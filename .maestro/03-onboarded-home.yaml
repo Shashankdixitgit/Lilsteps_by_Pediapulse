@@ -1,0 +1,50 @@
+# Post-auth happy-path: assumes the test device already has an authenticated
+# session (run the OTP step manually once, then re-run this flow). Smokes
+# the home screen, check-in entry, and tabs nav.
+
+appId: host.exp.Exponent
+tags:
+  - parent
+  - home
+---
+- launchApp
+- assertVisible:
+    text: "Good (morning|afternoon|evening)"
+    timeout: 10000
+- assertVisible: ".*thriving today.*"
+
+# Quick actions row present
+- assertVisible: "Book"
+- assertVisible: "Growth"
+- assertVisible: "Records"
+
+# Tap the AI check-in CTA (center button or PrimaryCtaCard)
+- runFlow:
+    when:
+      visible: "Log symptoms"
+    commands:
+      - tapOn: "Log symptoms"
+- assertVisible:
+    text: "What's going on|going on with"
+    timeout: 8000
+
+# Back to home
+- back
+- assertVisible: ".*thriving today.*"
+
+# Tabs nav check
+- tapOn:
+    id: "growth"
+- assertVisible:
+    text: "Growth|Weight|Height"
+    timeout: 5000
+
+- tapOn:
+    id: "records"
+- assertVisible:
+    text: "Records|Health Records"
+    timeout: 5000
+
+- tapOn:
+    id: "index"
+- assertVisible: ".*thriving today.*"

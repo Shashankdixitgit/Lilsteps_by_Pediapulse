@@ -27,7 +27,10 @@ function getAge(dob: Date): string {
 
 export default function ConfirmScreen() {
   const insets = useSafeAreaInsets();
-  const { childName, childSex, dob, weight, bloodGroup, allergies, conditions } = useOnboarding();
+  const {
+    childName, childSex, dob, weight, height, bloodGroup,
+    allergies, conditions, vaccinationsGiven,
+  } = useOnboarding();
   const { user, refreshHasChildren } = useAuth();
   const [agreed, setAgreed] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -62,15 +65,19 @@ export default function ConfirmScreen() {
       }
 
       // Insert child
+      const now = new Date().toISOString();
+      const parsedWeight = weight ? parseFloat(weight) : null;
+      const parsedHeight = height ? parseFloat(height) : null;
       const childPayload = {
         parent_id: user.id,
         name: childName.trim(),
         dob: dob.toISOString().split('T')[0],
         sex: childSex,
         blood_group: bloodGroup || null,
-        weight: weight ? parseFloat(weight) : null,
-        height: null,
-        weight_updated_at: weight ? new Date().toISOString() : null,
+        weight: parsedWeight,
+        height: parsedHeight,
+        weight_updated_at: parsedWeight != null ? now : null,
+        height_updated_at: parsedHeight != null ? now : null,
       };
       dbg.db('Confirm: inserting child', childPayload);
 
@@ -117,6 +124,26 @@ export default function ConfirmScreen() {
 
       await Promise.all(promises);
       dbg.db('Confirm: all related data saved');
+
+      // Mark vaccines the parent reported as already-given. The trigger on
+      // public.children has already populated 38 IAP-schedule rows for this
+      // child by now; we just flip those that match the canonical names AND
+      // whose scheduled_date is in the past (i.e. were due before today).
+      if (vaccinationsGiven.length > 0) {
+        const today = new Date().toISOString().slice(0, 10);
+        dbg.db('Confirm: marking vaccinations done', {
+          count: vaccinationsGiven.length,
+          names: vaccinationsGiven,
+        });
+        const { error: vaxErr, count } = await supabase
+          .from('vaccinations')
+          .update({ status: 'done', administered_date: today }, { count: 'exact' })
+          .eq('child_id', child.id)
+          .in('vaccine_name', vaccinationsGiven)
+          .lte('scheduled_date', today);
+        if (vaxErr) dbg.dbError('Confirm: vaccine update failed', vaxErr);
+        else dbg.db('Confirm: vaccines marked done', { count });
+      }
 
       // Refresh auth context so it knows we have children now
       await refreshHasChildren();

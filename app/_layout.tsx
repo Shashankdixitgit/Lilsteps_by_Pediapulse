@@ -17,8 +17,16 @@ import { HeroUINativeProvider } from 'heroui-native';
 
 import { AuthProvider } from '@/context/auth';
 import { ChildProvider } from '@/context/child';
+import { ErrorBoundary } from '@/components/error-boundary';
+import { analytics, crash } from '@/lib/observability';
 
 SplashScreen.preventAutoHideAsync();
+
+// One-shot observability init. The current implementations are no-op stubs
+// (see lib/observability.ts) — they'll do real work once Sentry/PostHog are
+// wired (D6/D7).
+crash.init();
+analytics.init();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -32,6 +40,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (fontsLoaded) {
       SplashScreen.hideAsync();
+      analytics.track('app_opened');
     }
   }, [fontsLoaded]);
 
@@ -41,8 +50,9 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <HeroUINativeProvider>
-        <AuthProvider>
+      <ErrorBoundary>
+        <HeroUINativeProvider>
+          <AuthProvider>
           <ChildProvider>
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
@@ -78,11 +88,20 @@ export default function RootLayout() {
                 name="profile"
                 options={{ animation: 'slide_from_right' }}
               />
+              <Stack.Screen
+                name="chat"
+                options={{ animation: 'slide_from_right' }}
+              />
+              <Stack.Screen
+                name="prescriptions"
+                options={{ animation: 'slide_from_right' }}
+              />
             </Stack>
             <StatusBar style="dark" />
           </ChildProvider>
         </AuthProvider>
-      </HeroUINativeProvider>
+        </HeroUINativeProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }

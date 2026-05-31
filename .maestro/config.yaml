@@ -1,0 +1,11 @@
+# Maestro shared config for Pedia Pulse parent app E2E flows.
+#
+# `appId` defaults to Expo Go on iOS (host.exp.Exponent) so flows run against
+# a Metro-served project. Once the app has a real bundle identifier (after
+# `npx expo run:ios` or `eas build`), update both this value and the flows.
+#
+# Override appId at runtime: `maestro test --include-tags=parent .maestro/`
+flows:
+  - 01-cold-start.yaml
+  - 02-signup-form.yaml
+  - 03-onboarded-home.yaml

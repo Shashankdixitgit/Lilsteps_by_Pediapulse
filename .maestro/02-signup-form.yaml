@@ -1,0 +1,35 @@
+# Signup form: navigate to signup, fill the name + phone fields, tap Create.
+# Stops BEFORE OTP verification — that step requires an actual SMS and is
+# better verified manually or via a Twilio Verify test credential.
+
+appId: host.exp.Exponent
+tags:
+  - parent
+  - auth
+---
+- launchApp
+# Skip if already signed in
+- runFlow:
+    when:
+      visible: ".*thriving today.*"
+    commands:
+      - stopApp
+- runFlow:
+    when:
+      visible: "Sign Up"
+    commands:
+      - tapOn: "Sign Up"
+- assertVisible: "Create"
+- tapOn:
+    id: "name"
+- inputText: "Test Parent"
+- tapOn:
+    id: "phone"
+- eraseText
+- inputText: "+919876543210"
+- tapOn: "Create Account"
+# OTP screen should appear
+- assertVisible:
+    text: "Enter|Code"
+    timeout: 10000
+- assertVisible: "+919876543210"

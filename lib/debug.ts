@@ -9,7 +9,7 @@
 
 const ENABLED = __DEV__; // Only log in development
 
-type LogCategory = 'AUTH' | 'DB' | 'GROQ' | 'NAV' | 'HOOK';
+type LogCategory = 'AUTH' | 'DB' | 'GROQ' | 'NAV' | 'HOOK' | 'APP';
 
 function log(category: LogCategory, action: string, data?: unknown) {
   if (!ENABLED) return;
@@ -40,6 +40,7 @@ export const dbg = {
   groq: (action: string, data?: unknown) => log('GROQ', action, data),
   nav: (action: string, data?: unknown) => log('NAV', action, data),
   hook: (action: string, data?: unknown) => log('HOOK', action, data),
+  app: (action: string, data?: unknown) => log('APP', action, data),
 
   authError: (action: string, error: unknown) => logError('AUTH', action, error),
   dbError: (action: string, error: unknown) => logError('DB', action, error),

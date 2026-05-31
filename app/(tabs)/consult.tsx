@@ -65,7 +65,10 @@ export default function ConsultScreen() {
             doctorSpecialisation={nextAppointment.doctors?.specialisation ?? ''}
             hospital={nextAppointment.doctors?.hospital ?? ''}
             date={nextAppointment.date}
-            time={nextAppointment.time}
+            time={nextAppointment.time.slice(0, 5)}
+            onJoinVideo={() =>
+              router.push({ pathname: '/consult/video/[id]', params: { id: nextAppointment.id } })
+            }
             onCancel={() => handleCancel(nextAppointment.id)}
           />
         ) : (

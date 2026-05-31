@@ -19,6 +19,7 @@ import { TabScreenLayout } from '@/components/TabScreenLayout';
 import { AppColors } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useDocuments, type DocumentRow } from '@/hooks/useDocuments';
+import { usePrescriptions, type PrescriptionRow } from '@/hooks/usePrescriptions';
 
 const CATEGORIES = [
   { key: 'all', label: 'All', icon: 'grid-outline' },
@@ -67,7 +68,19 @@ export default function RecordsScreen() {
 
   const { child } = useChild();
   const { documents, loading: loadingDocs } = useDocuments(child?.id ?? null);
+  const { prescriptions, loading: loadingPrescriptions } = usePrescriptions(child?.id ?? null);
   const childName = child?.name ?? 'Child';
+
+  const showPrescriptions = activeFilter === 'all' || activeFilter === 'prescriptions';
+  const filteredPrescriptions = useMemo(() => {
+    if (!showPrescriptions) return [];
+    if (!search.trim()) return prescriptions;
+    const q = search.trim().toLowerCase();
+    return prescriptions.filter((p) =>
+      p.doctors?.name?.toLowerCase().includes(q) ||
+      p.prescription_items?.some((i) => i.medicine.toLowerCase().includes(q)),
+    );
+  }, [prescriptions, search, showPrescriptions]);
 
   const filteredDocs = useMemo(() => {
     let docs = documents;
@@ -156,24 +169,33 @@ export default function RecordsScreen() {
             <Text style={styles.sectionTitle}>
               {activeFilter === 'all' ? 'All Records' : CATEGORIES.find(c => c.key === activeFilter)?.label ?? 'Records'}
             </Text>
-            <Text style={styles.countBadge}>{filteredDocs.length}</Text>
+            <Text style={styles.countBadge}>{filteredDocs.length + filteredPrescriptions.length}</Text>
           </View>
 
-          {loadingDocs ? (
+          {loadingDocs || (showPrescriptions && loadingPrescriptions) ? (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={AppColors.primary} />
               <Text style={styles.loadingText}>Loading records…</Text>
             </View>
-          ) : filteredDocs.length === 0 ? (
+          ) : filteredDocs.length === 0 && filteredPrescriptions.length === 0 ? (
             <EmptyState hasFilter={activeFilter !== 'all' || search.length > 0} />
           ) : (
-            filteredDocs.map(doc => (
-              <RecordCard
-                key={doc.id}
-                doc={doc}
-                onPress={() => router.push(`/records/${doc.id}` as any)}
-              />
-            ))
+            <>
+              {filteredPrescriptions.map((p) => (
+                <PrescriptionCard
+                  key={p.id}
+                  prescription={p}
+                  onPress={() => router.push(`/prescriptions/${p.id}` as any)}
+                />
+              ))}
+              {filteredDocs.map(doc => (
+                <RecordCard
+                  key={doc.id}
+                  doc={doc}
+                  onPress={() => router.push(`/records/${doc.id}` as any)}
+                />
+              ))}
+            </>
           )}
         </View>
       </TabScreenLayout>
@@ -289,6 +311,77 @@ function RecordCard({ doc, onPress }: { doc: DocumentRow; onPress: () => void })
           {doc.notes && (
             <Text style={styles.recordNotes} numberOfLines={2}>{doc.notes}</Text>
           )}
+        </Card.Body>
+      </Card>
+    </Pressable>
+  );
+}
+
+function PrescriptionCard({
+  prescription,
+  onPress,
+}: {
+  prescription: PrescriptionRow;
+  onPress: () => void;
+}) {
+  const issuedDate = new Date(prescription.issued_at).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  const itemCount = prescription.prescription_items?.length ?? 0;
+  const firstMedicine = prescription.prescription_items?.[0]?.medicine;
+  const summary =
+    itemCount === 0
+      ? 'No items'
+      : itemCount === 1
+        ? firstMedicine ?? '1 medicine'
+        : `${firstMedicine} + ${itemCount - 1} more`;
+
+  return (
+    <Pressable
+      style={({ pressed }) => [{ opacity: pressed ? 0.88 : 1 }]}
+      onPress={onPress}
+    >
+      <Card style={styles.recordCard}>
+        <Card.Body style={styles.recordCardBody}>
+          <View style={styles.recordTop}>
+            <View style={[styles.recordIconWrap, { backgroundColor: `${AppColors.primary}12` }]}>
+              <Ionicons name="medkit" size={26} color={AppColors.primary} />
+            </View>
+
+            <View style={styles.recordInfo}>
+              <View style={styles.recordTitleRow}>
+                <Text style={styles.recordTitle} numberOfLines={1}>
+                  {prescription.doctors?.name ?? 'Doctor'}
+                </Text>
+                <View style={[styles.typeBadge, { backgroundColor: `${AppColors.primary}12` }]}>
+                  <Text style={[styles.typeBadgeText, { color: AppColors.primary }]}>
+                    RX
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.recordMeta}>
+                <Ionicons name="calendar-outline" size={12} color={AppColors.onSurfaceVariant} />
+                <Text style={styles.recordMetaText}>{issuedDate}</Text>
+                <View style={styles.metaDot} />
+                <Ionicons name="medical-outline" size={12} color={AppColors.onSurfaceVariant} />
+                <Text style={styles.recordMetaText} numberOfLines={1}>{summary}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.recordBottom}>
+            <View style={[styles.catPill, { backgroundColor: `${AppColors.primary}10` }]}>
+              <Text style={[styles.catPillText, { color: AppColors.primary }]}>Prescription</Text>
+            </View>
+            <View style={styles.recordActions}>
+              <Pressable style={styles.actionBtn} onPress={onPress}>
+                <Ionicons name="eye-outline" size={14} color={AppColors.primary} />
+                <Text style={styles.actionBtnText}>View</Text>
+              </Pressable>
+            </View>
+          </View>
         </Card.Body>
       </Card>
     </Pressable>

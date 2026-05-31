@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth';
-import { chatCompletion, generateSummary, buildSystemPrompt, GroqMessage } from '@/lib/groq';
+import { chatCompletion, generateSummary, GroqMessage } from '@/lib/groq';
 import type { ChildWithDetails } from './useChildren';
 import { formatAge } from '@/constants/bracketConfig';
 
@@ -93,15 +93,13 @@ export function useCheckin(child: ChildWithDetails | null) {
       if (err) throw new Error(err.message);
       setSessionId(session.id);
 
-      // Build conversation and call Groq
+      // Build conversation and call Edge Function (system prompt is server-side)
       const childCtx = getChildContext();
-      const systemPrompt = buildSystemPrompt(childCtx);
       const groqMessages: GroqMessage[] = [
-        { role: 'system', content: systemPrompt },
         { role: 'user', content: initialComplaint },
       ];
 
-      const aiResponse = await chatCompletion(groqMessages);
+      const aiResponse = await chatCompletion(childCtx, groqMessages);
       const { clean, ready, quickOptions } = parseAiResponse(aiResponse);
 
       // Save messages to DB
@@ -152,17 +150,14 @@ export function useCheckin(child: ChildWithDetails | null) {
         content,
       });
 
-      // Build full conversation for Groq
+      // Build full conversation for Edge Function (system prompt is server-side)
       const childCtx = getChildContext();
-      const groqMessages: GroqMessage[] = [
-        { role: 'system', content: buildSystemPrompt(childCtx) },
-        ...updatedMessages.map(m => ({
-          role: (m.role === 'ai' ? 'assistant' : 'user') as 'user' | 'assistant',
-          content: m.content,
-        })),
-      ];
+      const groqMessages: GroqMessage[] = updatedMessages.map(m => ({
+        role: (m.role === 'ai' ? 'assistant' : 'user') as 'user' | 'assistant',
+        content: m.content,
+      }));
 
-      const aiResponse = await chatCompletion(groqMessages);
+      const aiResponse = await chatCompletion(childCtx, groqMessages);
       const { clean, ready, quickOptions } = parseAiResponse(aiResponse);
 
       // Save AI message to DB
@@ -205,7 +200,7 @@ export function useCheckin(child: ChildWithDetails | null) {
         content: m.content,
       }));
 
-      const result = await generateSummary(groqMessages, childCtx);
+      const result = await generateSummary(childCtx, groqMessages);
       setSummary(result);
 
       // Save summary to DB

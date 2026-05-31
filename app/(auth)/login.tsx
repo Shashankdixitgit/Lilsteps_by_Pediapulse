@@ -16,19 +16,27 @@ export default function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { signInWithOtp, verifyOtp } = useAuth();
 
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('+91');
   const [otp, setOtp] = useState('');
-  const [step, setStep] = useState<'email' | 'otp'>('email');
+  const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  function normalisedPhone() {
+    return phone.replace(/[\s-]/g, '');
+  }
+
   async function handleSendOtp() {
-    if (!email.trim()) return;
+    const p = normalisedPhone();
+    if (!/^\+\d{10,15}$/.test(p)) {
+      setError('Enter your phone number in international format (e.g. +919876543210)');
+      return;
+    }
     setLoading(true);
     setError(null);
 
-    dbg.auth('Login: sending OTP', { email: email.trim().toLowerCase() });
-    const { error: err } = await signInWithOtp(email.trim().toLowerCase());
+    dbg.auth('Login: sending OTP', { phone: p });
+    const { error: err } = await signInWithOtp(p);
     setLoading(false);
 
     if (err) {
@@ -48,8 +56,9 @@ export default function LoginScreen() {
     setLoading(true);
     setError(null);
 
-    dbg.auth('Login: verifying OTP', { email: email.trim().toLowerCase(), otpLength: otp.length });
-    const { error: err, isNewUser } = await verifyOtp(email.trim().toLowerCase(), otp);
+    const p = normalisedPhone();
+    dbg.auth('Login: verifying OTP', { phone: p, otpLength: otp.length });
+    const { error: err, isNewUser } = await verifyOtp(p, otp);
     setLoading(false);
 
     if (err) {
@@ -79,7 +88,7 @@ export default function LoginScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Pressable onPress={() => step === 'otp' ? setStep('email') : router.back()} style={styles.backButton}>
+            <Pressable onPress={() => step === 'otp' ? setStep('phone') : router.back()} style={styles.backButton}>
               <Ionicons name="arrow-back" size={20} color={AppColors.onSurface} />
             </Pressable>
           </View>
@@ -87,27 +96,28 @@ export default function LoginScreen() {
           {/* Title */}
           <View style={styles.titleSection}>
             <Text style={typography.headingXL}>
-              {step === 'email' ? 'Welcome\nBack' : 'Enter\nCode'}
+              {step === 'phone' ? 'Welcome\nBack' : 'Enter\nCode'}
             </Text>
             <Text style={[typography.bodySM, styles.subtitle]}>
-              {step === 'email'
-                ? 'Sign in with your email to continue'
-                : `We sent a 6-digit code to ${email}`}
+              {step === 'phone'
+                ? 'Sign in with your phone number to continue'
+                : `We sent a 6-digit code to ${phone}`}
             </Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
-            {step === 'email' ? (
+            {step === 'phone' ? (
               <View style={styles.fields}>
                 <TextInputField
-                  label="Email"
-                  placeholder="you@example.com"
-                  keyboardType="email-address"
+                  label="Phone"
+                  hint="(with country code)"
+                  placeholder="+919876543210"
+                  keyboardType="phone-pad"
                   autoCapitalize="none"
-                  autoComplete="email"
-                  value={email}
-                  onChangeText={setEmail}
+                  autoComplete="tel"
+                  value={phone}
+                  onChangeText={setPhone}
                 />
               </View>
             ) : (
@@ -129,8 +139,8 @@ export default function LoginScreen() {
             )}
 
             <GradientButton
-              label={loading ? '' : step === 'email' ? 'Send Code' : 'Verify'}
-              onPress={step === 'email' ? handleSendOtp : handleVerifyOtp}
+              label={loading ? '' : step === 'phone' ? 'Send Code' : 'Verify'}
+              onPress={step === 'phone' ? handleSendOtp : handleVerifyOtp}
               style={styles.submitButton}
             />
             {loading && (

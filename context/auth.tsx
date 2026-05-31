@@ -2,14 +2,17 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { dbg } from '@/lib/debug';
+import { analytics, crash } from '@/lib/observability';
 
 interface AuthState {
   session: Session | null;
   user: User | null;
   loading: boolean;
   hasChildren: boolean | null;
-  signInWithOtp: (email: string) => Promise<{ error: string | null }>;
-  verifyOtp: (email: string, token: string) => Promise<{ error: string | null; isNewUser: boolean }>;
+  /** Send an OTP SMS to the given phone in E.164 format (e.g. +919876543210) */
+  signInWithOtp: (phone: string) => Promise<{ error: string | null }>;
+  /** Verify the 6-digit SMS code */
+  verifyOtp: (phone: string, token: string) => Promise<{ error: string | null; isNewUser: boolean }>;
   signOut: () => Promise<void>;
   refreshHasChildren: () => Promise<void>;
 }
@@ -32,6 +35,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') {
           setSession(newSession);
           if (newSession?.user) {
+            crash.setUser(newSession.user.id);
+            analytics.identify(newSession.user.id);
             checkChildren(newSession.user.id);
           } else {
             dbg.auth('No user in session, setting loading=false');
@@ -40,6 +45,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         } else if (event === 'SIGNED_OUT') {
           dbg.auth('User signed out');
+          crash.setUser(null);
+          analytics.reset();
           setSession(null);
           setHasChildren(null);
           setLoading(false);
@@ -83,11 +90,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function signInWithOtp(email: string): Promise<{ error: string | null }> {
-    dbg.auth('signInWithOtp', { email });
+  async function signInWithOtp(phone: string): Promise<{ error: string | null }> {
+    dbg.auth('signInWithOtp', { phone });
 
     const { error } = await supabase.auth.signInWithOtp({
-      email,
+      phone,
       options: { shouldCreateUser: true },
     });
 
@@ -97,11 +104,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     dbg.auth('signInWithOtp success — OTP sent');
+    analytics.track('auth_otp_sent');
     return { error: null };
   }
 
-  async function verifyOtp(email: string, token: string): Promise<{ error: string | null; isNewUser: boolean }> {
-    dbg.auth('verifyOtp', { email, tokenLength: token.length });
+  async function verifyOtp(phone: string, token: string): Promise<{ error: string | null; isNewUser: boolean }> {
+    dbg.auth('verifyOtp', { phone, tokenLength: token.length });
 
     if (token.length !== 6 || !/^\d{6}$/.test(token)) {
       dbg.authError('verifyOtp', 'Invalid OTP format');
@@ -109,9 +117,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const { data, error } = await supabase.auth.verifyOtp({
-      email,
+      phone,
       token,
-      type: 'email',
+      type: 'sms',
     });
 
     if (error) {
@@ -123,7 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (data.user) {
       // Ensure parent row exists (fallback if trigger failed)
-      await ensureParentRow(data.user.id, email);
+      await ensureParentRow(data.user.id, phone);
 
       try {
         const { count, error: countErr } = await supabase
@@ -156,13 +164,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * the parent row, create it here. Uses upsert so it's safe to call
    * even if the row already exists.
    */
-  async function ensureParentRow(userId: string, email: string) {
-    dbg.db('ensureParentRow', { userId, email });
+  async function ensureParentRow(userId: string, phone: string) {
+    dbg.db('ensureParentRow', { userId, phone });
 
     const { error } = await supabase
       .from('parents')
       .upsert(
-        { id: userId, email },
+        { id: userId, phone },
         { onConflict: 'id' }
       );
 

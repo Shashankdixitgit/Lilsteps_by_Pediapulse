@@ -15,9 +15,10 @@ export interface CareProvider {
 interface CareTeamProps {
   providers: CareProvider[];
   onAddProvider?: () => void;
+  onProviderPress?: (providerId: string) => void;
 }
 
-export function CareTeam({ providers, onAddProvider }: CareTeamProps) {
+export function CareTeam({ providers, onAddProvider, onProviderPress }: CareTeamProps) {
   return (
     <View style={styles.section}>
       <Text style={[typography.headingMD, styles.heading]}>Care Team</Text>
@@ -27,7 +28,7 @@ export function CareTeam({ providers, onAddProvider }: CareTeamProps) {
         contentContainerStyle={styles.scroll}
       >
         {providers.map((p) => (
-          <PressableFeedback key={p.id}>
+          <PressableFeedback key={p.id} onPress={() => onProviderPress?.(p.id)}>
             <Card style={styles.card} className="p-0 border-0 shadow-none">
               <Card.Header style={styles.cardHeader}>
                 <View style={styles.avatarContainer}>

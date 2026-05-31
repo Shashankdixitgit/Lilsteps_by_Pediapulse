@@ -13,12 +13,36 @@ import { useOnboarding } from '@/context/onboarding';
 const SEX_OPTIONS = ['Male', 'Female'];
 const RELATIONSHIP = ['Mother', 'Father', 'Grandparent', 'Guardian'];
 
-function calculateBracket(dob: Date): 'A' | 'B' | 'C' {
-  const ageMs = Date.now() - dob.getTime();
-  const ageYears = ageMs / (365.25 * 24 * 60 * 60 * 1000);
-  if (ageYears < 3) return 'A';
-  if (ageYears < 9) return 'B';
+// Pedia Pulse serves children 0–15. Anything past the 16th birthday is
+// out of scope per Proposal §4 ("target users: parents of children 0–15").
+const MAX_AGE_YEARS = 16;
+
+function ageYears(dob: Date): number {
+  return (Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+}
+
+function isDobInRange(dob: Date): boolean {
+  if (dob.getTime() > Date.now()) return false; // future
+  return ageYears(dob) < MAX_AGE_YEARS;
+}
+
+function minAllowedDobIso(): string {
+  // Earliest acceptable DOB = exactly 16 years ago today.
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - MAX_AGE_YEARS);
+  return d.toISOString().split('T')[0];
+}
+
+function calculateBracket(dob: Date): 'A' | 'B' | 'C' | null {
+  if (!isDobInRange(dob)) return null;
+  const a = ageYears(dob);
+  if (a < 3) return 'A';
+  if (a < 9) return 'B';
   return 'C';
+}
+
+function bracketLabel(b: 'A' | 'B' | 'C'): string {
+  return b === 'A' ? 'Infant care (0–2)' : b === 'B' ? 'Early years (3–8)' : 'Pre-teen (9–15)';
 }
 
 function formatDate(date: Date): string {
@@ -58,10 +82,15 @@ export default function ChildBasicsScreen() {
     setPickerOpen(false);
   };
 
+  const bracket = dob ? calculateBracket(dob) : null;
+  const dobOutOfRange = dob !== null && !isDobInRange(dob);
+  const canContinue = !!firstName.trim() && !!dob && !dobOutOfRange && !!sex[0];
+
   const handleContinue = () => {
+    if (!canContinue || !dob) return;
     setChildName(firstName);
     if (sex[0]) setChildSex(sex[0].toLowerCase() as 'male' | 'female');
-    if (dob) { setBracket(calculateBracket(dob)); saveDob(dob); }
+    if (bracket) { setBracket(bracket); saveDob(dob); }
     router.push('/(onboarding)/physical');
   };
 
@@ -87,35 +116,72 @@ export default function ChildBasicsScreen() {
           <Text style={styles.dobLabel}>Date of Birth</Text>
           <Text style={styles.fieldHint}>(Helps us tailor health advice by age)</Text>
         </View>
-        <Pressable
-          onPress={openPicker}
-          style={({ pressed }) => [
-            styles.dateField,
-            dob && styles.dateFieldFilled,
-            pressed && styles.dateFieldPressed,
-          ]}
-        >
-          <Ionicons
-            name="calendar-outline"
-            size={18}
-            color={dob ? AppColors.primary : AppColors.outlineVariant}
-          />
-          <Text style={dob ? styles.dateText : styles.datePlaceholder}>
-            {dob ? formatDate(dob) : 'Tap to select your child’s birthdate'}
-          </Text>
-          <Ionicons
-            name="chevron-down"
-            size={16}
-            color={dob ? AppColors.onSurfaceVariant : AppColors.outlineVariant}
-          />
-        </Pressable>
-        {dob && (
+        {Platform.OS === 'web' ? (
+          <View style={[styles.dateField, dob && styles.dateFieldFilled]}>
+            <Ionicons
+              name="calendar-outline"
+              size={18}
+              color={dob ? AppColors.primary : AppColors.outlineVariant}
+            />
+            {/* Native browser date picker — react-native-web passes <input> to DOM */}
+            <input
+              type="date"
+              max={new Date().toISOString().split('T')[0]}
+              min={minAllowedDobIso()}
+              value={dob ? dob.toISOString().split('T')[0] : ''}
+              onChange={(e: { target: { value: string } }) => {
+                const val = e.target.value;
+                setDob(val ? new Date(val) : null);
+              }}
+              style={{
+                flex: 1,
+                border: 'none',
+                outline: 'none',
+                background: 'transparent',
+                fontFamily: 'PlusJakartaSans_600SemiBold',
+                fontSize: 16,
+                color: dob ? AppColors.onSurface : AppColors.onSurfaceVariant,
+                cursor: 'pointer',
+              }}
+            />
+          </View>
+        ) : (
+          <Pressable
+            onPress={openPicker}
+            style={({ pressed }) => [
+              styles.dateField,
+              dob && styles.dateFieldFilled,
+              pressed && styles.dateFieldPressed,
+            ]}
+          >
+            <Ionicons
+              name="calendar-outline"
+              size={18}
+              color={dob ? AppColors.primary : AppColors.outlineVariant}
+            />
+            <Text style={dob ? styles.dateText : styles.datePlaceholder}>
+              {dob ? formatDate(dob) : 'Tap to select your child’s birthdate'}
+            </Text>
+            <Ionicons
+              name="chevron-down"
+              size={16}
+              color={dob ? AppColors.onSurfaceVariant : AppColors.outlineVariant}
+            />
+          </Pressable>
+        )}
+        {dob && !dobOutOfRange && bracket && (
           <View style={styles.ageRow}>
             <View style={styles.ageDot} />
             <Text style={styles.ageText}>{calculateAgeLabel(dob)}</Text>
             <Text style={styles.ageDivider}>•</Text>
-            <Text style={styles.bracketText}>
-              {calculateBracket(dob) === 'A' ? 'Infant care (0–2)' : calculateBracket(dob) === 'B' ? 'Early years (3–8)' : 'Pre-teen (9–15)'}
+            <Text style={styles.bracketText}>{bracketLabel(bracket)}</Text>
+          </View>
+        )}
+        {dob && dobOutOfRange && (
+          <View style={styles.ageRow}>
+            <View style={[styles.ageDot, { backgroundColor: AppColors.tertiary }]} />
+            <Text style={[styles.ageText, { color: AppColors.tertiary }]}>
+              Pedia Pulse cares for children 0–15. Please double-check the date.
             </Text>
           </View>
         )}

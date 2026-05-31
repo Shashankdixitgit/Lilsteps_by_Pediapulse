@@ -15,6 +15,7 @@ import { AppColors } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useAppointments } from '@/hooks/useAppointments';
 import { useCheckin } from '@/hooks/useCheckin';
+import { useConversations } from '@/hooks/useConversations';
 import { useDoctors, useTimeSlots } from '@/hooks/useDoctors';
 
 export default function CheckinSummaryScreen() {
@@ -23,6 +24,8 @@ export default function CheckinSummaryScreen() {
   const checkin = useCheckin(child);
   const { doctors, loading: loadingDocs } = useDoctors();
   const { bookAppointment } = useAppointments(child?.id ?? null);
+  const { startConversation } = useConversations(child?.id ?? null);
+  const [openingChat, setOpeningChat] = useState(false);
 
   const days = useMemo(() => getNextDays(5), []);
 
@@ -71,6 +74,22 @@ export default function CheckinSummaryScreen() {
     }
   }
 
+  async function handleStartChat() {
+    if (!child || !selectedDoctor || openingChat) return;
+    setOpeningChat(true);
+    try {
+      const convo = await startConversation({
+        child_id: child.id,
+        doctor_id: selectedDoctor.id,
+      });
+      router.replace(`/chat/${convo.id}`);
+    } catch {
+      // ignored — user can retry
+    } finally {
+      setOpeningChat(false);
+    }
+  }
+
   if (confirmed) {
     return (
       <View style={styles.screen}>
@@ -93,6 +112,24 @@ export default function CheckinSummaryScreen() {
               <SuccessRow icon="time-outline" label="Time" value={selectedSlot ?? ''} isLast />
             </Card.Body>
           </Card>
+
+          <Pressable
+            style={({ pressed }) => [styles.chatBtn, { opacity: pressed || openingChat ? 0.7 : 1 }]}
+            onPress={handleStartChat}
+            disabled={openingChat}
+          >
+            {openingChat ? (
+              <ActivityIndicator size="small" color={AppColors.primary} />
+            ) : (
+              <>
+                <Ionicons name="chatbubble-outline" size={16} color={AppColors.primary} />
+                <Text style={styles.chatBtnText}>
+                  Message {selectedDoctor?.name?.split(' ').slice(-1)[0] ?? 'doctor'}
+                </Text>
+              </>
+            )}
+          </Pressable>
+
           <Pressable
             style={({ pressed }) => [styles.doneBtn, { opacity: pressed ? 0.85 : 1 }]}
             onPress={() => router.replace('/(tabs)')}
@@ -308,4 +345,16 @@ const styles = StyleSheet.create({
   doneBtn: { width: '100%', borderRadius: 999, overflow: 'hidden', marginTop: 8 },
   doneBtnGrad: { alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
   doneBtnText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: AppColors.onPrimary },
+  chatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    width: '100%',
+    paddingVertical: 14,
+    borderRadius: 999,
+    backgroundColor: `${AppColors.primary}10`,
+    marginTop: 4,
+  },
+  chatBtnText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: AppColors.primary },
 });

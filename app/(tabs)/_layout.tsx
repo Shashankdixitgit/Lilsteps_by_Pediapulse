@@ -6,23 +6,19 @@ import { router, Tabs } from 'expo-router';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useChild } from '@/context/child';
 import { AppColors } from '@/constants/theme';
-
-const UNDER_5_BRACKETS = ['NEWBORN', 'EARLY_INFANT', 'INFANT', 'TODDLER_EARLY', 'TODDLER', 'PRESCHOOL'];
+import { usePushTokenRegistration } from '@/hooks/usePushToken';
 
 const LEFT_TABS = [
   { name: 'index', icon: 'home-outline', iconActive: 'home' },
   { name: 'growth', icon: 'bar-chart-outline', iconActive: 'bar-chart' },
 ] as const;
 
-const RIGHT_TABS_UNDER5 = [
+// Vaccine is shown for ALL ages 0–15. Tdap, HPV, and boosters are due 9+,
+// so the previous "swap Vaccine for Consult on 5+" hid important reminders.
+// Booking remains reachable via Home → Book and the check-in summary CTA.
+const RIGHT_TABS = [
   { name: 'vaccine', icon: 'medical-outline', iconActive: 'medical' },
-  { name: 'records', icon: 'folder-open-outline', iconActive: 'folder-open' },
-] as const;
-
-const RIGHT_TABS_5PLUS = [
-  { name: 'consult', icon: 'calendar-outline', iconActive: 'calendar' },
   { name: 'records', icon: 'folder-open-outline', iconActive: 'folder-open' },
 ] as const;
 
@@ -38,9 +34,7 @@ const AI_BTN_SIZE = 52;
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { bracket } = useChild();
-  const under5 = bracket ? UNDER_5_BRACKETS.includes(bracket) : true;
-  const rightTabs = under5 ? RIGHT_TABS_UNDER5 : RIGHT_TABS_5PLUS;
+  const rightTabs = RIGHT_TABS;
 
   function getRouteIndex(name: string) {
     return state.routes.findIndex((r) => r.name === name);
@@ -138,6 +132,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 }
 
 export default function TabsLayout() {
+  usePushTokenRegistration();
   return (
     <Tabs tabBar={(props) => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
       <Tabs.Screen name="index" />

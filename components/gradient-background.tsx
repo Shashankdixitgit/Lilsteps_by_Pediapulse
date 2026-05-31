@@ -2,12 +2,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Dimensions, StyleSheet, View } from 'react-native';
 
 import { AppColors } from '@/constants/theme';
+import { GrainOverlay } from './grain-overlay';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 /**
- * Full-screen gradient background with decorative blurred blobs.
- * Reusable across any screen that needs the app's branded mesh-gradient look.
+ * Full-screen gradient background with decorative blurred blobs + a paper
+ * grain overlay. The grain sits above the gradient/blobs but below content,
+ * giving the Serene Guardian glass cards a tactile fibrous feel.
  */
 export function GradientBackground() {
   return (
@@ -20,6 +22,7 @@ export function GradientBackground() {
       <View style={[styles.blob, styles.blobTopLeft]} />
       <View style={[styles.blob, styles.blobBottomRight]} />
       <View style={[styles.blob, styles.blobTopRight]} />
+      <GrainOverlay intensity={0.05} />
     </>
   );
 }

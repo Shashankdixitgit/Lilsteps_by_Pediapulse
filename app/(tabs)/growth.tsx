@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Button, Card, Tabs } from 'heroui-native';
 import { useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { GrowthChart, valueForTab } from '@/components/growth/GrowthChart';
 import { LogMeasurementSheet } from '@/components/growth/LogMeasurementSheet';
@@ -27,7 +27,27 @@ export default function GrowthScreen() {
   const [showSheet, setShowSheet] = useState(false);
 
   const { child, bracket } = useChild();
-  const { measurements, addMeasurement } = useGrowth(child?.id ?? null);
+  const { measurements: actualMeasurements, addMeasurement } = useGrowth(child?.id ?? null);
+
+  // If no measurements logged yet but the child has weight/height on record
+  // (from onboarding or a direct DB edit), synthesize a single "today" entry
+  // so the chart shows a real dot rather than just WHO bands.
+  const measurements: GrowthRow[] = useMemo(() => {
+    if (actualMeasurements.length > 0) return actualMeasurements;
+    if (!child) return [];
+    if (child.weight == null && child.height == null) return [];
+    const stamp = child.height_updated_at ?? child.weight_updated_at ?? new Date().toISOString();
+    const synthetic: GrowthRow = {
+      id: `synthetic-${child.id}`,
+      child_id: child.id,
+      weight: child.weight,
+      height: child.height,
+      note: null,
+      measured_at: stamp.slice(0, 10),
+      created_at: stamp,
+    };
+    return [synthetic];
+  }, [actualMeasurements, child]);
 
   const isNewborn = ['NEWBORN', 'EARLY_INFANT'].includes(bracket ?? '');
   const showBMI = !['NEWBORN', 'EARLY_INFANT', 'INFANT', 'TODDLER_EARLY'].includes(bracket ?? '');
@@ -56,8 +76,14 @@ export default function GrowthScreen() {
   async function handleSaveMeasurement(data: { weight?: number; height?: number; note?: string }) {
     try {
       await addMeasurement(data);
-    } catch {
-      // error handled in hook
+    } catch (e) {
+      // The hook just rethrows — surface it so the user knows the save failed
+      // (the prior silent catch was why "I added height" appeared not to work).
+      const message = e instanceof Error ? e.message : 'Unknown error';
+      Alert.alert(
+        "Couldn't save measurement",
+        `${message}\n\nThe new measurement wasn't recorded. Please try again.`,
+      );
     }
   }
 

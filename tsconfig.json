@@ -15,5 +15,10 @@
     "expo-env.d.ts",
     "css.d.ts",
     "uniwind-types.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "supabase/functions",
+    "doctor-dashboard"
   ]
 }

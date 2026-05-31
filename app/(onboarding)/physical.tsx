@@ -11,13 +11,18 @@ import { useOnboarding } from '@/context/onboarding';
 const BLOOD_GROUPS = ['O+', 'A+', 'B+', 'AB+', 'O-', 'A-', 'B-', 'AB-', "Don't know"];
 
 export default function PhysicalScreen() {
-  const { setWeight: saveWeight, setBloodGroup: saveBloodGroup } = useOnboarding();
+  const {
+    setWeight: saveWeight,
+    setHeight: saveHeight,
+    setBloodGroup: saveBloodGroup,
+  } = useOnboarding();
   const [weight, setWeight] = useState('');
   const [height, setHeight] = useState('');
   const [bloodGroup, setBloodGroup] = useState<string[]>([]);
 
   const handleContinue = () => {
     saveWeight(weight);
+    saveHeight(height);
     saveBloodGroup(bloodGroup[0] ?? '');
     router.push('/(onboarding)/allergies');
   };

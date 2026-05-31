@@ -3,10 +3,35 @@ import { StyleSheet } from 'react-native';
 import { AppColors } from '@/constants/theme';
 
 /**
- * Shared typography styles using Plus Jakarta Sans.
- * Use these instead of defining font families inline.
+ * Shared typography styles.
+ *
+ * Sole family: Plus Jakarta Sans (per DESIGN.md). Variations come from
+ * weight + size, not a second typeface.
  */
 export const typography = StyleSheet.create({
+  // Display scales for hero moments (welcome, milestone callouts).
+  displayXL: {
+    fontFamily: 'PlusJakartaSans_800ExtraBold',
+    fontSize: 48,
+    color: AppColors.onSurface,
+    letterSpacing: -1.4,
+    lineHeight: 52,
+  },
+  displayLG: {
+    fontFamily: 'PlusJakartaSans_800ExtraBold',
+    fontSize: 36,
+    color: AppColors.onSurface,
+    letterSpacing: -1,
+    lineHeight: 40,
+  },
+  displayItalic: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 36,
+    color: AppColors.primary,
+    letterSpacing: -0.8,
+    lineHeight: 40,
+  },
+
   headingXL: {
     fontFamily: 'PlusJakartaSans_800ExtraBold',
     fontSize: 36,

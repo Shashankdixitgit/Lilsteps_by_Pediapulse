@@ -5,20 +5,24 @@ import { StyleSheet, Text, View } from 'react-native';
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { AppColors } from '@/constants/theme';
+import { useOnboarding } from '@/context/onboarding';
 
 const VAX_STATUS = ['Given', 'Missed', 'Not sure'];
 
-const VACCINES = [
-  { name: 'BCG', note: 'Given at birth' },
-  { name: 'Hepatitis B', note: 'Birth + 6 & 14 weeks' },
-  { name: 'OPV', note: 'Oral Polio — 6, 10, 14 weeks' },
-  { name: 'IPV', note: 'Injectable Polio — 6 & 14 weeks' },
-  { name: 'Pentavalent', note: 'DPT + Hib + HepB — 6, 10, 14 weeks' },
-  { name: 'Rotavirus', note: '6, 10, 14 weeks' },
-  { name: 'Measles / MR', note: '9 months' },
+// `canonical` matches IAP names from iap_vaccine_schedule(). Pentavalent is
+// a combo shot covering DPT + Hib + HepB; marking it Given marks all three.
+const VACCINES: { name: string; note: string; canonical: string[] }[] = [
+  { name: 'BCG',          note: 'Given at birth',                          canonical: ['BCG'] },
+  { name: 'Hepatitis B',  note: 'Birth + 6 & 14 weeks',                    canonical: ['Hepatitis B'] },
+  { name: 'OPV',          note: 'Oral Polio — 6, 10, 14 weeks',            canonical: ['OPV'] },
+  { name: 'IPV',          note: 'Injectable Polio — 6 & 14 weeks',         canonical: ['IPV'] },
+  { name: 'Pentavalent',  note: 'DPT + Hib + HepB — 6, 10, 14 weeks',      canonical: ['DTwP/DTaP', 'Hib', 'Hepatitis B'] },
+  { name: 'Rotavirus',    note: '6, 10, 14 weeks',                         canonical: ['Rotavirus'] },
+  { name: 'Measles / MR', note: '9 months',                                canonical: ['MMR'] },
 ];
 
 export default function VaccinationInfantScreen() {
+  const { setVaccinationsGiven } = useOnboarding();
   const [vaccineStatus, setVaccineStatus] = useState<Record<string, string>>({});
 
   const updateStatus = (vaccine: string, val: string[]) => {
@@ -27,13 +31,21 @@ export default function VaccinationInfantScreen() {
 
   const givenCount = Object.values(vaccineStatus).filter((s) => s === 'Given').length;
 
+  function handleContinue() {
+    const given = VACCINES
+      .filter((v) => vaccineStatus[v.name] === 'Given')
+      .flatMap((v) => v.canonical);
+    setVaccinationsGiven(Array.from(new Set(given)));
+    router.push('/(onboarding)/a-sleep');
+  }
+
   return (
     <OnboardingShell
       progress={0.88}
       title="Vaccination Status"
       subtitle="Select the status for each vaccine — you can update records anytime in the Vaccination Tracker"
       ctaLabel="Continue"
-      onCta={() => router.push('/(onboarding)/a-sleep')}
+      onCta={handleContinue}
     >
       <View style={styles.vaccineList}>
         {VACCINES.map((vaccine) => (

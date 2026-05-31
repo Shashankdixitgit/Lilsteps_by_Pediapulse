@@ -5,19 +5,21 @@ import { StyleSheet, Text, View } from 'react-native';
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { AppColors } from '@/constants/theme';
+import { useOnboarding } from '@/context/onboarding';
 
 const VAX_STATUS = ['Given', 'Missed', 'Not sure'];
 
-const VACCINES = [
-  { name: 'MMR', note: 'Measles-Mumps-Rubella — 12–15 months' },
-  { name: 'DPT Booster', note: '16–24 months' },
-  { name: 'OPV Booster', note: '16–24 months' },
-  { name: 'Typhoid', note: '2 years onwards' },
-  { name: 'Hepatitis A', note: '12–18 months, 2 doses' },
-  { name: 'Varicella', note: 'Chickenpox — 12–18 months' },
+const VACCINES: { name: string; note: string; canonical: string[] }[] = [
+  { name: 'MMR',         note: 'Measles-Mumps-Rubella — 12–15 months', canonical: ['MMR'] },
+  { name: 'DPT Booster', note: '16–24 months',                         canonical: ['DTwP/DTaP'] },
+  { name: 'OPV Booster', note: '16–24 months',                         canonical: ['OPV'] },
+  { name: 'Typhoid',     note: '2 years onwards',                      canonical: ['Typhoid Conjugate'] },
+  { name: 'Hepatitis A', note: '12–18 months, 2 doses',                canonical: ['Hepatitis A'] },
+  { name: 'Varicella',   note: 'Chickenpox — 12–18 months',            canonical: ['Varicella'] },
 ];
 
 export default function VaccinationYoungScreen() {
+  const { setVaccinationsGiven } = useOnboarding();
   const [vaccineStatus, setVaccineStatus] = useState<Record<string, string>>({});
 
   const updateStatus = (vaccine: string, val: string[]) => {
@@ -26,13 +28,21 @@ export default function VaccinationYoungScreen() {
 
   const givenCount = Object.values(vaccineStatus).filter((s) => s === 'Given').length;
 
+  function handleContinue() {
+    const given = VACCINES
+      .filter((v) => vaccineStatus[v.name] === 'Given')
+      .flatMap((v) => v.canonical);
+    setVaccinationsGiven(given);
+    router.push('/(onboarding)/b-sleep-dental');
+  }
+
   return (
     <OnboardingShell
       progress={0.87}
       title="Vaccination Status"
       subtitle="Select the status for each vaccine — you can update records anytime in the Vaccination Tracker"
       ctaLabel="Continue"
-      onCta={() => router.push('/(onboarding)/b-sleep-dental')}
+      onCta={handleContinue}
     >
       <View style={styles.vaccineList}>
         {VACCINES.map((vaccine) => (

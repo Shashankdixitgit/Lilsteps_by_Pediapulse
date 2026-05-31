@@ -25,22 +25,37 @@ export function useDoctors() {
 
   useEffect(() => {
     (async () => {
+      // Inner-join through doctor_auth so only doctors who have signed up
+      // for the clinical dashboard surface in the parent app. Leftover seed
+      // rows without a doctor_auth link are filtered out.
       const { data, error: err } = await supabase
         .from('doctors')
-        .select('*')
+        .select('*, doctor_auth!inner(id)')
         .eq('is_available', true)
         .order('name');
 
       if (err) {
         setError(err.message);
       } else {
-        setDoctors(data ?? []);
+        setDoctors((data ?? []) as DoctorRow[]);
       }
       setLoading(false);
     })();
   }, []);
 
   return { doctors, loading, error };
+}
+
+// Clinic local time. IST has no DST so this is stable year-round.
+const CLINIC_TZ = 'Asia/Kolkata';
+
+function nowInClinic(): { date: string; time: string } {
+  const now = new Date();
+  // en-CA gives YYYY-MM-DD; en-GB gives HH:MM:SS in 24h. Both sortable as strings.
+  return {
+    date: now.toLocaleDateString('en-CA', { timeZone: CLINIC_TZ }),
+    time: now.toLocaleTimeString('en-GB', { timeZone: CLINIC_TZ, hour12: false }),
+  };
 }
 
 export function useTimeSlots(doctorId: string | null, date: string | null) {
@@ -65,9 +80,18 @@ export function useTimeSlots(doctorId: string | null, date: string | null) {
 
     if (err) {
       setError(err.message);
-    } else {
-      setSlots(data ?? []);
+      setLoading(false);
+      return;
     }
+
+    // Hide already-elapsed slots when the picked date is today (clinic time).
+    // Past-date slots stay visible only for read-only contexts; the picker
+    // never lets you select a past date so this branch effectively only
+    // trims the today list.
+    const all = data ?? [];
+    const { date: today, time: nowTime } = nowInClinic();
+    const filtered = date === today ? all.filter((s) => s.time > nowTime) : all;
+    setSlots(filtered);
     setLoading(false);
   }, [doctorId, date]);
 

@@ -1,9 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Avatar, Button } from 'heroui-native';
-import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppColors } from '@/constants/theme';
+import { useChild } from '@/context/child';
 
 interface HomeHeaderProps {
   childName: string;
@@ -20,6 +22,26 @@ export function HomeHeader({
   paddingTop,
   onNotifications,
 }: HomeHeaderProps) {
+  const { children, child: activeChild, selectChild } = useChild();
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+
+  const canSwitch = children.length > 0;
+
+  function handleAvatarPress() {
+    if (!canSwitch) return;
+    setSwitcherOpen(true);
+  }
+
+  function handleSelect(id: string) {
+    selectChild(id);
+    setSwitcherOpen(false);
+  }
+
+  function handleAddChild() {
+    setSwitcherOpen(false);
+    router.push('/(onboarding)/add-child');
+  }
+
   return (
     <View style={[styles.wrapper, { paddingTop }]} pointerEvents="box-none">
       <LinearGradient
@@ -38,41 +60,88 @@ export function HomeHeader({
         end={{ x: 0, y: 1 }}
         pointerEvents="none"
       />
-      
+
       <View style={styles.content} pointerEvents="box-none">
-        <View style={styles.left}>
+        <Pressable
+          onPress={handleAvatarPress}
+          style={({ pressed }) => [styles.left, { opacity: pressed && canSwitch ? 0.7 : 1 }]}
+          accessibilityRole="button"
+          accessibilityLabel={`Switch child. Currently ${childName}.`}
+        >
           <View style={styles.avatarRing}>
-            <Avatar
-              alt={`${childName}'s avatar`}
-              size="sm"
-              color="accent"
-              variant="soft"
-              className="border-0"
-            >
-              <Avatar.Fallback>
-                {avatarInitial}
-              </Avatar.Fallback>
-            </Avatar>
+            <View style={styles.avatarFallback}>
+              <Text style={styles.avatarInitial}>{avatarInitial}</Text>
+            </View>
           </View>
-          <View style={styles.brandContainer}>
-            <Text style={styles.brandPrefix}>Lil</Text>
-            <Text style={styles.brandName}>Steps</Text>
+          <View style={styles.namePill}>
+            <Text style={styles.childNameLabel} numberOfLines={1}>
+              {childName}
+            </Text>
+            {canSwitch && children.length > 1 && (
+              <Ionicons name="chevron-down" size={14} color={AppColors.primary} />
+            )}
           </View>
-        </View>
+        </Pressable>
 
         <View style={styles.bellWrapper}>
-          <Button
-            isIconOnly
-            variant="ghost"
-            size="sm"
+          <Pressable
             onPress={onNotifications}
-            style={styles.bellButton}
+            style={({ pressed }) => [styles.bellButton, { opacity: pressed ? 0.6 : 1 }]}
+            accessibilityRole="button"
+            accessibilityLabel="Notifications and profile"
           >
             <Ionicons name="notifications-outline" size={20} color={AppColors.primary} />
-          </Button>
+          </Pressable>
           {hasUnread && <View style={styles.unreadDot} />}
         </View>
       </View>
+
+      <Modal
+        visible={switcherOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSwitcherOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setSwitcherOpen(false)}>
+          <Pressable
+            style={[styles.sheet, { marginTop: paddingTop + 64 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <Text style={styles.sheetEyebrow}>YOUR CHILDREN</Text>
+            {children.map((c) => {
+              const isActive = c.id === activeChild?.id;
+              return (
+                <Pressable
+                  key={c.id}
+                  onPress={() => handleSelect(c.id)}
+                  style={({ pressed }) => [
+                    styles.sheetItem,
+                    isActive && styles.sheetItemActive,
+                    { opacity: pressed ? 0.7 : 1 },
+                  ]}
+                >
+                  <View style={styles.sheetAvatar}>
+                    <Text style={styles.sheetAvatarInitial}>{c.name.charAt(0)}</Text>
+                  </View>
+                  <Text style={[styles.sheetItemName, isActive && styles.sheetItemNameActive]}>
+                    {c.name}
+                  </Text>
+                  {isActive && (
+                    <Ionicons name="checkmark" size={18} color={AppColors.primary} />
+                  )}
+                </Pressable>
+              );
+            })}
+            <Pressable
+              onPress={handleAddChild}
+              style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.7 : 1 }]}
+            >
+              <Ionicons name="add" size={18} color={AppColors.primary} />
+              <Text style={styles.addButtonLabel}>Add another child</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -103,28 +172,45 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: AppColors.surfaceContainerLowest,
   },
-  brandContainer: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
+  avatarFallback: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: AppColors.primaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  brandPrefix: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 17,
-    color: AppColors.onSurfaceVariant,
-    letterSpacing: -0.3,
-  },
-  brandName: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 17,
+  avatarInitial: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 14,
     color: AppColors.primary,
-    letterSpacing: -0.3,
+  },
+  namePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: `${AppColors.surfaceContainerLowest}E0`,
+  },
+  childNameLabel: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 14,
+    color: AppColors.onSurface,
+    letterSpacing: -0.2,
+    maxWidth: 140,
   },
   bellWrapper: {
     position: 'relative',
   },
   bellButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 20,
   },
   unreadDot: {
     position: 'absolute',
@@ -137,5 +223,78 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: AppColors.surfaceContainerLowest,
     zIndex: 10,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(52, 44, 56, 0.18)',
+  },
+  sheet: {
+    marginHorizontal: 20,
+    padding: 16,
+    borderRadius: 24,
+    backgroundColor: AppColors.surfaceContainerLowest,
+    gap: 6,
+    shadowColor: '#342c38',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 32,
+    elevation: 12,
+  },
+  sheetEyebrow: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 10,
+    letterSpacing: 1.6,
+    color: AppColors.onSurfaceVariant,
+    marginBottom: 4,
+    paddingHorizontal: 6,
+  },
+  sheetItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderRadius: 16,
+  },
+  sheetItemActive: {
+    backgroundColor: AppColors.surfaceContainer,
+  },
+  sheetAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: AppColors.primaryContainer,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetAvatarInitial: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 14,
+    color: AppColors.primary,
+  },
+  sheetItemName: {
+    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontSize: 15,
+    color: AppColors.onSurface,
+    flex: 1,
+  },
+  sheetItemNameActive: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    color: AppColors.primary,
+  },
+  addButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginTop: 4,
+    borderRadius: 16,
+    backgroundColor: AppColors.surfaceContainer,
+  },
+  addButtonLabel: {
+    fontFamily: 'PlusJakartaSans_700Bold',
+    fontSize: 14,
+    color: AppColors.primary,
   },
 });

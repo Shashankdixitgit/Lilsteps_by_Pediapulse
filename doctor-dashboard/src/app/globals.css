@@ -1,0 +1,211 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   Clinical Editorial — Pedia Pulse doctor dashboard
+   A paediatrician's chart pad meets the restraint of a literary journal.
+   Warm cream paper, deep ink, single emerald accent, mono-spaced metadata.
+   ────────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Paper + ink (NOT zinc grays — warm-shifted to feel like cream paper) */
+  --paper: #f7f3ea;
+  --paper-soft: #f1ece1;
+  --card: #fdfaf4;
+  --card-overlay: rgba(253, 250, 244, 0.6);
+
+  --ink: #1a1410;
+  --ink-2: #4a3f36;
+  --ink-3: #8c7e6f;
+  --ink-4: #b8ab9a;
+  --hairline: rgba(26, 20, 16, 0.1);
+  --hairline-strong: rgba(26, 20, 16, 0.22);
+
+  /* Accents — used sparingly, never as background fill */
+  --accent: #1f5e3e;       /* deep clinical emerald */
+  --accent-soft: #2d8055;
+  --accent-pale: #e7eee9;
+  --alert: #9a2520;        /* medical red */
+  --highlight: #d4a72c;    /* margin-note yellow */
+
+  /* Type ramp — pulled from next/font CSS vars set in layout.tsx */
+  --font-display: var(--font-fraunces), Georgia, 'Times New Roman', serif;
+  --font-sans: var(--font-geist), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), 'SF Mono', Menlo, monospace;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-soft: var(--paper-soft);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-hairline: var(--hairline);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-pale: var(--accent-pale);
+  --color-alert: var(--alert);
+  --color-highlight: var(--highlight);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  border-color: var(--hairline);
+}
+
+html,
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-feature-settings: 'ss01', 'ss02', 'cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Paper grain — extremely subtle, layered behind content. SVG inlined as
+   data-URL so there's no extra request. The texture catches a tiny bit of
+   light without becoming noisy. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.6;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.06 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* All app content above grain */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Display headings use Fraunces with optical sizing + slight tracking pull-in */
+.font-display {
+  font-family: var(--font-display);
+  font-feature-settings: 'opsz' 96;
+  font-variation-settings: 'opsz' 96, 'SOFT' 50, 'WONK' 0;
+  letter-spacing: -0.022em;
+}
+
+.font-display-italic {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-feature-settings: 'opsz' 36;
+  font-variation-settings: 'opsz' 36, 'SOFT' 100, 'WONK' 1;
+  letter-spacing: -0.01em;
+}
+
+/* Mono for IDs, timestamps, dosages — the clinical signal */
+.font-mono {
+  font-family: var(--font-mono);
+  font-feature-settings: 'zero', 'ss02';
+  letter-spacing: -0.01em;
+}
+
+/* Animations — restrained, editorial, no bouncing */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fade-up {
+  animation: fadeUp 320ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+/* Link underline reveal — grows from left on hover */
+.link-underline {
+  position: relative;
+  text-decoration: none;
+}
+.link-underline::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -2px;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.link-underline:hover::after {
+  transform: scaleX(1);
+}
+
+/* Selection colour matches accent */
+::selection {
+  background: var(--accent);
+  color: var(--card);
+}
+
+/* Inputs — paper, hairline underline, ink-coloured focus */
+.editorial-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--hairline-strong);
+  border-radius: 0;
+  padding: 0.625rem 0.125rem;
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  color: var(--ink);
+  transition: border-color 220ms;
+  width: 100%;
+}
+.editorial-input::placeholder {
+  color: var(--ink-4);
+  font-style: italic;
+}
+.editorial-input:focus {
+  outline: none;
+  border-bottom-color: var(--ink);
+}
+
+/* Primary button — ink-on-paper inverse, no rounding flourish */
+.editorial-btn {
+  background: var(--ink);
+  color: var(--card);
+  padding: 0.75rem 1.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  border: none;
+  cursor: pointer;
+  transition: background 180ms;
+}
+.editorial-btn:hover:not(:disabled) {
+  background: var(--accent);
+}
+.editorial-btn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+.editorial-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.editorial-btn-ghost {
+  background: transparent;
+  color: var(--ink);
+  border: 1px solid var(--hairline-strong);
+  padding: 0.6875rem 1.5rem;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 180ms;
+}
+.editorial-btn-ghost:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--card-overlay);
+}

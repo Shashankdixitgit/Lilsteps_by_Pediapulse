@@ -5,19 +5,23 @@ import { StyleSheet, Text, View } from 'react-native';
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { AppColors } from '@/constants/theme';
+import { useOnboarding } from '@/context/onboarding';
 
 const VAX_STATUS = ['Given', 'Missed', 'Not sure'];
 
-const VACCINES = [
-  { name: 'Tdap Booster', note: 'Tetanus-Diphtheria-Pertussis — 10 years' },
-  { name: 'HPV', note: 'Human Papillomavirus — 9–14 years, 2 doses' },
-  { name: 'Typhoid Booster', note: 'Every 3 years from age 2' },
-  { name: 'Influenza', note: 'Annual flu shot — recommended yearly' },
-  { name: 'Varicella Booster', note: 'Second dose if not given earlier' },
-  { name: 'Hepatitis A Booster', note: 'Second dose if first was given' },
+// `canonical` matches IAP names from iap_vaccine_schedule(). Marking a row
+// 'Given' will flag every past-due dose of that vaccine as status='done'.
+const VACCINES: { name: string; note: string; canonical: string[] }[] = [
+  { name: 'Tdap Booster',        note: 'Tetanus-Diphtheria-Pertussis — 10 years',     canonical: ['Tdap'] },
+  { name: 'HPV',                 note: 'Human Papillomavirus — 9–14 years, 2 doses',  canonical: ['HPV'] },
+  { name: 'Typhoid Booster',     note: 'Every 3 years from age 2',                    canonical: ['Typhoid Conjugate'] },
+  { name: 'Influenza',           note: 'Annual flu shot — recommended yearly',        canonical: ['Influenza'] },
+  { name: 'Varicella Booster',   note: 'Second dose if not given earlier',            canonical: ['Varicella'] },
+  { name: 'Hepatitis A Booster', note: 'Second dose if first was given',              canonical: ['Hepatitis A'] },
 ];
 
 export default function VaccinationOlderScreen() {
+  const { setVaccinationsGiven } = useOnboarding();
   const [vaccineStatus, setVaccineStatus] = useState<Record<string, string>>({});
 
   const updateStatus = (vaccine: string, val: string[]) => {
@@ -26,13 +30,21 @@ export default function VaccinationOlderScreen() {
 
   const givenCount = Object.values(vaccineStatus).filter((s) => s === 'Given').length;
 
+  function handleContinue() {
+    const given = VACCINES
+      .filter((v) => vaccineStatus[v.name] === 'Given')
+      .flatMap((v) => v.canonical);
+    setVaccinationsGiven(given);
+    router.push('/(onboarding)/c-sleep');
+  }
+
   return (
     <OnboardingShell
       progress={0.91}
       title="Vaccination Status"
       subtitle="Select the status for each vaccine — you can update records anytime in the Vaccination Tracker"
       ctaLabel="Continue"
-      onCta={() => router.push('/(onboarding)/c-sleep')}
+      onCta={handleContinue}
     >
       <View style={styles.vaccineList}>
         {VACCINES.map((vaccine) => (

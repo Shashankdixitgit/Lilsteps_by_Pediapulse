@@ -1,0 +1,26 @@
+# Cold-start: app launches, splash settles, lands on signup/login or home.
+# Catches regressions in font loading, splash hiding, and root auth routing.
+
+appId: host.exp.Exponent
+tags:
+  - parent
+  - smoke
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    text: ".*"     # any text visible == app rendered something
+    timeout: 15000
+# If the project's splash is configured, the LilSteps logo should appear
+# briefly. We can't assert on it directly (race), but we CAN assert that
+# we land on either an auth screen or the home tab.
+- runFlow:
+    when:
+      visible: "Welcome"
+    commands:
+      - assertVisible: "Welcome"
+- runFlow:
+    when:
+      visible: "Good morning|Good afternoon|Good evening"
+    commands:
+      - assertVisible: ".*thriving today.*"

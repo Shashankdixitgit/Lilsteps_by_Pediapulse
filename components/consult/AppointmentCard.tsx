@@ -12,6 +12,7 @@ export interface AppointmentCardProps {
   time: string;
   onViewDetails?: () => void;
   onCancel?: () => void;
+  onJoinVideo?: () => void;
 }
 
 export function AppointmentCard({
@@ -22,6 +23,7 @@ export function AppointmentCard({
   time,
   onViewDetails,
   onCancel,
+  onJoinVideo,
 }: AppointmentCardProps) {
   const d = new Date(date);
   const initials = doctorName.split(' ').map((w) => w[0]).join('').slice(0, 2);
@@ -54,18 +56,31 @@ export function AppointmentCard({
           </View>
         </View>
         <View style={styles.actions}>
-          <Pressable
-            style={({ pressed }) => [styles.viewBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={onViewDetails}
-          >
-            <Text style={styles.viewText}>View Details</Text>
-          </Pressable>
-          <Pressable
-            style={({ pressed }) => [styles.cancelBtn, { opacity: pressed ? 0.8 : 1 }]}
-            onPress={onCancel}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </Pressable>
+          {onJoinVideo && (
+            <Pressable
+              style={({ pressed }) => [styles.joinBtn, { opacity: pressed ? 0.85 : 1 }]}
+              onPress={onJoinVideo}
+            >
+              <Ionicons name="videocam" size={14} color={AppColors.onPrimary} />
+              <Text style={styles.joinText}>Join video</Text>
+            </Pressable>
+          )}
+          {onViewDetails && (
+            <Pressable
+              style={({ pressed }) => [styles.viewBtn, { opacity: pressed ? 0.8 : 1 }]}
+              onPress={onViewDetails}
+            >
+              <Text style={styles.viewText}>Details</Text>
+            </Pressable>
+          )}
+          {onCancel && (
+            <Pressable
+              style={({ pressed }) => [styles.cancelBtn, { opacity: pressed ? 0.8 : 1 }]}
+              onPress={onCancel}
+            >
+              <Text style={styles.cancelText}>Cancel</Text>
+            </Pressable>
+          )}
         </View>
       </Card.Body>
     </Card>
@@ -109,7 +124,20 @@ const styles = StyleSheet.create({
   details: { flexDirection: 'row', gap: 16 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   metaText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: AppColors.onSurfaceVariant },
-  actions: { flexDirection: 'row', gap: 10 },
+  actions: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  joinBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: AppColors.primary,
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    flexGrow: 1,
+    flexBasis: '40%',
+  },
+  joinText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: AppColors.onPrimary },
   viewBtn: {
     flex: 1,
     backgroundColor: `${AppColors.primary}10`,

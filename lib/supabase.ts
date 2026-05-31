@@ -25,7 +25,19 @@ const getWebStorage = (): Storage | null => {
 
   try {
     if (!("localStorage" in globalThis)) return null;
-    return globalThis.localStorage;
+    const ls = globalThis.localStorage as unknown;
+    // Expo's web SSR (Node) sometimes injects a broken localStorage stub
+    // (e.g. `--localstorage-file` without a valid path). Verify it actually
+    // implements the Storage API before handing it to Supabase.
+    if (
+      !ls ||
+      typeof (ls as Storage).getItem !== "function" ||
+      typeof (ls as Storage).setItem !== "function" ||
+      typeof (ls as Storage).removeItem !== "function"
+    ) {
+      return null;
+    }
+    return ls as Storage;
   } catch {
     // localStorage can throw in SSR or locked-down contexts
     return null;

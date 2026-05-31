@@ -1,13 +1,15 @@
 /**
  * Select Date & Time — Step 2 of booking
  *
- * Date strip (today + 6 days) + time grid (9am–4pm)
+ * Real time_slots via useTimeSlots(). Past slots for today are filtered in
+ * the hook. "Booked" = is_available=false.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,34 +19,24 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppColors } from '@/constants/theme';
+import { supabase } from '@/lib/supabase';
+import { useTimeSlots } from '@/hooks/useDoctors';
 
-// ─── Time slots 9am–4pm ────────────────────────────────────────────────────────
-const TIME_SLOTS = [
-  '09:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
-  '01:00 PM', '02:00 PM', '03:00 PM', '04:00 PM',
-];
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Randomly mark a couple as unavailable for demo realism
-const UNAVAILABLE_SLOTS = new Set(['11:00 AM', '02:00 PM']);
-
-// ─── Date helpers ──────────────────────────────────────────────────────────────
 function getNextDays(n: number) {
-  const out = [];
-  const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const out: { label: string; date: string; iso: string; fullLabel: string }[] = [];
   for (let i = 0; i < n; i++) {
     const d = new Date();
     d.setDate(d.getDate() + i);
+    const dateLabel = `${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`;
+    const dayLabel = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAY_LABELS[d.getDay()];
     out.push({
-      label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : DAY_LABELS[d.getDay()],
-      date: `${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`,
-      dayOfWeek: DAY_LABELS[d.getDay()],
+      label: dayLabel,
+      date: dateLabel,
       iso: d.toISOString().split('T')[0],
-      fullLabel: i === 0
-        ? `Today, ${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`
-        : i === 1
-        ? `Tomorrow, ${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`
-        : `${DAY_LABELS[d.getDay()]}, ${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`,
+      fullLabel: `${dayLabel}, ${dateLabel}`,
     });
   }
   return out;
@@ -52,33 +44,56 @@ function getNextDays(n: number) {
 
 const DAYS = getNextDays(7);
 
-// Doctor name map (same as booking.tsx)
-const DOCTOR_NAMES: Record<string, string> = {
-  'dr-madhav': 'Dr. Madhav Sharma',
-  'dr-shilpa': 'Dr. Shilpa Rao',
-  'dr-amit':   'Dr. Amit Verma',
-  'dr-harsh':  'Dr. Harsh Vardhan',
-};
+function formatTime(t: string): string {
+  // "09:00:00" -> "09:00 AM"
+  const [h, m] = t.split(':').map(Number);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const hour12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${String(hour12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+}
 
 export default function SlotsScreen() {
   const insets = useSafeAreaInsets();
   const { doctorId, issue } = useLocalSearchParams<{ doctorId: string; issue: string }>();
 
   const [selectedDay, setSelectedDay] = useState(0);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string | null>(null);
+  const [doctorName, setDoctorName] = useState<string>('Doctor');
 
-  const doctorName = DOCTOR_NAMES[doctorId] ?? 'Doctor';
+  useEffect(() => {
+    if (!doctorId) return;
+    (async () => {
+      const { data } = await supabase
+        .from('doctors')
+        .select('name')
+        .eq('id', doctorId)
+        .maybeSingle<{ name: string }>();
+      if (data) setDoctorName(data.name);
+    })();
+  }, [doctorId]);
+
+  const { slots, loading } = useTimeSlots(doctorId ?? null, DAYS[selectedDay].iso);
+
+  useEffect(() => {
+    setSelectedTime(null);
+  }, [selectedDay]);
 
   function goToConfirm() {
-    if (!selectedSlot) return;
-    router.push(
-      `/consult/confirm?doctorId=${doctorId}&dateIso=${DAYS[selectedDay].iso}&dateLabel=${encodeURIComponent(DAYS[selectedDay].fullLabel)}&time=${encodeURIComponent(selectedSlot)}&issue=${encodeURIComponent(issue ?? '')}`
-    );
+    if (!selectedTime || !doctorId) return;
+    router.push({
+      pathname: '/consult/confirm',
+      params: {
+        doctorId,
+        dateIso: DAYS[selectedDay].iso,
+        dateLabel: DAYS[selectedDay].fullLabel,
+        time: selectedTime,
+        issue: issue ?? '',
+      },
+    });
   }
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      {/* Header */}
       <View style={styles.header}>
         <Pressable style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={20} color={AppColors.onSurface} />
@@ -90,9 +105,8 @@ export default function SlotsScreen() {
         <View style={{ width: 36 }} />
       </View>
 
-      {/* Step indicator */}
       <View style={styles.steps}>
-        {[1, 2, 3, 4].map((s) => (
+        {[1, 2, 3].map((s) => (
           <View key={s} style={[styles.stepDot, s <= 2 && styles.stepDotActive]} />
         ))}
       </View>
@@ -101,7 +115,6 @@ export default function SlotsScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Date strip */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Choose a date</Text>
           <ScrollView
@@ -115,7 +128,7 @@ export default function SlotsScreen() {
                 <Pressable
                   key={i}
                   style={[styles.dayChip, active && styles.dayChipActive]}
-                  onPress={() => { setSelectedDay(i); setSelectedSlot(null); }}
+                  onPress={() => setSelectedDay(i)}
                 >
                   <Text style={[styles.dayLabel, active && styles.dayLabelActive]}>{d.label}</Text>
                   <Text style={[styles.dayDate, active && styles.dayDateActive]}>{d.date}</Text>
@@ -125,79 +138,92 @@ export default function SlotsScreen() {
           </ScrollView>
         </View>
 
-        {/* Doctor availability note */}
-        <View style={styles.availCard}>
-          <View style={styles.availDot} />
-          <Text style={styles.availText}>
-            {doctorName} is available on {DAYS[selectedDay].fullLabel}
-          </Text>
-        </View>
-
-        {/* Time grid */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Available times</Text>
           <Text style={styles.sectionSub}>All times are in IST</Text>
-          <View style={styles.slotsGrid}>
-            {TIME_SLOTS.map((slot) => {
-              const unavailable = UNAVAILABLE_SLOTS.has(slot);
-              const active = selectedSlot === slot;
-              return (
-                <Pressable
-                  key={slot}
-                  disabled={unavailable}
-                  style={[styles.slotChip, unavailable && styles.slotDisabled, active && styles.slotActive]}
-                  onPress={() => setSelectedSlot(slot)}
-                >
-                  {active && (
-                    <LinearGradient
-                      colors={[AppColors.primary, AppColors.gradientEnd]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={StyleSheet.absoluteFill}
-                    />
-                  )}
-                  <Ionicons
-                    name={unavailable ? 'close-outline' : 'time-outline'}
-                    size={14}
-                    color={unavailable ? `${AppColors.onSurfaceVariant}50` : active ? AppColors.onPrimary : AppColors.primary}
-                  />
-                  <Text
-                    style={[
-                      styles.slotText,
-                      unavailable && styles.slotTextDisabled,
-                      active && styles.slotTextActive,
-                    ]}
+
+          {loading ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="small" color={AppColors.primary} />
+            </View>
+          ) : slots.length === 0 ? (
+            <View style={styles.emptyCard}>
+              <Ionicons name="calendar-clear-outline" size={28} color={AppColors.onSurfaceVariant} />
+              <Text style={styles.emptyText}>
+                {doctorName} has no slots on {DAYS[selectedDay].fullLabel}.
+                Try another date.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.slotsGrid}>
+              {slots.map((slot) => {
+                const unavailable = !slot.is_available;
+                const active = selectedTime === slot.time;
+                return (
+                  <Pressable
+                    key={slot.id}
+                    disabled={unavailable}
+                    style={[styles.slotChip, unavailable && styles.slotDisabled, active && styles.slotActive]}
+                    onPress={() => setSelectedTime(slot.time)}
                   >
-                    {slot}
-                  </Text>
-                  {unavailable && <Text style={styles.bookedLabel}>Booked</Text>}
-                </Pressable>
-              );
-            })}
-          </View>
+                    {active && (
+                      <LinearGradient
+                        colors={[AppColors.primary, AppColors.gradientEnd]}
+                        start={{ x: 0, y: 0 }}
+                        end={{ x: 1, y: 1 }}
+                        style={StyleSheet.absoluteFill}
+                      />
+                    )}
+                    <Ionicons
+                      name={unavailable ? 'close-outline' : 'time-outline'}
+                      size={14}
+                      color={
+                        unavailable
+                          ? `${AppColors.onSurfaceVariant}50`
+                          : active
+                            ? AppColors.onPrimary
+                            : AppColors.primary
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.slotText,
+                        unavailable && styles.slotTextDisabled,
+                        active && styles.slotTextActive,
+                      ]}
+                    >
+                      {formatTime(slot.time)}
+                    </Text>
+                    {unavailable && <Text style={styles.bookedLabel}>Booked</Text>}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
         </View>
 
-        {/* Consultation info */}
         <View style={styles.infoRow}>
           <InfoChip icon="videocam-outline" label="Video consultation" />
           <InfoChip icon="time-outline" label="30 min session" />
-          <InfoChip icon="cash-outline" label="₹400 fee" />
         </View>
       </ScrollView>
 
-      {/* Bottom CTA */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-        {selectedSlot && (
+        {selectedTime && (
           <View style={styles.selectedSummary}>
             <Ionicons name="calendar-outline" size={14} color={AppColors.primary} />
             <Text style={styles.selectedSummaryText}>
-              {DAYS[selectedDay].fullLabel} · {selectedSlot}
+              {DAYS[selectedDay].fullLabel} · {formatTime(selectedTime)}
             </Text>
           </View>
         )}
         <Pressable
-          style={({ pressed }) => [styles.continueBtn, !selectedSlot && styles.continueBtnDisabled, { opacity: pressed ? 0.87 : 1 }]}
-          disabled={!selectedSlot}
+          style={({ pressed }) => [
+            styles.continueBtn,
+            !selectedTime && styles.continueBtnDisabled,
+            { opacity: pressed ? 0.87 : 1 },
+          ]}
+          disabled={!selectedTime}
           onPress={goToConfirm}
         >
           <LinearGradient
@@ -218,7 +244,7 @@ export default function SlotsScreen() {
 function InfoChip({ icon, label }: { icon: string; label: string }) {
   return (
     <View style={styles.infoChip}>
-      <Ionicons name={icon as any} size={14} color={AppColors.primary} />
+      <Ionicons name={icon as never} size={14} color={AppColors.primary} />
       <Text style={styles.infoChipText}>{label}</Text>
     </View>
   );
@@ -264,12 +290,12 @@ const styles = StyleSheet.create({
   dayDate: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: AppColors.onSurfaceVariant },
   dayDateActive: { color: 'rgba(255,255,255,0.8)' },
 
-  availCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: AppColors.successGreenSurface, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
+  center: { paddingVertical: 28, alignItems: 'center' },
+  emptyCard: {
+    alignItems: 'center', gap: 10,
+    backgroundColor: `${AppColors.surfaceContainerHigh}80`, borderRadius: 14, padding: 20,
   },
-  availDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: AppColors.successGreen },
-  availText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: AppColors.successGreenDark, flex: 1 },
+  emptyText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: AppColors.onSurfaceVariant, textAlign: 'center', lineHeight: 18 },
 
   slotsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   slotChip: {
