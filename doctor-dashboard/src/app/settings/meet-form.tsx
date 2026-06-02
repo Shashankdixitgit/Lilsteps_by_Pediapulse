@@ -30,7 +30,7 @@ export function MeetLinkForm({ initialLink }: { initialLink: string | null }) {
           placeholder="https://meet.google.com/abc-defg-hij"
           className="editorial-input mt-1"
         />
-        <p className="mt-2 font-display-italic text-[14px] text-[var(--ink-2)]">
+        <p className="mt-2 text-[14px] leading-[1.55] text-[var(--ink-3)]">
           Create a meeting at{' '}
           <a
             href="https://meet.google.com/new"

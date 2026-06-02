@@ -49,24 +49,14 @@ export default async function PrescriptionsPage({
   const childName = data?.find((p) => p.children?.id === childFilter)?.children?.name;
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-16">
-      <header className="mb-14 flex items-end justify-between gap-6 fade-up">
+    <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-12">
+      <header className="mb-10 flex items-end justify-between gap-6 fade-up">
         <div>
-          <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--ink-3)]">
-            {childName ? 'For patient' : 'Pharmacopoeia'}
+          <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
+            {childName ? 'For patient' : 'Records'}
           </div>
-          <h1 className="mt-4 font-display text-[56px] leading-[0.95] tracking-[-0.03em] text-[var(--ink)]">
-            {childName ? (
-              <>
-                <span className="font-display-italic">{childName}&apos;s</span>
-                <br />
-                prescriptions
-              </>
-            ) : (
-              <>
-                All <span className="font-display-italic">prescriptions</span>
-              </>
-            )}
+          <h1 className="mt-2 font-display text-[40px] leading-tight text-[var(--ink)]">
+            {childName ? `${childName}'s Prescriptions` : 'All Prescriptions'}
           </h1>
         </div>
         {childFilter && (
@@ -80,15 +70,16 @@ export default async function PrescriptionsPage({
       </header>
 
       {error && (
-        <div className="border-l-2 border-[var(--alert)] px-5 py-4 font-mono text-[13px] text-[var(--alert)]">
+        <div className="rounded-xl border border-[var(--hairline-strong)] border-l-2 border-l-[var(--ink)] px-5 py-4 font-mono text-[13px] text-[var(--ink)]">
           {error.message}
         </div>
       )}
 
       {!error && (!data || data.length === 0) && (
-        <div className="border-t border-[var(--hairline)] py-24 text-center">
-          <p className="font-display-italic text-[28px] text-[var(--ink-3)]">
-            Nothing issued yet.
+        <div className="rounded-xl border border-dashed border-[var(--hairline-strong)] bg-[var(--card)] py-20 text-center">
+          <p className="font-display text-[20px] text-[var(--ink-2)]">Nothing issued yet</p>
+          <p className="mt-2 text-[14px] text-[var(--ink-3)]">
+            Prescriptions you issue will appear here.
           </p>
         </div>
       )}

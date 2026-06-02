@@ -42,7 +42,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
             onChange={(e) => setDraft(e.target.value)}
             placeholder="A reply, in your own words…"
             rows={2}
-            className="editorial-input resize-none italic placeholder:not-italic"
+            className="editorial-input resize-none"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();

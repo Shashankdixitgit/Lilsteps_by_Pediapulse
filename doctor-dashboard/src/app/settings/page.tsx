@@ -36,31 +36,31 @@ export default async function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-8 py-16">
-      <header className="mb-12 fade-up">
-        <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--ink-3)]">
+    <main className="mx-auto w-full max-w-3xl flex-1 px-8 py-12">
+      <header className="mb-10 fade-up">
+        <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
           Practice
         </div>
-        <h1 className="mt-4 font-display text-[56px] leading-[0.95] tracking-[-0.03em] text-[var(--ink)]">
-          <span className="font-display-italic">Settings</span>
+        <h1 className="mt-2 font-display text-[40px] leading-tight text-[var(--ink)]">
+          Settings
         </h1>
-        <p className="mt-4 max-w-xl font-display-italic text-[18px] leading-[1.55] text-[var(--ink-2)]">
+        <p className="mt-2 text-[15px] text-[var(--ink-3)]">
           Configuration for your consultations.
         </p>
       </header>
 
       <section className="border-t border-[var(--hairline)] pt-8">
-        <h2 className="mb-6 font-display text-[28px] leading-tight tracking-[-0.02em] text-[var(--ink)]">
-          <span className="font-display-italic">Auto</span> Meet via Google Calendar
+        <h2 className="mb-6 font-display text-[22px] leading-tight text-[var(--ink)]">
+          Auto Meet via Google Calendar
         </h2>
         <GoogleLink initialEmail={googleEmail} />
       </section>
 
-      <section className="mt-14 border-t border-[var(--hairline)] pt-8">
-        <h2 className="mb-6 font-display text-[28px] leading-tight tracking-[-0.02em] text-[var(--ink)]">
-          <span className="font-display-italic">Fallback</span> video room
+      <section className="mt-12 border-t border-[var(--hairline)] pt-8">
+        <h2 className="mb-2 font-display text-[22px] leading-tight text-[var(--ink)]">
+          Fallback video room
         </h2>
-        <p className="mb-5 font-display-italic text-[15px] leading-[1.55] text-[var(--ink-2)]">
+        <p className="mb-5 text-[15px] leading-[1.55] text-[var(--ink-3)]">
           Used when Google Calendar isn&apos;t connected, or when the per-appointment
           Calendar event fails.
         </p>

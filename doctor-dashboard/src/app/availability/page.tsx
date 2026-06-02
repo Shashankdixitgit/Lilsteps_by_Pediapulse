@@ -34,32 +34,30 @@ export default async function AvailabilityPage() {
   const days = Array.from(byDate.values());
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-16">
-      <header className="mb-12 fade-up">
-        <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--ink-3)]">
+    <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-12">
+      <header className="mb-10 fade-up">
+        <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
           Calendar
         </div>
-        <h1 className="mt-4 font-display text-[56px] leading-[0.95] tracking-[-0.03em] text-[var(--ink)]">
-          Your <span className="font-display-italic">availability</span>
+        <h1 className="mt-2 font-display text-[40px] leading-tight text-[var(--ink)]">
+          Availability
         </h1>
-        <p className="mt-4 max-w-xl font-display-italic text-[18px] leading-[1.55] text-[var(--ink-2)]">
+        <p className="mt-2 text-[15px] text-[var(--ink-3)]">
           Open and close slots from here. Parents only see slots marked open.
         </p>
       </header>
 
       {error && (
-        <div className="border-l-2 border-[var(--alert)] px-5 py-4 font-mono text-[13px] text-[var(--alert)]">
+        <div className="rounded-xl border border-[var(--hairline-strong)] border-l-2 border-l-[var(--ink)] px-5 py-4 font-mono text-[13px] text-[var(--ink)]">
           {error.message}
         </div>
       )}
 
       <section className="mb-14">
         {days.length === 0 ? (
-          <div className="border-t border-[var(--hairline)] py-20 text-center">
-            <p className="font-display-italic text-[26px] text-[var(--ink-3)]">
-              No upcoming slots.
-            </p>
-            <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-4)]">
+          <div className="rounded-xl border border-dashed border-[var(--hairline-strong)] bg-[var(--card)] py-20 text-center">
+            <p className="font-display text-[20px] text-[var(--ink-2)]">No upcoming slots</p>
+            <p className="mt-2 text-[14px] text-[var(--ink-3)]">
               Generate a window below to get started.
             </p>
           </div>

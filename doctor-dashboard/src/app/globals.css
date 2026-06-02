@@ -1,36 +1,36 @@
 @import "tailwindcss";
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Clinical Editorial — Pedia Pulse doctor dashboard
-   A paediatrician's chart pad meets the restraint of a literary journal.
-   Warm cream paper, deep ink, single emerald accent, mono-spaced metadata.
+   Clean Monochrome — Pedia Pulse doctor dashboard
+   Pure black & white. White surfaces, near-black ink, neutral grays for
+   hierarchy. A single typeface (Roboto) with Roboto Mono for clinical numbers.
    ────────────────────────────────────────────────────────────────────────── */
 
 :root {
-  /* Paper + ink (NOT zinc grays — warm-shifted to feel like cream paper) */
-  --paper: #f7f3ea;
-  --paper-soft: #f1ece1;
-  --card: #fdfaf4;
-  --card-overlay: rgba(253, 250, 244, 0.6);
+  /* Surfaces — pure white, neutral grays */
+  --paper: #ffffff;
+  --paper-soft: #f5f5f5;
+  --card: #ffffff;
+  --card-overlay: rgba(255, 255, 255, 0.6);
 
-  --ink: #1a1410;
-  --ink-2: #4a3f36;
-  --ink-3: #8c7e6f;
-  --ink-4: #b8ab9a;
-  --hairline: rgba(26, 20, 16, 0.1);
-  --hairline-strong: rgba(26, 20, 16, 0.22);
+  --ink: #0a0a0a;
+  --ink-2: #404040;
+  --ink-3: #737373;
+  --ink-4: #a3a3a3;
+  --hairline: rgba(0, 0, 0, 0.1);
+  --hairline-strong: rgba(0, 0, 0, 0.22);
 
-  /* Accents — used sparingly, never as background fill */
-  --accent: #1f5e3e;       /* deep clinical emerald */
-  --accent-soft: #2d8055;
-  --accent-pale: #e7eee9;
-  --alert: #9a2520;        /* medical red */
-  --highlight: #d4a72c;    /* margin-note yellow */
+  /* Accents — monochrome. Emphasis through depth of gray, not hue. */
+  --accent: #000000;
+  --accent-soft: #404040;
+  --accent-pale: #f0f0f0;
+  --alert: #171717;        /* surface alerts via weight/border, not color */
+  --highlight: #525252;
 
   /* Type ramp — pulled from next/font CSS vars set in layout.tsx */
-  --font-display: var(--font-fraunces), Georgia, 'Times New Roman', serif;
-  --font-sans: var(--font-geist), system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), 'SF Mono', Menlo, monospace;
+  --font-display: var(--font-roboto), system-ui, sans-serif;
+  --font-sans: var(--font-roboto), system-ui, sans-serif;
+  --font-mono: var(--font-roboto-mono), 'SF Mono', Menlo, monospace;
 }
 
 @theme inline {
@@ -61,50 +61,30 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-feature-settings: 'ss01', 'ss02', 'cv11';
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Paper grain — extremely subtle, layered behind content. SVG inlined as
-   data-URL so there's no extra request. The texture catches a tiny bit of
-   light without becoming noisy. */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.6;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.1 0 0 0 0 0.08 0 0 0 0 0.06 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='220' height='220' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* All app content above grain */
-body > * {
-  position: relative;
-  z-index: 1;
-}
-
-/* Display headings use Fraunces with optical sizing + slight tracking pull-in */
+/* Display headings — Roboto, bold weight, tightened tracking for a clean,
+   modern look. No serif, no optical-size axes. */
 .font-display {
   font-family: var(--font-display);
-  font-feature-settings: 'opsz' 96;
-  font-variation-settings: 'opsz' 96, 'SOFT' 50, 'WONK' 0;
-  letter-spacing: -0.022em;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
+/* Retained for backwards-compat with existing markup, but no longer italic —
+   renders as a clean, upright medium-weight emphasis. */
 .font-display-italic {
   font-family: var(--font-display);
-  font-style: italic;
-  font-feature-settings: 'opsz' 36;
-  font-variation-settings: 'opsz' 36, 'SOFT' 100, 'WONK' 1;
+  font-style: normal;
+  font-weight: 500;
   letter-spacing: -0.01em;
 }
 
 /* Mono for IDs, timestamps, dosages — the clinical signal */
 .font-mono {
   font-family: var(--font-mono);
-  font-feature-settings: 'zero', 'ss02';
   letter-spacing: -0.01em;
 }
 
@@ -160,7 +140,6 @@ body > * {
 }
 .editorial-input::placeholder {
   color: var(--ink-4);
-  font-style: italic;
 }
 .editorial-input:focus {
   outline: none;
@@ -182,7 +161,7 @@ body > * {
   transition: background 180ms;
 }
 .editorial-btn:hover:not(:disabled) {
-  background: var(--accent);
+  background: var(--ink-2);
 }
 .editorial-btn:active:not(:disabled) {
   transform: scale(0.99);

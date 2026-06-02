@@ -113,15 +113,21 @@ export default async function ConsultationPage({
             <div className="mt-1 font-mono text-[12px] tracking-[0.1em] text-[var(--ink-2)]">{stamp.time}</div>
           </div>
           <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-3)]">Patient</div>
-            <h1 className="mt-2 font-display-italic text-[44px] leading-none text-[var(--ink)]">{child.name}</h1>
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">Patient</div>
+            <h1 className="mt-2 font-display text-[36px] leading-tight text-[var(--ink)]">{child.name}</h1>
             <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
               {age} · {child.sex} · parent {appointment.parents?.name ?? appointment.parents?.phone ?? '—'}
             </div>
           </div>
           <div className="flex flex-col items-end gap-2">
-            <span className={`font-mono text-[10px] uppercase tracking-[0.18em] ${appointment.status === 'upcoming' ? 'text-[var(--accent)]' : 'text-[var(--ink-3)]'}`}>
-              · {appointment.status}
+            <span
+              className={`inline-flex items-center rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] ${
+                appointment.status === 'upcoming'
+                  ? 'border-[var(--ink)] text-[var(--ink)]'
+                  : 'border-[var(--hairline-strong)] text-[var(--ink-3)]'
+              }`}
+            >
+              {appointment.status}
             </span>
           </div>
         </div>
@@ -171,12 +177,12 @@ export default async function ConsultationPage({
               {checkin.ai_summary.chiefComplaint}
             </p>
             {checkin.ai_summary.allergyNote && (
-              <p className="mt-3 border-l-2 border-[var(--alert)] bg-[var(--card-overlay)] py-2 pl-3 font-display-italic text-[14px] text-[var(--alert)]">
+              <p className="mt-3 border-l-[3px] border-[var(--ink)] bg-[var(--paper-soft)] py-2 pl-3 text-[14px] font-semibold text-[var(--ink)]">
                 ⚠ {checkin.ai_summary.allergyNote}
               </p>
             )}
             {checkin.ai_summary.relevantHistory && (
-              <p className="mt-3 font-display-italic text-[14px] text-[var(--ink-2)]">
+              <p className="mt-3 text-[14px] leading-[1.55] text-[var(--ink-2)]">
                 Relevant history: {checkin.ai_summary.relevantHistory}
               </p>
             )}
@@ -216,7 +222,7 @@ export default async function ConsultationPage({
 
         <Section title="Clinical flags" eyebrow="Profile">
           {!allergies?.length && !conditions?.length && !medications?.length ? (
-            <p className="font-display-italic text-[16px] text-[var(--ink-3)]">No flags on file.</p>
+            <p className="text-[15px] text-[var(--ink-3)]">No flags on file.</p>
           ) : (
             <>
               {allergies && allergies.length > 0 && (
@@ -265,21 +271,31 @@ export default async function ConsultationPage({
 
       {/* Vaccinations */}
       <Section title="Immunisation" eyebrow="Schedule" className="mt-10">
-        <div className="mb-4 flex flex-wrap gap-3 font-mono text-[10px] uppercase tracking-[0.16em]">
-          <span className="text-[var(--accent)]">{doneVaccines.length} done</span>
-          <span className="text-[var(--ink-3)]">·</span>
-          <span className="text-[var(--alert)]">{overdueVaccines.length} overdue</span>
-          <span className="text-[var(--ink-3)]">·</span>
-          <span className="text-[var(--ink-2)]">{upcomingVaccines.length} upcoming</span>
+        <div className="mb-4 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.12em]">
+          <span className="rounded-full border border-[var(--hairline-strong)] px-2.5 py-1 text-[var(--ink-3)]">
+            {doneVaccines.length} done
+          </span>
+          <span
+            className={`rounded-full px-2.5 py-1 ${
+              overdueVaccines.length > 0
+                ? 'border border-[var(--ink)] bg-[var(--ink)] font-semibold text-[var(--paper)]'
+                : 'border border-[var(--hairline-strong)] text-[var(--ink-4)]'
+            }`}
+          >
+            {overdueVaccines.length} overdue
+          </span>
+          <span className="rounded-full border border-[var(--hairline-strong)] px-2.5 py-1 text-[var(--ink-2)]">
+            {upcomingVaccines.length} upcoming
+          </span>
         </div>
         {overdueVaccines.length > 0 && (
           <div className="mb-5">
-            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--alert)]">Overdue</div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.18em] font-semibold text-[var(--ink)] underline decoration-[var(--hairline-strong)] underline-offset-4">Overdue</div>
             <ul className="mt-2 space-y-1">
               {overdueVaccines.slice(0, 8).map((v) => (
                 <li key={v.id} className="grid grid-cols-[1fr_auto] gap-4 border-b border-[var(--hairline)] py-2 text-[14px]">
                   <span>{v.vaccine_name} <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">· {v.dose_label}</span></span>
-                  <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--alert)]">{v.scheduled_date}</span>
+                  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--ink)]">{v.scheduled_date}</span>
                 </li>
               ))}
             </ul>
@@ -345,11 +361,17 @@ function FlagBlock({
   color?: 'alert';
   children: React.ReactNode;
 }) {
+  const isAlert = color === 'alert';
   return (
-    <div className="mb-4 border-l-2 pl-4" style={{ borderColor: color === 'alert' ? 'var(--alert)' : 'var(--accent)' }}>
+    <div
+      className={`mb-4 pl-4 ${
+        isAlert ? 'border-l-[3px] border-[var(--ink)]' : 'border-l border-[var(--hairline-strong)]'
+      }`}
+    >
       <div
-        className="font-mono text-[10px] uppercase tracking-[0.18em]"
-        style={{ color: color === 'alert' ? 'var(--alert)' : 'var(--ink-3)' }}
+        className={`font-mono text-[10px] uppercase tracking-[0.18em] ${
+          isAlert ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-3)]'
+        }`}
       >
         {label}
       </div>
