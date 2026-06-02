@@ -12,8 +12,6 @@
     "test:e2e:headed": "playwright test --headed"
   },
   "dependencies": {
-    "@100mslive/hms-video-store": "^0.14.2",
-    "@100mslive/react-sdk": "^0.12.2",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
     "next": "16.2.6",
