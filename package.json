@@ -13,8 +13,6 @@
     "test:e2e:smoke": "maestro test .maestro --include-tags=smoke"
   },
   "dependencies": {
-    "@100mslive/react-sdk": "^0.12.2",
-    "@100mslive/roomkit-react": "^0.5.2",
     "@expo-google-fonts/plus-jakarta-sans": "^0.4.2",
     "@expo/vector-icons": "^15.0.3",
     "@react-native-community/datetimepicker": "8.4.4",

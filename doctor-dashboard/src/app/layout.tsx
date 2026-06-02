@@ -1,23 +1,16 @@
 import type { Metadata } from 'next';
-import { Fraunces, Geist, JetBrains_Mono } from 'next/font/google';
+import { Roboto, Roboto_Mono } from 'next/font/google';
 import './globals.css';
 import { DashboardNav } from './nav';
 
-const fraunces = Fraunces({
-  variable: '--font-fraunces',
-  subsets: ['latin'],
-  display: 'swap',
-  axes: ['SOFT', 'WONK', 'opsz'],
-});
-
-const geist = Geist({
-  variable: '--font-geist',
+const roboto = Roboto({
+  variable: '--font-roboto',
   subsets: ['latin'],
   display: 'swap',
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  variable: '--font-jetbrains-mono',
+const robotoMono = Roboto_Mono({
+  variable: '--font-roboto-mono',
   subsets: ['latin'],
   display: 'swap',
 });
@@ -35,7 +28,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${fraunces.variable} ${geist.variable} ${jetbrainsMono.variable} h-full`}
+      className={`${roboto.variable} ${robotoMono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col">
         <DashboardNav />

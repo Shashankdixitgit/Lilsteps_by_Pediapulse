@@ -15,21 +15,51 @@ function computeAge(dob: string): string {
   const d = new Date(dob);
   const now = new Date();
   const months = (now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth());
-  if (months < 1) return 'newborn';
+  if (months < 1) return 'Newborn';
   if (months < 24) return `${months} mo`;
   const years = Math.floor(months / 12);
   const rest = months % 12;
-  return rest === 0 ? `${years} yr` : `${years} yr · ${rest} mo`;
+  return rest === 0 ? `${years} yr` : `${years} yr ${rest} mo`;
 }
 
-function formatDate(iso: string): { weekday: string; day: string; month: string } {
+function formatWhen(iso: string, time: string): { date: string; time: string } {
   const d = new Date(`${iso}T00:00:00`);
   return {
-    weekday: d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
-    day: d.toLocaleDateString('en-US', { day: '2-digit' }),
-    month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
+    date: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: '2-digit' }),
+    time: time.slice(0, 5),
   };
 }
+
+function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {
+  return (
+    <div className="rounded-xl border border-[var(--hairline)] bg-[var(--card)] p-6">
+      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
+        {label}
+      </div>
+      <div className="mt-3 font-display text-[40px] leading-none text-[var(--ink)]">{value}</div>
+      <div className="mt-2 text-[13px] text-[var(--ink-3)]">{hint}</div>
+    </div>
+  );
+}
+
+function SummaryBadge({ ready }: { ready: boolean }) {
+  if (ready) {
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--ink)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink)]">
+        <span className="h-1.5 w-1.5 rounded-full bg-[var(--ink)]" />
+        Ready
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--hairline-strong)] px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[var(--ink-4)]">
+      <span className="h-1.5 w-1.5 rounded-full bg-[var(--ink-4)]" />
+      Pending
+    </span>
+  );
+}
+
+const COLS = 'grid-cols-[2.5rem_9rem_minmax(0,1fr)_8rem_7rem]';
 
 export default async function QueuePage() {
   const supabase = await createSupabaseServerClient();
@@ -46,114 +76,105 @@ export default async function QueuePage() {
     .order('time', { ascending: true })
     .returns<QueueRow[]>();
 
-  const today_str = new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
+  const today_str = new Date()
+    .toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })
+    .toUpperCase();
+
+  const total = data?.length ?? 0;
+  const ready = data?.filter((a) => a.summary_ready).length ?? 0;
+  const awaiting = total - ready;
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-16">
-      {/* Editorial hero */}
-      <header className="mb-16 fade-up">
-        <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-[var(--ink-3)]">
-          Vol. I · {today_str}
+    <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-12">
+      {/* Header */}
+      <header className="fade-up">
+        <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
+          Queue · {today_str}
         </div>
-        <h1 className="mt-4 font-display text-[64px] leading-[0.95] tracking-[-0.03em] text-[var(--ink)]">
-          The day&apos;s
-          <br />
-          <span className="font-display-italic">consultations</span>
+        <h1 className="mt-2 font-display text-[40px] leading-tight text-[var(--ink)]">
+          Today&apos;s Consultations
         </h1>
-        <div className="mt-6 flex items-baseline gap-6 border-t border-[var(--hairline)] pt-5">
-          <span className="font-mono text-[12px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
-            {data?.length ?? 0} {data?.length === 1 ? 'entry' : 'entries'} pending
-          </span>
-          <span className="font-mono text-[12px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
-            {data?.filter((a) => a.summary_ready).length ?? 0} with summary
-          </span>
-        </div>
       </header>
 
+      {/* Summary stats */}
+      <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3 fade-up">
+        <StatCard label="Pending" value={total} hint="Appointments scheduled" />
+        <StatCard label="Summary ready" value={ready} hint="Pre-consult notes prepared" />
+        <StatCard label="Awaiting summary" value={awaiting} hint="No notes yet" />
+      </section>
+
       {error && (
-        <div className="border-l-2 border-[var(--alert)] bg-[var(--card)] px-5 py-4 font-mono text-[13px] text-[var(--alert)]">
+        <div className="mt-10 rounded-xl border border-[var(--hairline-strong)] border-l-2 border-l-[var(--ink)] bg-[var(--card)] px-5 py-4 font-mono text-[13px] text-[var(--ink)]">
           {error.message}
         </div>
       )}
 
-      {!error && (!data || data.length === 0) && (
-        <div className="border-t border-[var(--hairline)] py-24 text-center">
-          <p className="font-display-italic text-[28px] text-[var(--ink-3)]">
-            No appointments today.
-          </p>
-          <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-4)]">
-            — fin —
-          </p>
-        </div>
-      )}
+      {/* Appointments table */}
+      {!error && (
+        <section className="mt-10 fade-up">
+          <div className="flex items-baseline justify-between">
+            <h2 className="font-display text-[20px] text-[var(--ink)]">Appointments</h2>
+            <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
+              {total} scheduled
+            </span>
+          </div>
 
-      {data && data.length > 0 && (
-        <ol className="space-y-0">
-          {data.map((appt, idx) => {
-            const child = appt.children;
-            const date = formatDate(appt.date);
-            const time = appt.time.slice(0, 5);
-            return (
-              <li
-                key={appt.id}
-                className="fade-up group grid grid-cols-[3rem_5.5rem_1fr_auto] items-baseline gap-6 border-t border-[var(--hairline)] py-6 transition-colors hover:bg-[var(--card-overlay)]"
-                style={{ animationDelay: `${idx * 40}ms` }}
+          {total === 0 ? (
+            <div className="mt-5 rounded-xl border border-dashed border-[var(--hairline-strong)] bg-[var(--card)] py-20 text-center">
+              <p className="font-display text-[20px] text-[var(--ink-2)]">
+                No appointments today
+              </p>
+              <p className="mt-2 text-[14px] text-[var(--ink-3)]">
+                New bookings appear here as patients schedule them.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-5 overflow-hidden rounded-xl border border-[var(--hairline)] bg-[var(--card)]">
+              {/* Column headers */}
+              <div
+                className={`grid ${COLS} items-center gap-4 border-b border-[var(--hairline)] bg-[var(--paper-soft)] px-6 py-3 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]`}
               >
-                {/* Chart number */}
-                <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-4)]">
-                  {String(idx + 1).padStart(3, '0')}
-                </div>
+                <span>#</span>
+                <span>When</span>
+                <span>Patient</span>
+                <span>Details</span>
+                <span className="text-right">Summary</span>
+              </div>
 
-                {/* Date stamp */}
-                <div className="flex flex-col">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-                    {date.weekday} {date.month}
-                  </span>
-                  <span className="font-display text-[28px] leading-[1] text-[var(--ink)]">
-                    {date.day}
-                  </span>
-                  <span className="mt-1 font-mono text-[11px] tracking-[0.1em] text-[var(--ink-2)]">
-                    {time}
-                  </span>
-                </div>
-
-                {/* Patient */}
-                <div>
+              {/* Rows */}
+              {data!.map((appt, idx) => {
+                const child = appt.children;
+                const when = formatWhen(appt.date, appt.time);
+                return (
                   <Link
+                    key={appt.id}
                     href={`/consultations/${appt.id}`}
-                    className="link-underline font-display-italic text-[26px] leading-tight text-[var(--ink)]"
+                    className={`grid ${COLS} items-center gap-4 border-b border-[var(--hairline)] px-6 py-4 transition-colors last:border-0 hover:bg-[var(--paper-soft)]`}
                   >
-                    {child?.name ?? 'Unknown'}
+                    <span className="font-mono text-[12px] text-[var(--ink-4)]">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                    <div className="flex flex-col">
+                      <span className="text-[14px] text-[var(--ink)]">{when.date}</span>
+                      <span className="font-mono text-[12px] text-[var(--ink-3)]">{when.time}</span>
+                    </div>
+                    <span className="truncate text-[16px] font-medium text-[var(--ink)]">
+                      {child?.name ?? 'Unknown'}
+                    </span>
+                    <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--ink-3)]">
+                      <span>{child ? computeAge(child.dob) : '—'}</span>
+                      <span className="text-[var(--hairline-strong)]">·</span>
+                      <span>{child?.sex ?? '—'}</span>
+                    </div>
+                    <div className="text-right">
+                      <SummaryBadge ready={appt.summary_ready} />
+                    </div>
                   </Link>
-                  <div className="mt-1 flex items-baseline gap-3 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-                    <span>{child ? computeAge(child.dob) : '—'}</span>
-                    <span className="text-[var(--hairline-strong)]">·</span>
-                    <span>{child?.sex ?? '—'}</span>
-                  </div>
-                </div>
-
-                {/* Summary status */}
-                <div className="text-right">
-                  {appt.summary_ready ? (
-                    <span className="inline-flex items-baseline gap-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--accent)]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
-                      Summary ready
-                    </span>
-                  ) : (
-                    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-4)]">
-                      — pending —
-                    </span>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-          <li className="border-t border-[var(--hairline)]" />
-        </ol>
+                );
+              })}
+            </div>
+          )}
+        </section>
       )}
     </main>
   );

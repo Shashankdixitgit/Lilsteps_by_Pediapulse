@@ -100,7 +100,7 @@ export function PrescriptionForm({ childId, childName, appointmentId }: Props) {
                 onChange={(e) => updateItem(idx, { notes: e.target.value })}
                 rows={2}
                 placeholder="Take with food, etc."
-                className="editorial-input mt-1 resize-none italic placeholder:not-italic"
+                className="editorial-input mt-1 resize-none"
               />
             </div>
           </fieldset>
@@ -124,7 +124,7 @@ export function PrescriptionForm({ childId, childName, appointmentId }: Props) {
           onChange={(e) => setNotes(e.target.value)}
           rows={3}
           placeholder="Anything the parent should know about this prescription."
-          className="editorial-input mt-1 resize-none italic placeholder:not-italic"
+          className="editorial-input mt-1 resize-none"
         />
       </div>
 

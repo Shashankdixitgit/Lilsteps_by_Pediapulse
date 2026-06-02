@@ -71,11 +71,11 @@ export default async function ConversationPage({
     <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-8">
       {/* Editorial conversation header */}
       <header className="py-10 fade-up">
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-3)]">
+        <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
           Patient
         </div>
-        <h1 className="mt-3 font-display text-[44px] leading-[1] tracking-[-0.025em] text-[var(--ink)]">
-          <span className="font-display-italic">{conversation.children?.name ?? 'Unknown'}</span>
+        <h1 className="mt-2 font-display text-[36px] leading-tight text-[var(--ink)]">
+          {conversation.children?.name ?? 'Unknown'}
         </h1>
         <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
           Parent ·{' '}
@@ -114,7 +114,7 @@ export default async function ConversationPage({
 
       <section className="flex-1 border-t border-[var(--hairline)] py-10">
         {grouped.length === 0 ? (
-          <p className="py-16 text-center font-display-italic text-[22px] text-[var(--ink-3)]">
+          <p className="py-16 text-center font-display text-[18px] text-[var(--ink-3)]">
             No messages yet.
           </p>
         ) : (

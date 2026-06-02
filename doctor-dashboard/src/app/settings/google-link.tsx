@@ -78,7 +78,7 @@ export function GoogleLink({ initialEmail }: Props) {
 
   return (
     <div className="space-y-5 fade-up" style={{ animationDelay: '40ms' }}>
-      <div className="font-display-italic text-[15px] leading-[1.55] text-[var(--ink-2)]">
+      <div className="text-[15px] leading-[1.55] text-[var(--ink-3)]">
         Connect once. Every appointment booking will create a Google Calendar
         event with a unique Meet link, sent to you (and emailed to the parent
         if their email is on file).
