@@ -15,9 +15,10 @@ export default function SleepOlderScreen() {
 
   return (
     <OnboardingShell
+      sprout="sleepy"
       progress={1}
       title="Sleep"
-      subtitle="Sleep quality at this age directly impacts academic and emotional health"
+      subtitle="Sleep shapes school and mood at this age"
       ctaLabel="Finish"
       onCta={() => router.push('/(onboarding)/confirm')}
     >
@@ -42,10 +43,11 @@ export default function SleepOlderScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

@@ -1,6 +1,6 @@
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 
 export interface DayOption {
   label: string;
@@ -38,6 +38,9 @@ export function DateStrip({ days, selectedIndex, onSelect }: DateStripProps) {
             key={i}
             style={[styles.chip, active && styles.chipActive]}
             onPress={() => onSelect(i)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active }}
+            accessibilityLabel={`${d.label}, ${d.sub}`}
           >
             <Text style={[styles.label, active && styles.labelActive]}>{d.label}</Text>
             <Text style={[styles.date, active && styles.dateActive]}>{d.sub}</Text>
@@ -49,21 +52,22 @@ export function DateStrip({ days, selectedIndex, onSelect }: DateStripProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { gap: 10 },
+  row: { gap: 8 },
   chip: {
     alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderWidth: 1.5,
-    borderColor: `${AppColors.outlineVariant}15`,
-    minWidth: 78,
+    justifyContent: 'center',
+    height: 56,
+    minWidth: 76,
+    paddingHorizontal: 14,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    backgroundColor: AppColors.card,
+    borderWidth: 1,
+    borderColor: AppColors.border,
   },
   chipActive: { backgroundColor: AppColors.primary, borderColor: AppColors.primary },
-  label: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: AppColors.onSurface },
+  label: { fontFamily: FontFamily.semibold, fontSize: 13, lineHeight: 18, color: AppColors.onSurface },
   labelActive: { color: AppColors.onPrimary },
-  date: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: AppColors.onSurfaceVariant },
-  dateActive: { color: `${AppColors.onPrimary}B0` },
+  date: { fontFamily: FontFamily.regular, fontSize: 12, lineHeight: 16, color: AppColors.muted },
+  dateActive: { color: AppColors.onDarkMuted },
 });

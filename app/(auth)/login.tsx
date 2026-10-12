@@ -1,15 +1,16 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GradientBackground } from '@/components/gradient-background';
 import { GradientButton } from '@/components/gradient-button';
+import { Sprout } from '@/components/mascot/Sprout';
+import { HeaderIconButton } from '@/components/ScreenHeader';
 import { TextInputField } from '@/components/text-input-field';
+import { haptic } from '@/components/ui/useMotion';
 import { AppColors } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
-import { useAuth } from '@/context/auth';
+import { DEMO_LOGIN, useAuth } from '@/context/auth';
 import { dbg } from '@/lib/debug';
 
 export default function LoginScreen() {
@@ -28,7 +29,7 @@ export default function LoginScreen() {
 
   async function handleSendOtp() {
     const p = normalisedPhone();
-    if (!/^\+\d{10,15}$/.test(p)) {
+    if (!DEMO_LOGIN && !/^\+\d{10,15}$/.test(p)) {
       setError('Enter your phone number in international format (e.g. +919876543210)');
       return;
     }
@@ -49,7 +50,7 @@ export default function LoginScreen() {
   }
 
   async function handleVerifyOtp() {
-    if (otp.length !== 6) {
+    if (!DEMO_LOGIN && otp.length !== 6) {
       setError('Please enter the 6-digit code');
       return;
     }
@@ -63,6 +64,7 @@ export default function LoginScreen() {
 
     if (err) {
       dbg.authError('Login: OTP verify failed', err);
+      haptic('warning');
       setError(err);
     } else if (isNewUser) {
       dbg.nav('Login → Onboarding (new user)');
@@ -75,32 +77,33 @@ export default function LoginScreen() {
 
   return (
     <View style={layout.screenContainer}>
-      <GradientBackground />
-
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 16 }]}
+          contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {/* Header */}
           <View style={styles.header}>
-            <Pressable onPress={() => step === 'otp' ? setStep('phone') : router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={20} color={AppColors.onSurface} />
-            </Pressable>
+            <HeaderIconButton
+              icon="arrow-back"
+              onPress={() => step === 'otp' ? setStep('phone') : router.back()}
+              accessibilityLabel="Go back"
+            />
           </View>
 
           {/* Title */}
           <View style={styles.titleSection}>
-            <Text style={typography.headingXL}>
-              {step === 'phone' ? 'Welcome\nBack' : 'Enter\nCode'}
+            {step === 'phone' ? <Sprout mood="wave" size={40} style={styles.sprout} /> : null}
+            <Text style={typography.heading}>
+              {step === 'phone' ? 'Welcome back' : 'Check your messages'}
             </Text>
-            <Text style={[typography.bodySM, styles.subtitle]}>
+            <Text style={[typography.body, styles.subtitle]}>
               {step === 'phone'
-                ? 'Sign in with your phone number to continue'
+                ? "Let's pick up where you left off."
                 : `We sent a 6-digit code to ${phone}`}
             </Text>
           </View>
@@ -111,57 +114,54 @@ export default function LoginScreen() {
               <View style={styles.fields}>
                 <TextInputField
                   label="Phone"
-                  hint="(with country code)"
+                  hint="Include the country code"
                   placeholder="+919876543210"
                   keyboardType="phone-pad"
                   autoCapitalize="none"
                   autoComplete="tel"
                   value={phone}
                   onChangeText={setPhone}
+                  error={error ?? undefined}
                 />
               </View>
             ) : (
               <View style={styles.fields}>
                 <TextInputField
-                  label="Verification Code"
+                  label="Verification code"
                   placeholder="000000"
                   keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  autoComplete="sms-otp"
                   maxLength={6}
                   value={otp}
                   onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, ''))}
+                  style={styles.otpInput}
+                  error={error ?? undefined}
                   autoFocus
                 />
               </View>
             )}
 
-            {error && (
-              <Text style={styles.errorText}>{error}</Text>
-            )}
 
             <GradientButton
-              label={loading ? '' : step === 'phone' ? 'Send Code' : 'Verify'}
+              label={step === 'phone' ? 'Send code' : 'Verify'}
+              loading={loading}
               onPress={step === 'phone' ? handleSendOtp : handleVerifyOtp}
               style={styles.submitButton}
             />
-            {loading && (
-              <ActivityIndicator
-                color={AppColors.onPrimary}
-                style={styles.loadingOverlay}
-              />
-            )}
 
-            {step === 'otp' && (
-              <Pressable onPress={handleSendOtp} style={styles.resendButton}>
+            {step === 'otp' ? (
+              <Pressable onPress={handleSendOtp} style={styles.resendButton} accessibilityRole="button" hitSlop={10}>
                 <Text style={styles.resendText}>Didn&apos;t receive it? Resend code</Text>
               </Pressable>
-            )}
+            ) : null}
           </View>
 
           {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don&apos;t have an account?</Text>
-            <Pressable onPress={() => router.push('/(auth)/signup')}>
-              <Text style={styles.linkText}>Sign Up</Text>
+            <Pressable onPress={() => router.push('/(auth)/signup')} accessibilityRole="link" hitSlop={10}>
+              <Text style={styles.linkText}>Sign up</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -176,71 +176,58 @@ const styles = StyleSheet.create({
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   header: {
-    marginBottom: 8,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: `${AppColors.surfaceContainerLowest}B3`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: `${AppColors.outlineVariant}26`,
+    marginLeft: -8,
   },
   titleSection: {
-    marginTop: 24,
-    marginBottom: 32,
+    marginTop: 16,
+    marginBottom: 24,
+  },
+  sprout: {
+    marginBottom: 12,
+  },
+  otpInput: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 22,
+    letterSpacing: 6,
+    fontVariant: ['tabular-nums'],
   },
   subtitle: {
-    marginTop: 8,
+    marginTop: 4,
   },
   form: {},
   fields: {
-    gap: 14,
+    gap: 16,
   },
   submitButton: {
-    marginTop: 20,
-  },
-  loadingOverlay: {
-    position: 'absolute',
-    bottom: 18,
-    alignSelf: 'center',
-  },
-  errorText: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 13,
-    color: AppColors.tertiary,
-    marginTop: 10,
-    textAlign: 'center',
+    marginTop: 24,
   },
   resendButton: {
     alignSelf: 'center',
     marginTop: 16,
   },
   resendText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 13,
-    color: AppColors.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    color: AppColors.secondary,
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 32,
+    paddingTop: 24,
     gap: 4,
   },
   footerText: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
     color: AppColors.onSurfaceVariant,
   },
   linkText: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 14,
-    color: AppColors.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    color: AppColors.secondary,
   },
 });

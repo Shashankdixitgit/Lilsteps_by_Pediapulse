@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -5,7 +6,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { TextInputField } from '@/components/text-input-field';
-import { AppColors } from '@/constants/theme';
+import { AppColors, Radius } from '@/constants/theme';
 import { useOnboarding } from '@/context/onboarding';
 
 const MED_ALLERGIES = ['Penicillin', 'Sulfa drugs', 'Aspirin', 'Ibuprofen', 'Codeine', 'Not known', 'Other'];
@@ -43,7 +44,7 @@ export default function AllergiesScreen() {
     >
       {/* Medication allergies */}
       <View>
-        <Text style={styles.sectionTitle}>Medication Allergies</Text>
+        <Text style={styles.sectionTitle}>Medication allergies</Text>
         <ChipGroup
           options={MED_ALLERGIES}
           selected={medAllergies}
@@ -62,7 +63,7 @@ export default function AllergiesScreen() {
 
       {/* Food allergies */}
       <View>
-        <Text style={styles.sectionTitle}>Food Allergies</Text>
+        <Text style={styles.sectionTitle}>Food allergies</Text>
         <ChipGroup
           options={FOOD_ALLERGIES}
           selected={foodAllergies}
@@ -81,7 +82,7 @@ export default function AllergiesScreen() {
 
       {/* Other allergies */}
       <View>
-        <Text style={styles.sectionTitle}>Other Allergies</Text>
+        <Text style={styles.sectionTitle}>Other allergies</Text>
         <ChipGroup
           options={OTHER_ALLERGIES}
           selected={otherAllergies}
@@ -101,8 +102,9 @@ export default function AllergiesScreen() {
       {/* Allergy preview badge */}
       {allSelected.length > 0 && (
         <View style={styles.badge}>
+          <Ionicons name="alert-circle" size={14} color={AppColors.danger} style={styles.badgeIcon} />
           <Text style={styles.badgeText}>
-            {displayName}&apos;s allergy alert: {allSelected.join(', ')}
+            Allergy alert: {allSelected.join(', ')}
           </Text>
         </View>
       )}
@@ -112,21 +114,29 @@ export default function AllergiesScreen() {
 
 const styles = StyleSheet.create({
   sectionTitle: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
   badge: {
-    backgroundColor: AppColors.tertiaryContainer,
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    backgroundColor: AppColors.dangerSurface,
+    borderRadius: Radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  badgeIcon: {
+    marginTop: 2,
   },
   badgeText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'Inter_500Medium',
     fontSize: 13,
-    color: AppColors.tertiary,
+    lineHeight: 18,
+    color: AppColors.danger,
+    flex: 1,
   },
 });

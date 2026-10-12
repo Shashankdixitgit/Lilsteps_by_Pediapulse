@@ -22,8 +22,8 @@ export default function AcademicScreen() {
   return (
     <OnboardingShell
       progress={0.57}
-      title="Academic & Lifestyle"
-      subtitle="Helps us understand your child's daily routine"
+      title="School and lifestyle"
+      subtitle="Helps us understand the daily routine"
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/c-diet')}
     >
@@ -59,10 +59,11 @@ export default function AcademicScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

@@ -15,9 +15,10 @@ export default function SleepInfantScreen() {
 
   return (
     <OnboardingShell
+      sprout="sleepy"
       progress={1}
       title="Sleep"
-      subtitle="Sleep patterns help us monitor overall wellbeing"
+      subtitle="Helps us keep an eye on wellbeing"
       ctaLabel="Finish"
       onCta={() => router.push('/(onboarding)/confirm')}
     >
@@ -42,10 +43,11 @@ export default function SleepInfantScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

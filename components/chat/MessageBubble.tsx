@@ -20,7 +20,7 @@ export function MessageBubble({
         <View style={styles.parentBubble}>
           <Text style={styles.parentText}>{content}</Text>
         </View>
-        {timestamp && <Text style={styles.parentTime}>{timestamp}</Text>}
+        {!!timestamp && <Text style={styles.parentTime}>{timestamp}</Text>}
       </View>
     );
   }
@@ -35,7 +35,7 @@ export function MessageBubble({
           <Text style={styles.doctorText}>{content}</Text>
         </View>
       </View>
-      {timestamp && <Text style={styles.doctorTime}>{timestamp}</Text>}
+      {!!timestamp && <Text style={styles.doctorTime}>{timestamp}</Text>}
     </View>
   );
 }
@@ -51,18 +51,18 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.primary,
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
   parentText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 15,
     color: AppColors.onPrimary,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   parentTime: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 11,
-    color: AppColors.onSurfaceVariant,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    color: AppColors.muted,
     marginTop: 4,
     marginRight: 4,
   },
@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: `${AppColors.primary}14`,
+    backgroundColor: AppColors.greenWash,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
@@ -83,18 +83,20 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.surfaceContainerLowest,
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: AppColors.border,
   },
   doctorText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 16,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 15,
     color: AppColors.onSurface,
-    lineHeight: 24,
+    lineHeight: 22,
   },
   doctorTime: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 11,
-    color: AppColors.onSurfaceVariant,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    color: AppColors.muted,
     marginTop: 4,
     marginLeft: 40,
   },

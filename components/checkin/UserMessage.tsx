@@ -13,13 +13,13 @@ export function UserMessage({ text }: { text: string }) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 20 },
+  row: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 16 },
   bubble: {
     maxWidth: '80%',
     backgroundColor: AppColors.primary,
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
   },
-  text: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 16, color: AppColors.onPrimary, lineHeight: 24 },
+  text: { fontFamily: 'Inter_400Regular', fontSize: 15, color: AppColors.onPrimary, lineHeight: 22 },
 });

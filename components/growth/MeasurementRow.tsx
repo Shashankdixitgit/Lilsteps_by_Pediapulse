@@ -1,32 +1,22 @@
-import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { AppColors, FontFamily } from '@/constants/theme';
 import type { GrowthRow } from '@/hooks/useGrowth';
+import { typography } from '@/styles/global';
 
-export function MeasurementRow({ entry, prev }: { entry: GrowthRow; prev?: GrowthRow }) {
-  const wTrend = prev && entry.weight && prev.weight
-    ? (entry.weight > prev.weight ? 'up' : entry.weight < prev.weight ? 'down' : 'flat')
-    : null;
-  const hTrend = prev && entry.height && prev.height
-    ? (entry.height > prev.height ? 'up' : entry.height < prev.height ? 'down' : 'flat')
-    : null;
-
+/**
+ * One history row: date (13 muted) | weight | height (15 SemiBold), 44 high,
+ * hairline on top. `prev` is accepted for call-site compatibility; the old
+ * trend arrows were decorative and are no longer drawn.
+ */
+export function MeasurementRow({ entry }: { entry: GrowthRow; prev?: GrowthRow }) {
   const dateStr = new Date(entry.measured_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
 
   return (
     <View style={styles.row}>
-      <Text style={styles.date}>{dateStr}</Text>
-      <View style={styles.metric}>
-        <Text style={styles.value}>{entry.weight ?? '—'} kg</Text>
-        {wTrend === 'up' && <Ionicons name="arrow-up" size={11} color={AppColors.successGreen} />}
-        {wTrend === 'down' && <Ionicons name="arrow-down" size={11} color={AppColors.errorRed} />}
-      </View>
-      <View style={styles.metric}>
-        <Text style={styles.value}>{entry.height ?? '—'} cm</Text>
-        {hTrend === 'up' && <Ionicons name="arrow-up" size={11} color={AppColors.successGreen} />}
-        {hTrend === 'down' && <Ionicons name="arrow-down" size={11} color={AppColors.errorRed} />}
-      </View>
+      <Text style={[typography.meta, styles.cell]}>{dateStr}</Text>
+      <Text style={[styles.value, styles.cell]}>{entry.weight == null ? '—' : `${Number(entry.weight).toFixed(1)} kg`}</Text>
+      <Text style={[styles.value, styles.cell]}>{entry.height == null ? '—' : `${Number(entry.height).toFixed(1)} cm`}</Text>
     </View>
   );
 }
@@ -35,25 +25,18 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: `${AppColors.outlineVariant}15`,
+    minHeight: 44,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: AppColors.border,
   },
-  date: {
+  cell: {
     flex: 1,
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
-    color: AppColors.onSurfaceVariant,
-  },
-  metric: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
   },
   value: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: FontFamily.semibold,
     fontSize: 15,
+    lineHeight: 22,
     color: AppColors.onSurface,
+    fontVariant: ['tabular-nums'],
   },
 });

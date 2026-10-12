@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { Card } from 'heroui-native';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CHECKIN_HEADER_HEIGHT, CheckinHeader } from '@/components/checkin/CheckinHeader';
@@ -11,12 +10,14 @@ import { DateStrip, getNextDays } from '@/components/checkin/DateStrip';
 import { DoctorPicker } from '@/components/checkin/DoctorPicker';
 import { SlotPicker } from '@/components/checkin/SlotPicker';
 import { SummaryCard } from '@/components/checkin/SummaryCard';
-import { AppColors } from '@/constants/theme';
+import { GradientButton } from '@/components/gradient-button';
+import { AppColors, CanvasFade } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useAppointments } from '@/hooks/useAppointments';
 import { useCheckin } from '@/hooks/useCheckin';
 import { useConversations } from '@/hooks/useConversations';
 import { useDoctors, useTimeSlots } from '@/hooks/useDoctors';
+import { typography } from '@/styles/global';
 
 export default function CheckinSummaryScreen() {
   const insets = useSafeAreaInsets();
@@ -91,58 +92,27 @@ export default function CheckinSummaryScreen() {
   }
 
   if (confirmed) {
+    const when = `${days[selectedDay].label}, ${days[selectedDay].sub}${selectedSlot ? ` at ${selectedSlot}` : ''}`;
     return (
-      <View style={styles.screen}>
-        <View style={[styles.successContainer, { paddingTop: insets.top + 40 }]}>
+      <View style={[styles.screen, styles.successScreen, { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 16 }]}>
+        <View style={styles.successBody}>
           <View style={styles.successIcon}>
-            <Ionicons name="checkmark" size={44} color={AppColors.successGreen} />
+            <Ionicons name="checkmark" size={28} color={AppColors.success} />
           </View>
-          <Text style={styles.successTitle}>All set!</Text>
-          <Text style={styles.successSub}>
-            {childName}&apos;s summary has been sent to {selectedDoctor?.name ?? 'the doctor'}.
+          <Text style={[typography.heading, styles.centerText]}>All set</Text>
+          <Text style={[typography.body, styles.centerText]}>
+            {childName}&apos;s summary is with {selectedDoctor?.name ?? 'the doctor'}. See you {when}.
           </Text>
-          <Card style={styles.successCard}>
-            <Card.Body style={styles.successCardBody}>
-              <SuccessRow icon="person-outline" label="Doctor" value={selectedDoctor?.name ?? ''} />
-              <SuccessRow
-                icon="calendar-outline"
-                label="Date"
-                value={`${days[selectedDay].label}, ${days[selectedDay].sub}`}
-              />
-              <SuccessRow icon="time-outline" label="Time" value={selectedSlot ?? ''} isLast />
-            </Card.Body>
-          </Card>
-
-          <Pressable
-            style={({ pressed }) => [styles.chatBtn, { opacity: pressed || openingChat ? 0.7 : 1 }]}
+        </View>
+        <View style={styles.successActions}>
+          <GradientButton label="Go to home" onPress={() => router.replace('/(tabs)')} />
+          <GradientButton
+            variant="ghost"
+            label={`Message ${selectedDoctor?.name?.split(' ').slice(-1)[0] ?? 'doctor'}`}
             onPress={handleStartChat}
-            disabled={openingChat}
-          >
-            {openingChat ? (
-              <ActivityIndicator size="small" color={AppColors.primary} />
-            ) : (
-              <>
-                <Ionicons name="chatbubble-outline" size={16} color={AppColors.primary} />
-                <Text style={styles.chatBtnText}>
-                  Message {selectedDoctor?.name?.split(' ').slice(-1)[0] ?? 'doctor'}
-                </Text>
-              </>
-            )}
-          </Pressable>
-
-          <Pressable
-            style={({ pressed }) => [styles.doneBtn, { opacity: pressed ? 0.85 : 1 }]}
-            onPress={() => router.replace('/(tabs)')}
-          >
-            <LinearGradient
-              colors={[AppColors.primary, AppColors.gradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.doneBtnGrad}
-            >
-              <Text style={styles.doneBtnText}>Go to Home</Text>
-            </LinearGradient>
-          </Pressable>
+            loading={openingChat}
+            style={styles.selfCenter}
+          />
         </View>
       </View>
     );
@@ -150,7 +120,7 @@ export default function CheckinSummaryScreen() {
 
   return (
     <View style={styles.screen}>
-      <CheckinHeader title="Pre-visit Summary" onBack={() => router.back()} />
+      <CheckinHeader title="Pre-visit summary" onBack={() => router.back()} />
 
       <ScrollView
         contentContainerStyle={[
@@ -166,12 +136,12 @@ export default function CheckinSummaryScreen() {
         ) : (
           <View style={styles.loadingSection}>
             <ActivityIndicator size="small" color={AppColors.primary} />
-            <Text style={styles.loadingText}>Loading summary…</Text>
+            <Text style={typography.meta}>Loading summary…</Text>
           </View>
         )}
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Choose Doctor</Text>
+          <Text style={typography.headingSM}>Choose a doctor</Text>
           {loadingDocs ? (
             <ActivityIndicator size="small" color={AppColors.primary} />
           ) : (
@@ -180,12 +150,12 @@ export default function CheckinSummaryScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pick a Date</Text>
+          <Text style={typography.headingSM}>Pick a date</Text>
           <DateStrip days={days} selectedIndex={selectedDay} onSelect={setSelectedDay} />
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Pick a Time</Text>
+          <Text style={typography.headingSM}>Pick a time</Text>
           {loadingSlots ? (
             <ActivityIndicator size="small" color={AppColors.primary} />
           ) : (
@@ -197,9 +167,9 @@ export default function CheckinSummaryScreen() {
       <View style={styles.footerWrapper} pointerEvents="box-none">
         <LinearGradient
           colors={[
-            `${AppColors.surface}00`,
-            `${AppColors.surface}40`,
-            `${AppColors.surface}B0`,
+            CanvasFade.a0,
+            CanvasFade.a25,
+            CanvasFade.a69,
             AppColors.surface,
           ]}
           locations={[0, 0.25, 0.5, 0.7]}
@@ -209,59 +179,14 @@ export default function CheckinSummaryScreen() {
           pointerEvents="none"
         />
         <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-          <Pressable
-            style={({ pressed }) => [styles.confirmBtn, { opacity: pressed && selectedSlot ? 0.88 : 1 }]}
+          <GradientButton
+            label="Confirm booking"
             disabled={!selectedSlot || booking}
+            loading={booking}
             onPress={handleConfirm}
-          >
-            <LinearGradient
-              colors={
-                selectedSlot
-                  ? [AppColors.primary, AppColors.gradientEnd]
-                  : [AppColors.surfaceContainerHigh, AppColors.surfaceContainerHigh]
-              }
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.confirmGrad}
-            >
-              {booking ? (
-                <ActivityIndicator size="small" color={AppColors.onPrimary} />
-              ) : (
-                <>
-                  <Text style={[styles.confirmText, !selectedSlot && styles.confirmTextDisabled]}>
-                    Confirm Booking
-                  </Text>
-                  <Ionicons
-                    name="arrow-forward"
-                    size={18}
-                    color={selectedSlot ? AppColors.onPrimary : AppColors.onSurfaceVariant}
-                  />
-                </>
-              )}
-            </LinearGradient>
-          </Pressable>
+          />
         </View>
       </View>
-    </View>
-  );
-}
-
-function SuccessRow({
-  icon,
-  label,
-  value,
-  isLast,
-}: {
-  icon: string;
-  label: string;
-  value: string;
-  isLast?: boolean;
-}) {
-  return (
-    <View style={[styles.successRow, isLast && styles.successRowLast]}>
-      <Ionicons name={icon as any} size={16} color={AppColors.onSurfaceVariant} />
-      <Text style={styles.successRowLabel}>{label}</Text>
-      <Text style={styles.successRowValue}>{value}</Text>
     </View>
   );
 }
@@ -271,90 +196,25 @@ const styles = StyleSheet.create({
 
   scroll: { paddingHorizontal: 20, gap: 24 },
 
-  loadingSection: { alignItems: 'center', gap: 10, paddingVertical: 30 },
-  loadingText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: AppColors.onSurfaceVariant },
+  loadingSection: { alignItems: 'center', gap: 8, paddingVertical: 24 },
 
-  section: { gap: 14 },
-  sectionTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: AppColors.onSurface },
+  section: { gap: 8 },
 
   footerWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 },
   footer: { paddingHorizontal: 20, paddingTop: 12 },
-  confirmBtn: { borderRadius: 999, overflow: 'hidden' },
-  confirmGrad: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-  },
-  confirmText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: AppColors.onPrimary },
-  confirmTextDisabled: { color: AppColors.onSurfaceVariant },
 
-  successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
+  successScreen: { paddingHorizontal: 20, justifyContent: 'space-between' },
+  successBody: { alignItems: 'center', gap: 12, paddingTop: 48 },
   successIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: `${AppColors.successGreen}15`,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: AppColors.successSurface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
-  successTitle: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 28,
-    color: AppColors.onSurface,
-    letterSpacing: -0.5,
-  },
-  successSub: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 15,
-    color: AppColors.onSurfaceVariant,
-    textAlign: 'center',
-    lineHeight: 22,
-  },
-  successCard: {
-    width: '100%',
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 18,
-    marginTop: 8,
-  },
-  successCardBody: { padding: 6 },
-  successRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: `${AppColors.outlineVariant}15`,
-  },
-  successRowLast: { borderBottomWidth: 0 },
-  successRowLabel: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
-    color: AppColors.onSurfaceVariant,
-    flex: 1,
-  },
-  successRowValue: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
-    color: AppColors.onSurface,
-    textAlign: 'right',
-  },
-  doneBtn: { width: '100%', borderRadius: 999, overflow: 'hidden', marginTop: 8 },
-  doneBtnGrad: { alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
-  doneBtnText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: AppColors.onPrimary },
-  chatBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    width: '100%',
-    paddingVertical: 14,
-    borderRadius: 999,
-    backgroundColor: `${AppColors.primary}10`,
-    marginTop: 4,
-  },
-  chatBtnText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: AppColors.primary },
+  centerText: { textAlign: 'center' },
+  successActions: { gap: 4 },
+  selfCenter: { alignSelf: 'center' },
 });

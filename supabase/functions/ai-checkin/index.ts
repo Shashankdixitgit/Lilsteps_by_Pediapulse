@@ -1,17 +1,19 @@
 // Edge Function: ai-checkin
 //
-// Proxies Groq calls so the API key never reaches the client app bundle.
+// Proxies Gemini calls (OpenAI-compatible endpoint) so the API key never
+// reaches the client app bundle.
 // Verifies the caller's Supabase JWT, builds the system prompt server-side
-// for the requested action, and returns Groq's response unchanged.
+// for the requested action, and returns the model's response unchanged.
 //
-// Deploy: `supabase functions deploy ai-checkin --project-ref opdosbudlzwywdmrxlqr`
-// Set secret: `supabase secrets set GROQ_API_KEY=<key> --project-ref opdosbudlzwywdmrxlqr`
+// Deploy: `supabase functions deploy ai-checkin --project-ref ahikfefphptmtivwukpv`
+// Set secret: `supabase secrets set GEMINI_API_KEY=<key> --project-ref ahikfefphptmtivwukpv`
 
 // deno-lint-ignore-file no-explicit-any
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.99.3";
 
-const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
-const MODEL = "llama-3.3-70b-versatile";
+const GEMINI_API_URL =
+  "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+const MODEL = "gemini-3.5-flash";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +22,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-interface GroqMessage {
+interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }
@@ -38,13 +40,13 @@ interface ChildContext {
 type ChatRequest = {
   action: "chat";
   child: ChildContext;
-  messages: GroqMessage[];
+  messages: ChatMessage[];
 };
 
 type SummaryRequest = {
   action: "summary";
   child: ChildContext;
-  messages: GroqMessage[];
+  messages: ChatMessage[];
 };
 
 type RequestBody = ChatRequest | SummaryRequest;
@@ -123,11 +125,11 @@ Child allergies: ${child.allergies.join(", ") || "None"}
 Child conditions: ${child.conditions.join(", ") || "None"}`;
 }
 
-async function callGroq(messages: GroqMessage[]): Promise<string> {
-  const apiKey = Deno.env.get("GROQ_API_KEY");
-  if (!apiKey) throw new Error("GROQ_API_KEY not configured");
+async function callModel(messages: ChatMessage[]): Promise<string> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
 
-  const response = await fetch(GROQ_API_URL, {
+  const response = await fetch(GEMINI_API_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -138,17 +140,19 @@ async function callGroq(messages: GroqMessage[]): Promise<string> {
       messages,
       temperature: 0.6,
       max_tokens: 512,
+      // Thinking tokens count against max_tokens; the replies are short.
+      reasoning_effort: "none",
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Unknown error");
-    throw new Error(`Groq API error (${response.status}): ${errorText}`);
+    throw new Error(`Gemini API error (${response.status}): ${errorText}`);
   }
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("Groq returned an empty response");
+  if (!content) throw new Error("Gemini returned an empty response");
   return content;
 }
 
@@ -197,16 +201,16 @@ Deno.serve(async (req) => {
 
   try {
     if (body.action === "chat") {
-      const messages: GroqMessage[] = [
+      const messages: ChatMessage[] = [
         { role: "system", content: buildSystemPrompt(body.child) },
         ...body.messages.filter((m) => m.role !== "system"),
       ];
-      const content = await callGroq(messages);
+      const content = await callModel(messages);
       return json({ content });
     }
 
     if (body.action === "summary") {
-      const messages: GroqMessage[] = [
+      const messages: ChatMessage[] = [
         { role: "system", content: buildSummaryPrompt(body.child) },
         ...body.messages.filter((m) => m.role !== "system"),
         {
@@ -215,7 +219,7 @@ Deno.serve(async (req) => {
             "Now generate the structured summary JSON based on the conversation above.",
         },
       ];
-      const content = await callGroq(messages);
+      const content = await callModel(messages);
       return json({ content });
     }
 

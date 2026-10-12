@@ -53,7 +53,7 @@ export function LogMeasurementSheet({ visible, onClose, onSave }: LogMeasurement
                   keyboardType="decimal-pad"
                   placeholder="e.g. 12.4"
                   variant="secondary"
-                  className="bg-white border border-gray-200 rounded-xl"
+                  className="bg-surface border border-border rounded-xl"
                 />
               </TextField>
             </View>
@@ -66,7 +66,7 @@ export function LogMeasurementSheet({ visible, onClose, onSave }: LogMeasurement
                   keyboardType="decimal-pad"
                   placeholder="e.g. 84"
                   variant="secondary"
-                  className="bg-white border border-gray-200 rounded-xl"
+                  className="bg-surface border border-border rounded-xl"
                 />
               </TextField>
             </View>
@@ -82,7 +82,7 @@ export function LogMeasurementSheet({ visible, onClose, onSave }: LogMeasurement
                 multiline
                 numberOfLines={4}
                 variant="secondary"
-                className="bg-white border border-gray-200 rounded-xl"
+                className="bg-surface border border-border rounded-xl"
                 style={{ minHeight: 100, textAlignVertical: 'top', paddingTop: 12 }}
               />
             </TextField>
@@ -105,7 +105,7 @@ export function LogMeasurementSheet({ visible, onClose, onSave }: LogMeasurement
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  overlay: { flex: 1, backgroundColor: AppColors.overlay },
   sheet: {
     backgroundColor: AppColors.surface,
     borderTopLeftRadius: 28,
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   title: {
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: 'Inter_700Bold',
     fontSize: 20,
     color: AppColors.onSurface,
     paddingHorizontal: 20,
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
   field: { flex: 1 },
   fieldFull: { width: '100%' },
   label: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 14,
     color: AppColors.onSurface,
     marginBottom: 8,
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveBtnText: {
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: 'Inter_700Bold',
     fontSize: 16,
     color: AppColors.onPrimary,
   },

@@ -1,43 +1,71 @@
-import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { StyleSheet, View } from 'react-native';
+import Animated, {
+  Easing,
+  SharedValue,
+  cancelAnimation,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withTiming,
+} from 'react-native-reanimated';
 
+import { SproutArt } from '@/components/mascot/Sprout';
+import { useMotion } from '@/components/ui/useMotion';
 import { AppColors } from '@/constants/theme';
 
+function Dot({ v }: { v: SharedValue<number> }) {
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.4 + v.get() * 0.6,
+    transform: [{ translateY: -3 * v.get() }, { scale: 1 + v.get() * 0.2 }],
+  }));
+  return <Animated.View style={[styles.dot, style]} />;
+}
+
+/** "Sprout is thinking": static Sprout (think) + three bouncing dots (reanimated, UI thread). */
 export function TypingIndicator() {
-  const dot1 = useRef(new Animated.Value(0)).current;
-  const dot2 = useRef(new Animated.Value(0)).current;
-  const dot3 = useRef(new Animated.Value(0)).current;
+  const { reduceMotion } = useMotion();
+  const d1 = useSharedValue(0);
+  const d2 = useSharedValue(0);
+  const d3 = useSharedValue(0);
 
   useEffect(() => {
-    const animate = (val: Animated.Value, delay: number) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(delay),
-          Animated.timing(val, { toValue: 1, duration: 300, easing: Easing.ease, useNativeDriver: true }),
-          Animated.timing(val, { toValue: 0, duration: 300, easing: Easing.ease, useNativeDriver: true }),
-        ])
+    const dots = [d1, d2, d3];
+    if (reduceMotion) {
+      dots.forEach((d) => d.set(0.6));
+      return;
+    }
+    dots.forEach((d, i) => {
+      d.set(
+        withDelay(
+          i * 120,
+          withRepeat(
+            withSequence(
+              withTiming(1, { duration: 300, easing: Easing.out(Easing.quad) }),
+              withTiming(0, { duration: 300, easing: Easing.in(Easing.quad) }),
+              withTiming(0, { duration: 240 }),
+            ),
+            -1,
+            false,
+          ),
+        ),
       );
-    const a1 = animate(dot1, 0);
-    const a2 = animate(dot2, 150);
-    const a3 = animate(dot3, 300);
-    a1.start(); a2.start(); a3.start();
-    return () => { a1.stop(); a2.stop(); a3.stop(); };
-  }, [dot1, dot2, dot3]);
-
-  const scale = (v: Animated.Value) => v.interpolate({ inputRange: [0, 1], outputRange: [1, 1.3] });
-  const opacity = (v: Animated.Value) => v.interpolate({ inputRange: [0, 1], outputRange: [0.4, 1] });
+    });
+    return () => dots.forEach((d) => cancelAnimation(d));
+  }, [reduceMotion, d1, d2, d3]);
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} accessibilityLabel="LilSteps AI is typing" accessibilityRole="text">
       <View style={styles.row}>
-        <View style={styles.avatar}>
-          <Ionicons name="sparkles" size={16} color={AppColors.primary} />
+        <View style={styles.avatar} accessible={false} importantForAccessibility="no-hide-descendants">
+          <SproutArt mood="think" size={26} />
         </View>
         <View style={styles.dots}>
-          <Animated.View style={[styles.dot, { transform: [{ scale: scale(dot1) }], opacity: opacity(dot1) }]} />
-          <Animated.View style={[styles.dot, { transform: [{ scale: scale(dot2) }], opacity: opacity(dot2) }]} />
-          <Animated.View style={[styles.dot, { transform: [{ scale: scale(dot3) }], opacity: opacity(dot3) }]} />
+          <Dot v={d1} />
+          <Dot v={d2} />
+          <Dot v={d3} />
         </View>
       </View>
     </View>
@@ -48,14 +76,14 @@ const styles = StyleSheet.create({
   container: { marginBottom: 20 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: `${AppColors.primary}12`,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: AppColors.mintSurface,
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
   },
-  dots: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 8 },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: AppColors.primary },
+  dots: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 12 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: AppColors.secondary },
 });

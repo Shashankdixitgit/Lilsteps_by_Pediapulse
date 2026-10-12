@@ -30,8 +30,8 @@ export default function PubertyScreen() {
   return (
     <OnboardingShell
       progress={0.74}
-      title="Puberty & Development"
-      subtitle="Completely normal to discuss — helps the doctor give better care"
+      title="Puberty and development"
+      subtitle="Normal to discuss, and helps the doctor"
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/c-mental-health')}
     >
@@ -83,10 +83,11 @@ export default function PubertyScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

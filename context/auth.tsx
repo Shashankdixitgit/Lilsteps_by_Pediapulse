@@ -19,6 +19,24 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+/**
+ * Testing-only bypass (EXPO_PUBLIC_DEMO_LOGIN=1 in .env): no SMS is sent and
+ * any code is accepted. Each phone number maps to its own email/password
+ * account, so logging in again with the same number returns the same data.
+ * Remove the env var to go back to real SMS OTP. Never active in release
+ * builds (__DEV__ is false there), even if the env var is set.
+ */
+export const DEMO_LOGIN = __DEV__ && process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
+
+async function demoSignIn(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  const email = `phone-${digits}@demo.lilsteps.dev`;
+  const password = `demo-${digits}-lilsteps`;
+  const signIn = await supabase.auth.signInWithPassword({ email, password });
+  if (!signIn.error) return signIn;
+  return supabase.auth.signUp({ email, password, options: { data: { phone } } });
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -93,6 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signInWithOtp(phone: string): Promise<{ error: string | null }> {
     dbg.auth('signInWithOtp', { phone });
 
+    if (DEMO_LOGIN) return { error: null };
+
     const { error } = await supabase.auth.signInWithOtp({
       phone,
       options: { shouldCreateUser: true },
@@ -111,16 +131,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function verifyOtp(phone: string, token: string): Promise<{ error: string | null; isNewUser: boolean }> {
     dbg.auth('verifyOtp', { phone, tokenLength: token.length });
 
-    if (token.length !== 6 || !/^\d{6}$/.test(token)) {
+    if (!DEMO_LOGIN && (token.length !== 6 || !/^\d{6}$/.test(token))) {
       dbg.authError('verifyOtp', 'Invalid OTP format');
       return { error: 'OTP must be exactly 6 digits', isNewUser: false };
     }
 
-    const { data, error } = await supabase.auth.verifyOtp({
-      phone,
-      token,
-      type: 'sms',
-    });
+    const { data, error } = DEMO_LOGIN
+      ? await demoSignIn(phone)
+      : await supabase.auth.verifyOtp({
+          phone,
+          token,
+          type: 'sms',
+        });
 
     if (error) {
       dbg.authError('verifyOtp', error);

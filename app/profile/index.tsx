@@ -1,38 +1,109 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { ListGroup, Separator } from 'heroui-native';
+import { ReactNode } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BRACKET_CONFIG } from '@/constants/bracketConfig';
-import { AppColors } from '@/constants/theme';
+import { TextButton } from '@/components/gradient-button';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { HeroCard } from '@/components/ui/HeroCard';
+import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useChild } from '@/context/child';
-
-const HEADER_HEIGHT = 60;
+import { layout, typography } from '@/styles/global';
 
 const QUICK_LINKS = [
-  { key: 'records', label: 'Health Records', desc: 'Documents, prescriptions', icon: 'folder-outline', route: '/(tabs)/records' },
-  { key: 'health-log', label: 'Health Log', desc: 'Track symptoms, moods', icon: 'heart-outline', route: '/health-log' },
-  { key: 'checkin', label: 'AI Health Check-in', desc: 'Smart symptom triage', icon: 'sparkles-outline', route: '/checkin' },
-  { key: 'consult', label: 'Book Consultation', desc: 'Schedule with doctors', icon: 'calendar-outline', route: '/consult/booking' },
+  { key: 'records', label: 'Health records', icon: 'folder-outline', route: '/(tabs)/records' },
+  { key: 'health-log', label: 'Health log', icon: 'heart-outline', route: '/health-log' },
+  { key: 'checkin', label: 'AI health check-in', icon: 'sparkles-outline', route: '/checkin' },
+  { key: 'consult', label: 'Book a consultation', icon: 'calendar-outline', route: '/consult/booking' },
 ] as const;
 
 const SETTINGS_ITEMS = [
-  { key: 'notifications', label: 'Notifications', desc: 'Alerts, reminders', icon: 'notifications-outline' },
-  { key: 'privacy', label: 'Privacy & Security', desc: 'Data, permissions', icon: 'shield-checkmark-outline' },
-  { key: 'help', label: 'Help & Support', desc: 'FAQ, contact us', icon: 'help-circle-outline' },
+  { key: 'notifications', label: 'Notifications', icon: 'notifications-outline' },
+  { key: 'privacy', label: 'Privacy & security', icon: 'shield-checkmark-outline' },
+  { key: 'help', label: 'Help & support', icon: 'help-circle-outline' },
 ] as const;
+
+type IconName = keyof typeof Ionicons.glyphMap;
+
+/** One list row: 36 icon well, 15 SemiBold title, optional value / detail, chevron. */
+function Row({
+  icon,
+  title,
+  value,
+  detail,
+  onPress,
+  chevron,
+  tone = 'default',
+  divider,
+}: {
+  icon: IconName;
+  title: string;
+  /** Short value on the right (13 muted, 1 line). */
+  value?: string;
+  /** Data line under the title (e.g. allergy names). */
+  detail?: string;
+  onPress?: () => void;
+  chevron?: boolean;
+  tone?: 'default' | 'warning' | 'danger' | 'neutral';
+  divider?: boolean;
+}) {
+  const well =
+    tone === 'warning'
+      ? { bg: AppColors.warningSurface, fg: AppColors.warning }
+      : tone === 'danger'
+        ? { bg: AppColors.dangerSurface, fg: AppColors.danger }
+        : tone === 'neutral'
+          ? { bg: AppColors.surfaceContainer, fg: AppColors.onSurfaceVariant }
+          : { bg: AppColors.mintSurface, fg: AppColors.secondary };
+  const content: ReactNode = (
+    <>
+      <View style={[styles.well, { backgroundColor: well.bg }]}>
+        <Ionicons name={icon} size={Size.iconRow} color={well.fg} />
+      </View>
+      <View style={value ? styles.rowTextFixed : styles.rowTextFlex}>
+        <Text style={typography.title} numberOfLines={1}>
+          {title}
+        </Text>
+        {detail ? (
+          <Text style={typography.meta} numberOfLines={2}>
+            {detail}
+          </Text>
+        ) : null}
+      </View>
+      {value ? (
+        <Text style={[typography.meta, styles.rowValue]} numberOfLines={1} ellipsizeMode="middle">
+          {value}
+        </Text>
+      ) : null}
+      {chevron ? <Ionicons name="chevron-forward" size={16} color={AppColors.outlineVariant} /> : null}
+    </>
+  );
+  return (
+    <View>
+      {onPress || chevron ? (
+        <Pressable
+          onPress={onPress}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+        >
+          {content}
+        </Pressable>
+      ) : (
+        <View style={styles.row}>{content}</View>
+      )}
+      {divider ? <View style={styles.divider} /> : null}
+    </View>
+  );
+}
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
-  const { child, children, bracket, age, parentName, selectChild } = useChild();
+  const { child, children, age, parentName, selectChild } = useChild();
 
   const childName = child?.name ?? 'Child';
-  const bracketKey = bracket ?? 'TODDLER';
-  const bracketCfg = BRACKET_CONFIG[bracketKey];
   const allergies = child?.allergies.map(a => a.name) ?? [];
   const conditions = child?.conditions.map(c => c.name) ?? [];
 
@@ -51,238 +122,121 @@ export default function ProfileScreen() {
   }
 
   return (
-    <View style={styles.screen}>
-      <View style={[styles.headerWrapper, { paddingTop: insets.top }]} pointerEvents="box-none">
-        <LinearGradient
-          colors={[
-            AppColors.surface,
-            AppColors.surface,
-            `${AppColors.surface}E8`,
-            `${AppColors.surface}B0`,
-            `${AppColors.surface}60`,
-            `${AppColors.surface}20`,
-            `${AppColors.surface}00`,
-          ]}
-          locations={[0, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
-          style={StyleSheet.absoluteFill}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          pointerEvents="none"
-        />
-        <View style={styles.header} pointerEvents="box-none">
-          <Pressable style={styles.backBtn} onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={24} color={AppColors.onSurface} />
-          </Pressable>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <View style={styles.headerSpacer} />
-        </View>
-      </View>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <ScreenHeader title="Profile" />
 
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingTop: insets.top + HEADER_HEIGHT, paddingBottom: 40 + insets.bottom }
-        ]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: 32 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
-        bounces
-        alwaysBounceVertical
       >
-        <LinearGradient
-          colors={[AppColors.primary, AppColors.gradientEnd]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.profileCard}
-        >
-          <View style={styles.profileBlobTR} />
-          <View style={styles.profileAvatar}>
-            <Text style={styles.profileAvatarText}>{childName.charAt(0)}</Text>
+        <HeroCard style={styles.hero}>
+          <View style={styles.avatar}>
+            <Text style={styles.avatarText}>{childName.charAt(0)}</Text>
           </View>
-          <Text style={styles.profileName}>{childName}</Text>
-          <Text style={styles.profileAge}>{age}</Text>
-          <Text style={styles.profileBracket}>{bracketCfg.greetingSubtext(childName)}</Text>
-
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{child?.weight ?? '—'} kg</Text>
-              <Text style={styles.statLabel}>Weight</Text>
-            </View>
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{child?.height ?? '—'} cm</Text>
-              <Text style={styles.statLabel}>Height</Text>
-            </View>
+          <View style={styles.heroText}>
+            <Text style={typography.heading} numberOfLines={1}>
+              {childName}
+            </Text>
+            <Text style={[typography.bodySM, styles.heroMeta]} numberOfLines={1}>
+              {age}
+              {child?.weight || child?.height
+                ? ` · ${child?.weight ?? '—'} kg · ${child?.height ?? '—'} cm`
+                : ''}
+            </Text>
           </View>
-        </LinearGradient>
+        </HeroCard>
 
-        <View style={styles.section}>
+        <View style={layout.section}>
           <Text style={styles.sectionLabel}>Account</Text>
-          <ListGroup style={styles.listGroup}>
-            <ListGroup.Item style={styles.listItem}>
-              <ListGroup.ItemPrefix style={styles.listItemPrefix}>
-                <View style={[styles.listItemIcon, { backgroundColor: `${AppColors.primary}12` }]}>
-                  <Ionicons name="person-outline" size={20} color={AppColors.primary} />
-                </View>
-              </ListGroup.ItemPrefix>
-              <ListGroup.ItemContent style={styles.listItemContent}>
-                <ListGroup.ItemTitle style={styles.listItemTitle}>Parent</ListGroup.ItemTitle>
-                <ListGroup.ItemDescription style={styles.listItemDesc}>
-                  {parentName || 'Not set'}
-                </ListGroup.ItemDescription>
-              </ListGroup.ItemContent>
-            </ListGroup.Item>
-            <Separator style={styles.separator} />
-            <ListGroup.Item style={styles.listItem}>
-              <ListGroup.ItemPrefix style={styles.listItemPrefix}>
-                <View style={[styles.listItemIcon, { backgroundColor: `${AppColors.secondary}12` }]}>
-                  <Ionicons name="mail-outline" size={20} color={AppColors.secondary} />
-                </View>
-              </ListGroup.ItemPrefix>
-              <ListGroup.ItemContent style={styles.listItemContent}>
-                <ListGroup.ItemTitle style={styles.listItemTitle}>Email</ListGroup.ItemTitle>
-                <ListGroup.ItemDescription style={styles.listItemDesc}>
-                  {user?.email ?? '—'}
-                </ListGroup.ItemDescription>
-              </ListGroup.ItemContent>
-            </ListGroup.Item>
-          </ListGroup>
+          <View style={styles.card}>
+            <Row icon="person-outline" title="Parent" value={parentName || 'Not set'} divider />
+            <Row icon="mail-outline" title="Email" value={user?.email ?? '—'} />
+          </View>
         </View>
 
         {children.length > 1 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Switch Child</Text>
+          <View style={layout.section}>
+            <Text style={styles.sectionLabel}>Switch child</Text>
             <View style={styles.childList}>
-              {children.map((c) => (
-                <Pressable
-                  key={c.id}
-                  style={[styles.childChip, c.id === child?.id && styles.childChipActive]}
-                  onPress={() => selectChild(c.id)}
-                >
-                  <View style={[styles.childChipAvatar, c.id === child?.id && styles.childChipAvatarActive]}>
-                    <Text style={[styles.childChipInitial, c.id === child?.id && styles.childChipInitialActive]}>
-                      {c.name.charAt(0)}
-                    </Text>
-                  </View>
-                  <Text style={[styles.childChipName, c.id === child?.id && styles.childChipNameActive]}>
-                    {c.name}
-                  </Text>
-                  {c.id === child?.id && (
-                    <View style={styles.childChipCheck}>
-                      <Ionicons name="checkmark" size={12} color={AppColors.onPrimary} />
+              {children.map((c) => {
+                const active = c.id === child?.id;
+                return (
+                  <Pressable
+                    key={c.id}
+                    style={[styles.childChip, active && styles.childChipActive]}
+                    onPress={() => selectChild(c.id)}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected: active }}
+                  >
+                    <View style={[styles.childChipAvatar, active && styles.childChipAvatarActive]}>
+                      <Text style={[styles.childChipInitial, active && styles.childChipInitialActive]}>
+                        {c.name.charAt(0)}
+                      </Text>
                     </View>
-                  )}
-                </Pressable>
-              ))}
+                    <Text style={[styles.childChipName, active && styles.childChipNameActive]}>{c.name}</Text>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         )}
 
         {(allergies.length > 0 || conditions.length > 0) && (
-          <View style={styles.section}>
-            <Text style={styles.sectionLabel}>Health Info</Text>
-            <ListGroup style={styles.listGroup}>
+          <View style={layout.section}>
+            <Text style={styles.sectionLabel}>Health info</Text>
+            <View style={styles.card}>
               {allergies.length > 0 && (
-                <ListGroup.Item style={styles.listItem}>
-                  <ListGroup.ItemPrefix style={styles.listItemPrefix}>
-                    <View style={[styles.listItemIcon, { backgroundColor: `${AppColors.warningAmber}15` }]}>
-                      <Ionicons name="warning-outline" size={20} color={AppColors.warningAmber} />
-                    </View>
-                  </ListGroup.ItemPrefix>
-                  <ListGroup.ItemContent style={styles.listItemContent}>
-                    <ListGroup.ItemTitle style={styles.listItemTitle}>Allergies</ListGroup.ItemTitle>
-                    <ListGroup.ItemDescription style={styles.listItemDesc}>
-                      {allergies.join(', ')}
-                    </ListGroup.ItemDescription>
-                  </ListGroup.ItemContent>
-                  <ListGroup.ItemSuffix>
-                    <View style={styles.countBadge}>
-                      <Text style={styles.countBadgeText}>{allergies.length}</Text>
-                    </View>
-                  </ListGroup.ItemSuffix>
-                </ListGroup.Item>
+                <Row
+                  icon="warning-outline"
+                  tone="warning"
+                  title="Allergies"
+                  detail={allergies.join(', ')}
+                  divider={conditions.length > 0}
+                />
               )}
-              {allergies.length > 0 && conditions.length > 0 && <Separator style={styles.separator} />}
               {conditions.length > 0 && (
-                <ListGroup.Item style={styles.listItem}>
-                  <ListGroup.ItemPrefix style={styles.listItemPrefix}>
-                    <View style={[styles.listItemIcon, { backgroundColor: `${AppColors.tertiary}12` }]}>
-                      <Ionicons name="medical-outline" size={20} color={AppColors.tertiary} />
-                    </View>
-                  </ListGroup.ItemPrefix>
-                  <ListGroup.ItemContent style={styles.listItemContent}>
-                    <ListGroup.ItemTitle style={styles.listItemTitle}>Chronic Conditions</ListGroup.ItemTitle>
-                    <ListGroup.ItemDescription style={styles.listItemDesc}>
-                      {conditions.join(', ')}
-                    </ListGroup.ItemDescription>
-                  </ListGroup.ItemContent>
-                  <ListGroup.ItemSuffix>
-                    <View style={[styles.countBadge, { backgroundColor: `${AppColors.tertiary}15` }]}>
-                      <Text style={[styles.countBadgeText, { color: AppColors.tertiary }]}>{conditions.length}</Text>
-                    </View>
-                  </ListGroup.ItemSuffix>
-                </ListGroup.Item>
+                <Row icon="medical-outline" tone="danger" title="Chronic conditions" detail={conditions.join(', ')} />
               )}
-            </ListGroup>
+            </View>
           </View>
         )}
 
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Quick Links</Text>
-          <ListGroup style={styles.listGroup}>
+        <View style={layout.section}>
+          <Text style={styles.sectionLabel}>Quick links</Text>
+          <View style={styles.card}>
             {QUICK_LINKS.map((item, index) => (
-              <View key={item.key}>
-                <ListGroup.Item
-                  style={styles.listItem}
-                  onPress={() => router.push(item.route as any)}
-                >
-                  <ListGroup.ItemPrefix style={styles.listItemPrefix}>
-                    <View style={[styles.listItemIcon, { backgroundColor: `${AppColors.primary}12` }]}>
-                      <Ionicons name={item.icon as any} size={20} color={AppColors.primary} />
-                    </View>
-                  </ListGroup.ItemPrefix>
-                  <ListGroup.ItemContent style={styles.listItemContent}>
-                    <ListGroup.ItemTitle style={styles.listItemTitle}>{item.label}</ListGroup.ItemTitle>
-                    <ListGroup.ItemDescription style={styles.listItemDesc}>{item.desc}</ListGroup.ItemDescription>
-                  </ListGroup.ItemContent>
-                  <ListGroup.ItemSuffix iconProps={{ size: 16, color: AppColors.outlineVariant }} />
-                </ListGroup.Item>
-                {index < QUICK_LINKS.length - 1 && <Separator style={styles.separator} />}
-              </View>
+              <Row
+                key={item.key}
+                icon={item.icon}
+                title={item.label}
+                chevron
+                onPress={() => router.push(item.route as any)}
+                divider={index < QUICK_LINKS.length - 1}
+              />
             ))}
-          </ListGroup>
+          </View>
         </View>
 
-        <View style={styles.section}>
+        <View style={layout.section}>
           <Text style={styles.sectionLabel}>Settings</Text>
-          <ListGroup style={styles.listGroup}>
+          <View style={styles.card}>
             {SETTINGS_ITEMS.map((item, index) => (
-              <View key={item.key}>
-                <ListGroup.Item style={styles.listItem}>
-                  <ListGroup.ItemPrefix style={styles.listItemPrefix}>
-                    <View style={[styles.listItemIcon, { backgroundColor: `${AppColors.onSurfaceVariant}10` }]}>
-                      <Ionicons name={item.icon as any} size={20} color={AppColors.onSurfaceVariant} />
-                    </View>
-                  </ListGroup.ItemPrefix>
-                  <ListGroup.ItemContent style={styles.listItemContent}>
-                    <ListGroup.ItemTitle style={styles.listItemTitle}>{item.label}</ListGroup.ItemTitle>
-                    <ListGroup.ItemDescription style={styles.listItemDesc}>{item.desc}</ListGroup.ItemDescription>
-                  </ListGroup.ItemContent>
-                  <ListGroup.ItemSuffix iconProps={{ size: 16, color: AppColors.outlineVariant }} />
-                </ListGroup.Item>
-                {index < SETTINGS_ITEMS.length - 1 && <Separator style={styles.separator} />}
-              </View>
+              <Row
+                key={item.key}
+                icon={item.icon}
+                tone="neutral"
+                title={item.label}
+                chevron
+                divider={index < SETTINGS_ITEMS.length - 1}
+              />
             ))}
-          </ListGroup>
+          </View>
         </View>
 
-        <Pressable
-          style={({ pressed }) => [styles.signOutBtn, { opacity: pressed ? 0.8 : 1 }]}
-          onPress={handleSignOut}
-        >
-          <Ionicons name="log-out-outline" size={18} color={AppColors.errorRed} />
-          <Text style={styles.signOutText}>Sign Out</Text>
-        </Pressable>
-
-        <Text style={styles.versionText}>LilSteps v1.0.0</Text>
+        <View style={styles.footer}>
+          <TextButton label="Sign out" tone="danger" onPress={handleSignOut} />
+          <Text style={[typography.caption, styles.version]}>LilSteps v1.0.0</Text>
+        </View>
       </ScrollView>
     </View>
   );
@@ -291,228 +245,102 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: AppColors.surface },
 
-  headerWrapper: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 10,
-  },
-  header: {
+  scroll: { paddingHorizontal: 20, paddingTop: 8, gap: 24 },
+
+  hero: {
+    padding: 20,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingTop: 8,
-    paddingBottom: 20,
-    gap: 6,
+    gap: 16,
   },
-  backBtn: {
-    width: 44, height: 44,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 17,
-    color: AppColors.onSurface,
-  },
-  headerSpacer: { flex: 1 },
-
-  scroll: { paddingHorizontal: 20, gap: 24 },
-
-  profileCard: {
-    borderRadius: 24,
-    padding: 28,
+  // Avatar keeps the deep-green fill (small solid element, not a card).
+  avatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: AppColors.primary,
     alignItems: 'center',
-    gap: 6,
-    overflow: 'hidden',
+    justifyContent: 'center',
   },
-  profileBlobTR: {
-    position: 'absolute', top: -30, right: -30,
-    width: 140, height: 140, borderRadius: 70,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  profileAvatar: {
-    width: 80, height: 80, borderRadius: 40,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)',
-    marginBottom: 12,
-  },
-  profileAvatarText: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 32,
+  avatarText: {
+    fontFamily: FontFamily.bold,
+    fontSize: 22,
     color: AppColors.onPrimary,
   },
-  profileName: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 26,
-    color: AppColors.onPrimary,
-    letterSpacing: -0.5,
-  },
-  profileAge: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.85)',
-  },
-  profileBracket: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.65)',
-    textAlign: 'center',
-  },
-  statsRow: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    marginTop: 16,
-    gap: 24,
-  },
-  statItem: { flex: 1, alignItems: 'center', gap: 4 },
-  statValue: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 18,
-    color: AppColors.onPrimary,
-  },
-  statLabel: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.65)',
-  },
-  statDivider: {
-    width: 1,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginVertical: 4,
-  },
+  heroText: { flex: 1, gap: 2 },
+  heroMeta: { color: AppColors.secondary, fontFamily: FontFamily.medium },
 
-  section: { gap: 10 },
   sectionLabel: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 13,
-    color: AppColors.onSurfaceVariant,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    ...typography.sectionLabel,
+    color: AppColors.muted,
     marginLeft: 4,
   },
 
-  listGroup: {
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 18,
+  card: {
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
     overflow: 'hidden',
   },
-  listItem: {
-    paddingVertical: 14,
+  row: {
+    minHeight: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
     paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  listItemPrefix: {
-    marginRight: 14,
-  },
-  listItemIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+  rowPressed: { backgroundColor: AppColors.surfaceContainerLow },
+  well: {
+    width: Size.iconWell,
+    height: Size.iconWell,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  listItemContent: {
-    gap: 2,
-  },
-  listItemTitle: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 15,
-    color: AppColors.onSurface,
-  },
-  listItemDesc: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 13,
-    color: AppColors.onSurfaceVariant,
-  },
-  separator: {
-    marginHorizontal: 16,
-    backgroundColor: `${AppColors.outlineVariant}20`,
+  rowTextFixed: { flexShrink: 0, gap: 2 },
+  rowTextFlex: { flex: 1, gap: 2 },
+  rowValue: { flex: 1, minWidth: 0, textAlign: 'right' },
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: AppColors.border,
+    marginLeft: 16 + Size.iconWell + 12,
   },
 
-  countBadge: {
-    backgroundColor: `${AppColors.warningAmber}15`,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  countBadgeText: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 12,
-    color: AppColors.warningAmber,
-  },
-
-  childList: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  childList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   childChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderWidth: 1.5,
-    borderColor: `${AppColors.outlineVariant}20`,
+    gap: 8,
+    paddingLeft: 6,
+    paddingRight: 14,
+    paddingVertical: 6,
+    borderRadius: Radius.full,
+    backgroundColor: AppColors.card,
+    borderWidth: 1,
+    borderColor: AppColors.border,
   },
   childChipActive: {
-    borderColor: AppColors.primary,
-    backgroundColor: `${AppColors.primary}06`,
+    borderColor: AppColors.mintBorder,
+    backgroundColor: AppColors.mintSurface,
   },
   childChipAvatar: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: `${AppColors.primary}12`,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  childChipAvatarActive: {
-    backgroundColor: AppColors.primary,
-  },
-  childChipInitial: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 13,
-    color: AppColors.primary,
-  },
-  childChipInitialActive: {
-    color: AppColors.onPrimary,
-  },
-  childChipName: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
-    color: AppColors.onSurface,
-  },
-  childChipNameActive: {
-    color: AppColors.primary,
-  },
-  childChipCheck: {
-    width: 20, height: 20, borderRadius: 10,
-    backgroundColor: AppColors.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  signOutBtn: {
-    flexDirection: 'row',
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: AppColors.surfaceContainer,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    backgroundColor: `${AppColors.errorRed}08`,
-    borderWidth: 1.5,
-    borderColor: `${AppColors.errorRed}30`,
-    borderRadius: 14,
-    paddingVertical: 16,
   },
-  signOutText: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 15,
-    color: AppColors.errorRed,
-  },
+  childChipAvatarActive: { backgroundColor: AppColors.primary },
+  childChipInitial: { fontFamily: FontFamily.bold, fontSize: 13, color: AppColors.secondary },
+  childChipInitialActive: { color: AppColors.onPrimary },
+  childChipName: { fontFamily: FontFamily.medium, fontSize: 13, color: AppColors.onSurface },
+  childChipNameActive: { fontFamily: FontFamily.semibold, color: AppColors.primary },
 
-  versionText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 12,
-    color: AppColors.outlineVariant,
-    textAlign: 'center',
-    marginTop: 8,
-  },
+  footer: { alignItems: 'center', gap: 4 },
+  version: { textAlign: 'center' },
 });

@@ -19,7 +19,7 @@ export default function DevelopmentYoungScreen() {
     <OnboardingShell
       progress={0.61}
       title="Development"
-      subtitle="Helps the care team understand your child's needs"
+      subtitle="Helps the care team understand needs"
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/b-diet-activity')}
     >
@@ -55,10 +55,11 @@ export default function DevelopmentYoungScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

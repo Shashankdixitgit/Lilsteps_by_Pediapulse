@@ -1,12 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
+import type { BottomTabBarProps } from 'expo-router/js-tabs';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Tabs } from 'expo-router';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useEffect, useRef, useState } from 'react';
+import { LayoutChangeEvent, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppColors } from '@/constants/theme';
+import { PressableScale } from '@/components/ui/PressableScale';
+import { haptic, useMotion } from '@/components/ui/useMotion';
+import { AppColors, CanvasFade, FontFamily, GlassBlur, Motion, Radius, Shadow } from '@/constants/theme';
 import { usePushTokenRegistration } from '@/hooks/usePushToken';
 
 const LEFT_TABS = [
@@ -31,10 +41,68 @@ const TAB_LABELS: Record<string, string> = {
 };
 
 const AI_BTN_SIZE = 52;
+const PILL_W = 56;
+const PILL_H = 30;
+
+type TabLayout = { x: number; width: number };
+
+/** Mint pill that slides (translateX) behind the active tab icon. Own memoised child. */
+const ActivePill = memo(function ActivePill({ layout }: { layout: TabLayout | undefined }) {
+  const { reduceMotion } = useMotion();
+  const x = useSharedValue(-1);
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    if (!layout) {
+      opacity.set(withTiming(0, { duration: Motion.exit }));
+      return;
+    }
+    const target = layout.x + layout.width / 2 - PILL_W / 2;
+    if (x.get() < 0 || reduceMotion) x.set(target);
+    else x.set(withSpring(target, Motion.springPress));
+    opacity.set(withTiming(1, { duration: Motion.exit }));
+  }, [layout, reduceMotion, x, opacity]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: opacity.get(),
+    transform: [{ translateX: Math.max(0, x.get()) }],
+  }));
+
+  return <Animated.View pointerEvents="none" style={[styles.activePill, style]} />;
+});
+
+function TabIcon({ focused, icon, iconActive }: { focused: boolean; icon: string; iconActive: string }) {
+  const { reduceMotion } = useMotion();
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    if (focused && !reduceMotion) {
+      scale.set(withSequence(withSpring(1.12, Motion.springBouncy), withSpring(1, Motion.springBouncy)));
+    }
+  }, [focused, reduceMotion, scale]);
+
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
+
+  return (
+    <Animated.View style={[styles.iconSlot, style]}>
+      <Ionicons
+        name={(focused ? iconActive : icon) as any}
+        size={22}
+        color={focused ? AppColors.primary : AppColors.outline}
+      />
+    </Animated.View>
+  );
+}
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const rightTabs = RIGHT_TABS;
+  const [layouts, setLayouts] = useState<Record<string, TabLayout>>({});
+  const prevIndex = useRef(state.index);
+
+  useEffect(() => {
+    if (prevIndex.current !== state.index) haptic('selection');
+    prevIndex.current = state.index;
+  }, [state.index]);
 
   function getRouteIndex(name: string) {
     return state.routes.findIndex((r) => r.name === name);
@@ -48,6 +116,13 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
     if (!isFocused && !event.defaultPrevented) navigation.navigate(name);
   }
 
+  function onTabLayout(name: string, e: LayoutChangeEvent) {
+    const { x, width } = e.nativeEvent.layout;
+    setLayouts((prev) => (prev[name]?.x === x && prev[name]?.width === width ? prev : { ...prev, [name]: { x, width } }));
+  }
+
+  const activeName = state.routes[state.index]?.name;
+
   function renderTab(tab: { name: string; icon: string; iconActive: string }) {
     const idx = getRouteIndex(tab.name);
     const focused = idx !== -1 && state.index === idx;
@@ -58,17 +133,15 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         key={tab.name}
         style={styles.tabItem}
         onPress={() => pressTab(tab.name)}
+        onLayout={(e) => onTabLayout(tab.name, e)}
         android_ripple={null}
+        accessibilityRole="tab"
+        accessibilityLabel={label}
+        accessibilityState={{ selected: focused }}
       >
         <View style={styles.tabInner}>
-          <Ionicons
-            name={(focused ? tab.iconActive : tab.icon) as any}
-            size={24}
-            color={focused ? AppColors.primary : AppColors.onSurfaceVariant}
-          />
-          <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>
-            {label}
-          </Text>
+          <TabIcon focused={focused} icon={tab.icon} iconActive={tab.iconActive} />
+          <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
         </View>
       </Pressable>
     );
@@ -78,16 +151,16 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
 
   return (
     <View style={[styles.wrapper, { paddingBottom: bottomPadding }]} pointerEvents="box-none">
-      {/* Gradient fade: transparent at top → solid at bottom */}
+      {/* Canvas fade: transparent at top → solid at bottom */}
       <LinearGradient
         colors={[
-          `${AppColors.surface}00`,
-          `${AppColors.surface}20`,
-          `${AppColors.surface}60`,
-          `${AppColors.surface}B0`,
-          `${AppColors.surface}E8`,
-          AppColors.surface,
-          AppColors.surface,
+          CanvasFade.a0,
+          CanvasFade.a13,
+          CanvasFade.a38,
+          CanvasFade.a69,
+          CanvasFade.a91,
+          CanvasFade.solid,
+          CanvasFade.solid,
         ]}
         locations={[0, 0.1, 0.22, 0.35, 0.5, 0.65, 1]}
         style={styles.fadeGradient}
@@ -96,36 +169,34 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         pointerEvents="none"
       />
 
-      <View style={styles.aiButtonWrapper} pointerEvents="box-none">
-        <Pressable 
-          onPress={() => router.push('/checkin')}
-          android_ripple={{ color: 'rgba(255,255,255,0.3)', borderless: true }}
-        >
-          <View style={styles.aiButtonOuter}>
-            <LinearGradient
-              colors={[AppColors.primary, AppColors.gradientEnd]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.aiButton}
-            >
-              <Ionicons name="sparkles" size={22} color={AppColors.onPrimary} />
-            </LinearGradient>
-          </View>
-        </Pressable>
-      </View>
-      
       <View style={styles.tabBarContainer}>
-        <BlurView
-          intensity={Platform.OS === 'ios' ? 80 : 0}
-          tint="light"
-          style={styles.blurView}
+        {/* Subtle glass: translucent white + hairline; light blur on iOS only. */}
+        <View style={styles.glassClip} pointerEvents="none">
+          {Platform.OS === 'ios' ? (
+            <BlurView intensity={GlassBlur} tint="light" style={StyleSheet.absoluteFill} />
+          ) : null}
+          <View style={styles.glassFill} />
+        </View>
+        <View style={styles.tabBarInner}>
+          <ActivePill layout={activeName ? layouts[activeName] : undefined} />
+          {LEFT_TABS.map((t) => renderTab(t))}
+          <View style={styles.aiButtonSpacer} />
+          {RIGHT_TABS.map((t) => renderTab(t))}
+        </View>
+      </View>
+
+      <View style={styles.aiButtonWrapper} pointerEvents="box-none">
+        <PressableScale
+          onPress={() => router.push('/checkin')}
+          hapticOnPress
+          scaleTo={0.92}
+          accessibilityLabel="AI check-in"
+          style={styles.aiButtonOuter}
         >
-          <View style={styles.tabBarInner}>
-            {LEFT_TABS.map((t) => renderTab(t))}
-            <View style={styles.aiButtonSpacer} />
-            {rightTabs.map((t) => renderTab(t))}
+          <View style={styles.aiButton}>
+            <Ionicons name="sparkles" size={22} color={AppColors.mint} />
           </View>
-        </BlurView>
+        </PressableScale>
       </View>
     </View>
   );
@@ -163,16 +234,17 @@ const styles = StyleSheet.create({
   },
   aiButtonWrapper: {
     position: 'absolute',
-    top: -AI_BTN_SIZE / 2,
+    top: -AI_BTN_SIZE / 2 + 2,
     left: 0,
     right: 0,
     alignItems: 'center',
     zIndex: 10,
   },
   aiButtonOuter: {
-    borderRadius: AI_BTN_SIZE / 2 + 3,
-    padding: 3,
-    backgroundColor: AppColors.surface,
+    borderRadius: Radius.full,
+    padding: 4,
+    backgroundColor: AppColors.card,
+    boxShadow: Shadow.raised,
   },
   aiButton: {
     width: AI_BTN_SIZE,
@@ -180,48 +252,67 @@ const styles = StyleSheet.create({
     borderRadius: AI_BTN_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: AppColors.primary,
   },
   aiButtonSpacer: {
     width: AI_BTN_SIZE + 20,
   },
   tabBarContainer: {
-    borderRadius: 24,
-    overflow: 'hidden',
-    borderWidth: 0,
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.glassBorder,
+    boxShadow: Shadow.card,
   },
-  blurView: {
-    borderRadius: 24,
+  glassClip: {
+    ...StyleSheet.absoluteFill,
+    borderRadius: Radius.xl,
     overflow: 'hidden',
-    backgroundColor: Platform.OS === 'android' ? 'rgba(255,255,255,0.97)' : undefined,
-    borderWidth: 0,
+  },
+  glassFill: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: Platform.OS === 'ios' ? AppColors.glassLight : 'rgba(255, 255, 255, 0.92)',
   },
   tabBarInner: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 60,
+    height: 66,
     paddingHorizontal: 4,
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(255,243,255,0.85)' : 'transparent',
-    borderWidth: 0,
+  },
+  activePill: {
+    position: 'absolute',
+    left: 0,
+    top: 9,
+    width: PILL_W,
+    height: PILL_H,
+    borderRadius: Radius.full,
+    backgroundColor: AppColors.mintSurface,
   },
   tabItem: {
     flex: 1,
+    alignSelf: 'stretch',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 9,
   },
   tabInner: {
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 2,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  },
+  iconSlot: {
+    height: PILL_H,
+    width: PILL_W,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tabLabel: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 10,
-    color: AppColors.onSurfaceVariant,
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    lineHeight: 16,
+    color: AppColors.muted,
   },
   tabLabelActive: {
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: FontFamily.semibold,
     color: AppColors.primary,
   },
 });

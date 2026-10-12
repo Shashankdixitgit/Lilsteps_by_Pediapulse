@@ -21,8 +21,8 @@ export default function BirthHistoryScreen() {
   return (
     <OnboardingShell
       progress={0.58}
-      title="Birth History"
-      subtitle="This information helps paediatricians understand early development"
+      title="Birth history"
+      subtitle="Helps doctors understand early development"
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/a-feeding')}
     >
@@ -49,6 +49,7 @@ export default function BirthHistoryScreen() {
       <TextInputField
         label="Birth weight"
         hint="(kg)"
+        hintInline
         placeholder="e.g. 2.8"
         value={birthWeight}
         onChangeText={setBirthWeight}
@@ -71,10 +72,11 @@ export default function BirthHistoryScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

@@ -18,14 +18,15 @@ export default function ParentDetailsScreen() {
   return (
     <OnboardingShell
       progress={0.05}
-      title="About You"
-      subtitle="Tell us a bit about yourself so we can personalise your experience"
+      title="About you"
+      subtitle="So we can personalise LilSteps for you"
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/add-child')}
     >
       <TextInputField
-        label="Full Name"
+        label="Full name"
         hint="(Parent or Guardian)"
+        hintInline
         placeholder="e.g. Sarah Johnson"
         value={name}
         onChangeText={setName}
@@ -39,7 +40,7 @@ export default function ParentDetailsScreen() {
       </View>
 
       <View style={styles.fieldGroup}>
-        <Text style={styles.fieldLabel}>Preferred Language</Text>
+        <Text style={styles.fieldLabel}>Preferred language</Text>
         <ChipGroup options={LANGUAGES} selected={language} onChange={setLanguage} />
       </View>
     </OnboardingShell>
@@ -48,11 +49,13 @@ export default function ParentDetailsScreen() {
 
 const styles = StyleSheet.create({
   fieldGroup: {
-    gap: 12,
+    gap: 8,
   },
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
+    marginLeft: 2,
   },
 });

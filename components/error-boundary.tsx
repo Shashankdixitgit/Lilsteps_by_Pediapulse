@@ -51,13 +51,13 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   title: {
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: 'Inter_700Bold',
     fontSize: 22,
     color: AppColors.onSurface,
     textAlign: 'center',
   },
   body: {
-    fontFamily: 'PlusJakartaSans_400Regular',
+    fontFamily: 'Inter_400Regular',
     fontSize: 15,
     color: AppColors.onSurfaceVariant,
     textAlign: 'center',
@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
     borderRadius: 9999,
   },
   buttonText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
     color: AppColors.onPrimary,
   },

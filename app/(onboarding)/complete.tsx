@@ -1,48 +1,47 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 
-import { GradientBackground } from '@/components/gradient-background';
+import { Celebrate, type CelebrateHandle } from '@/components/celebrate/Celebrate';
 import { GradientButton } from '@/components/gradient-button';
+import { Sprout } from '@/components/mascot/Sprout';
 import { AppColors } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
 import { useOnboarding } from '@/context/onboarding';
 
 export default function CompleteScreen() {
   const { childName } = useOnboarding();
-  const displayName = childName || 'your child';
+  const displayName = childName || 'Your child';
+  const celebrateRef = useRef<CelebrateHandle>(null);
+
+  // One confetti burst on arrival (skipped under reduced motion inside Celebrate).
+  useEffect(() => {
+    const t = setTimeout(() => celebrateRef.current?.fire({ title: "You're all set", big: true, card: false }), 350);
+    return () => clearTimeout(t);
+  }, []);
 
   return (
     <View style={layout.screenContainer}>
-      <GradientBackground />
-
       <View style={styles.content}>
         <Animated.View entering={FadeIn.duration(600)} style={styles.iconSection}>
-          <LinearGradient
-            colors={[AppColors.primary, AppColors.primaryContainer]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.checkCircle}
-          >
-            <Text style={styles.checkMark}>{'\u2713'}</Text>
-          </LinearGradient>
+          <View style={styles.blob} />
+          <Sprout mood="cheer" size={96} animated />
         </Animated.View>
 
         <Animated.View entering={FadeInUp.delay(300).duration(600)} style={styles.textSection}>
-          <Text style={typography.headingXL}>You&apos;re All Set!</Text>
-          <Text style={[typography.bodyLG, styles.subtitle]}>
-            {displayName}&apos;s health profile is ready. Doctors will now have instant access to this information during consultations.
+          <Text style={[typography.display, styles.center]}>You&apos;re all set</Text>
+          <Text style={[typography.body, styles.subtitle]}>
+            {displayName}&apos;s profile is ready for your doctor.
           </Text>
         </Animated.View>
 
         <Animated.View entering={FadeInUp.delay(600).duration(600)} style={styles.footer}>
-          <GradientButton
-            label="Go to Home"
-            onPress={() => router.replace('/(tabs)')}
-          />
+          <GradientButton label="Go to home" onPress={() => router.replace('/(tabs)')} />
         </Animated.View>
       </View>
+
+      <Celebrate ref={celebrateRef} />
     </View>
   );
 }
@@ -50,39 +49,37 @@ export default function CompleteScreen() {
 const styles = StyleSheet.create({
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     justifyContent: 'center',
     alignItems: 'center',
   },
   iconSection: {
-    marginBottom: 32,
-  },
-  checkCircle: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    marginBottom: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: AppColors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 12,
+    width: 140,
+    height: 124,
   },
-  checkMark: {
-    fontSize: 44,
-    color: AppColors.onPrimary,
+  blob: {
+    position: 'absolute',
+    width: 136,
+    height: 116,
+    borderRadius: 68,
+    backgroundColor: AppColors.greenWash,
   },
   textSection: {
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+  },
+  center: {
+    textAlign: 'center',
   },
   subtitle: {
     textAlign: 'center',
-    maxWidth: 300,
+    maxWidth: 320,
   },
   footer: {
     width: '100%',
-    marginTop: 48,
+    marginTop: 32,
   },
 });

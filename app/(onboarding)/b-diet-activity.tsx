@@ -21,9 +21,10 @@ export default function DietActivityScreen() {
 
   return (
     <OnboardingShell
+      sprout="happy"
       progress={0.74}
-      title="Diet & Activity"
-      subtitle="Understanding daily habits helps with holistic care"
+      title="Diet and activity"
+      subtitle="Daily habits help with whole-child care"
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/b-vaccination')}
     >
@@ -60,10 +61,11 @@ export default function DietActivityScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

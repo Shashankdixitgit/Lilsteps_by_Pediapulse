@@ -1,5 +1,4 @@
-import { Card } from 'heroui-native';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { AppColors } from '@/constants/theme';
 
@@ -30,20 +29,23 @@ export function FeverInput({ value, unit, onValueChange, onUnitChange }: FeverIn
   const barWidth = tempInC !== null ? Math.min(Math.max((tempInC - 36) / 4, 0), 1) : 0;
 
   return (
-    <Card style={styles.card}>
-      <Card.Body style={styles.body}>
+    <View style={styles.card}>
         <View style={styles.header}>
-          <Text style={styles.title}>Enter Temperature</Text>
+          <Text style={styles.title}>Temperature</Text>
           <View style={styles.toggle}>
             <Pressable
               style={[styles.unit, unit === 'C' && styles.unitActive]}
               onPress={() => onUnitChange('C')}
+              accessibilityRole="button"
+              accessibilityState={{ selected: unit === 'C' }}
             >
               <Text style={[styles.unitText, unit === 'C' && styles.unitTextActive]}>°C</Text>
             </Pressable>
             <Pressable
               style={[styles.unit, unit === 'F' && styles.unitActive]}
               onPress={() => onUnitChange('F')}
+              accessibilityRole="button"
+              accessibilityState={{ selected: unit === 'F' }}
             >
               <Text style={[styles.unitText, unit === 'F' && styles.unitTextActive]}>°F</Text>
             </Pressable>
@@ -57,7 +59,7 @@ export function FeverInput({ value, unit, onValueChange, onUnitChange }: FeverIn
             onChangeText={onValueChange}
             keyboardType="decimal-pad"
             placeholder={unit === 'C' ? '38.5' : '101.3'}
-            placeholderTextColor={`${AppColors.primary}50`}
+            placeholderTextColor={AppColors.placeholder}
           />
           {level && (
             <View style={styles.severity}>
@@ -75,8 +77,7 @@ export function FeverInput({ value, unit, onValueChange, onUnitChange }: FeverIn
             </View>
           )}
         </View>
-      </Card.Body>
-    </Card>
+    </View>
   );
 }
 
@@ -88,42 +89,43 @@ export function buildFeverComplaint(value: string, unit: TempUnit): string | nul
 const styles = StyleSheet.create({
   card: {
     backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 18,
+    borderRadius: 16,
+    borderCurve: 'continuous',
     borderWidth: 1,
-    borderColor: `${AppColors.primary}20`,
+    borderColor: AppColors.border,
+    padding: 16,
+    gap: 12,
   },
-  body: { padding: 18, gap: 16 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  title: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: AppColors.onSurface },
+  title: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: AppColors.onSurface },
   toggle: {
     flexDirection: 'row',
     backgroundColor: AppColors.surfaceContainerHigh,
     borderRadius: 999,
     padding: 3,
   },
-  unit: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 999 },
+  unit: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
   unitActive: { backgroundColor: AppColors.surfaceContainerLowest },
-  unitText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: AppColors.onSurfaceVariant },
-  unitTextActive: { color: AppColors.primary, fontFamily: 'PlusJakartaSans_700Bold' },
+  unitText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: AppColors.onSurfaceVariant },
+  unitTextActive: { color: AppColors.primary, fontFamily: 'Inter_700Bold' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   input: {
     flex: 1,
-    height: 56,
-    backgroundColor: AppColors.surfaceContainerLow,
-    borderRadius: 14,
-    paddingHorizontal: 18,
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 26,
-    color: AppColors.primary,
+    height: 48,
+    backgroundColor: AppColors.card,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 22,
+    color: AppColors.forestDeep,
     borderWidth: 1.5,
-    borderColor: `${AppColors.primary}15`,
+    borderColor: AppColors.fieldBorder,
+    ...(Platform.OS === 'web' ? { outlineStyle: 'solid' as const, outlineWidth: 0 } : null),
   },
   severity: { gap: 6 },
   severityLabel: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
   },
   bar: {
     width: 88,

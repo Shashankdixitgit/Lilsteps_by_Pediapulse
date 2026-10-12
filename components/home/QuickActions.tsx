@@ -1,8 +1,8 @@
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
-import { Button, PressableFeedback } from 'heroui-native';
 
-import { AppColors } from '@/constants/theme';
+import { PressableScale } from '@/components/ui/PressableScale';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 
 interface QuickActionsProps {
   onBook?: () => void;
@@ -11,11 +11,12 @@ interface QuickActionsProps {
   onRecords?: () => void;
 }
 
+// Pastel wells (friendly accents) with forest icons: contrast 8-10:1.
 const ACTIONS = [
-  { key: 'book', label: 'Book', iconFamily: 'Feather', iconName: 'calendar' },
-  { key: 'growth', label: 'Growth', iconFamily: 'Feather', iconName: 'trending-up' },
-  { key: 'vaccines', label: 'Vaccines', iconFamily: 'MaterialCommunityIcons', iconName: 'shield-check-outline' },
-  { key: 'records', label: 'Records', iconFamily: 'Feather', iconName: 'folder' },
+  { key: 'book', label: 'Book', icon: 'calendar-outline', well: AppColors.mintSurface, wellPressed: AppColors.mintBorder },
+  { key: 'growth', label: 'Growth', icon: 'trending-up-outline', well: AppColors.skySurface, wellPressed: AppColors.infoBorder },
+  { key: 'vaccines', label: 'Vaccines', icon: 'shield-checkmark-outline', well: AppColors.sunshineSurface, wellPressed: AppColors.warningBorder },
+  { key: 'records', label: 'Records', icon: 'folder-open-outline', well: AppColors.peachSurface, wellPressed: AppColors.dangerBorder },
 ] as const;
 
 export function QuickActions({ onBook, onGrowth, onVaccines, onRecords }: QuickActionsProps) {
@@ -26,33 +27,21 @@ export function QuickActions({ onBook, onGrowth, onVaccines, onRecords }: QuickA
     records: onRecords ?? (() => {}),
   };
 
-  const renderIcon = (family: string, name: string) => {
-    if (family === 'MaterialCommunityIcons') {
-      return <MaterialCommunityIcons name={name as any} size={24} color={AppColors.primary} />;
-    }
-    return <Feather name={name as any} size={22} color={AppColors.primary} />;
-  };
-
   return (
     <View style={styles.row}>
       {ACTIONS.map((action) => (
-        <PressableFeedback
+        <PressableScale
           key={action.key}
           style={styles.item}
           onPress={handlers[action.key]}
+          accessibilityLabel={action.label}
+          scaleTo={0.94}
         >
-          <View pointerEvents="none">
-            <Button
-              isIconOnly
-              variant="secondary"
-              size="lg"
-              style={styles.iconBox}
-            >
-              {renderIcon(action.iconFamily, action.iconName)}
-            </Button>
+          <View style={[styles.well, { backgroundColor: action.well }]}>
+            <Ionicons name={action.icon} size={26} color={AppColors.primary} />
           </View>
           <Text style={styles.label}>{action.label}</Text>
-        </PressableFeedback>
+        </PressableScale>
       ))}
     </View>
   );
@@ -68,22 +57,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  iconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 16,
-    backgroundColor: AppColors.surfaceContainer,
-    shadowColor: AppColors.onSurface,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
+  well: {
+    width: 64,
+    height: 64,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: AppColors.card,
   },
   label: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 12,
-    color: AppColors.onSurfaceVariant,
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    color: AppColors.onSurface,
   },
 });

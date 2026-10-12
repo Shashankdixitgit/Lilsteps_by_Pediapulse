@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-LilSteps is a React Native mobile application built with Expo (v54) and TypeScript. It targets iOS, Android, and Web platforms from a shared codebase.
+LilSteps is a React Native mobile application built with Expo (SDK 57) and TypeScript. It targets iOS, Android, and Web platforms from a shared codebase.
 
 ## Development Commands
 
@@ -32,9 +32,11 @@ npm run reset-project  # Moves app/ to app-example/
 - `app/(tabs)/` - Tab navigator group (future main app)
 - `app/_layout.tsx` - Root layout wrapper (font loading, navigation stack)
 
-**Theming**: Design system colors via `constants/theme.ts`, design philosophy in `DESIGN.md`:
-- `AppColors` — Material Design 3 color tokens used across all components
-- `styles/global.ts` — shared typography and layout presets
+**Theming**: "Nivaran Soft Clay" (forest green + sage neutrals + a kid-friendly layer). Tokens in `constants/theme.ts`, rules in `DESIGN.md`:
+- `AppColors` — colour tokens (Material-style names, forest/sage values). Also `Radius`, `Spacing`, `Shadow`, `Motion`, `CanvasFade`, `ChildColors`, `ForestRamp`, `softSurface()`
+- `global.css` — HeroUI / uniwind variables, mirrored 1:1 from `AppColors`
+- `styles/global.ts` — shared typography (Inter only, 7-size scale: 32/22/17/15/13/12 + 22 numbers) and layout presets
+- The app is light-only (`app.json` + `Uniwind.setTheme('light')`). No purple; no `${AppColors.x}NN` alpha tints
 
 **Platform-specific code**: Uses file extensions for platform variants:
 - `.ios.tsx` - iOS-specific implementation
@@ -43,7 +45,7 @@ npm run reset-project  # Moves app/ to app-example/
 ## Key Configuration
 
 - **TypeScript**: Strict mode enabled, path alias `@/*` maps to project root
-- **New Architecture**: React Native new architecture enabled
+- **New Architecture**: Always on (SDK 55+; no app.json flag)
 - **React Compiler**: Experimental React compiler enabled
 - **Typed Routes**: Expo Router typed routes enabled
 
@@ -75,11 +77,24 @@ screens/
 2. **Screen files (`app/`) should be thin** — they compose components and contain only screen-specific layout/logic. Screens should NOT define reusable UI inline.
 3. **Existing reusable components** (add to this list as the app grows):
    - `AppLogo` — brand logo icon + name
-   - `GradientBackground` — full-screen mesh gradient with decorative blobs
-   - `GlassCard` — frosted-glass card container
+   - `GradientBackground` — flat sage canvas; `variant="welcome"` adds two soft static blobs
+   - `GlassCard` — white bordered card with tones (`mint`, `sunshine`, `info`, `forest` = light-green glass hero) and `elevated`
+   - `ui/HeroCard` — light-green glass hero card (`HeroCard`, `HeroBackdrop` + `heroCardStyle`, `HeroBadge`); big cards are light green, deep green is for actions
    - `AvatarStack` — overlapping avatar circles with count badge
-   - `GradientButton` — primary action button with signature gradient pill shape
-   - `TextInputField` — styled text input with focus states per DESIGN.md
+   - `GradientButton` — forest / white pill with arrow circle; `outline` / `ghost` / `danger` variants, `size` (`md` 48 default, `lg` 56 splash only, `sm` 32), `loading`, real disabled state; also exports `TextButton`
+   - `ScreenHeader` (+ `HeaderIconButton`) — the one stack-screen header: plain back icon, 17 SemiBold title, right slot, height 52
+   - `TextInputField` — input with `fieldBorder`, focus ring, `error` and `leading` per DESIGN.md
+   - `ChipGroup` — single/multi-select chips (mint selected state with check)
+   - `OnboardingShell` — onboarding frame: back button, animated progress, optional `sprout` mood
+   - `EmptyState` — Sprout + prop scene, title, body, optional action; `compact` one-liner (no Sprout) for empty sections
+   - `ChildAvatar` (+ `childColorIndex`) — child initial/photo with a per-child colour ring, optional static progress arc
+   - `mascot/Sprout` (+ `SproutArt`) — seedling mascot, moods happy/cheer/think/sleepy/care/wave
+   - `celebrate/Celebrate` — confetti burst + celebration card via `ref.fire({...})`
+   - `ui/PressableScale` — the press primitive (UI-thread scale + colour)
+   - `ui/AnimatedProgress` — transform-only progress bar with optional sunshine thumb
+   - `ui/StatusPill` — semantic status pill (colour + icon + label)
+   - `ui/Sticker` — clay reward sticker (rewards logging only)
+   - `ui/useMotion` / `haptic` — reduced-motion flag and safe haptics
 
 **Style separation — global vs screen-specific:**
 

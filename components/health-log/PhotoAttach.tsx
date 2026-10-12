@@ -35,7 +35,7 @@ export function PhotoAttach({ uri, onChange }: PhotoAttachProps) {
           <Text style={styles.metaText}>Photo attached</Text>
           <Text style={styles.metaSub}>Will upload when you save</Text>
         </View>
-        <Pressable style={styles.remove} onPress={() => onChange(null)} hitSlop={8}>
+        <Pressable style={styles.remove} onPress={() => onChange(null)} hitSlop={10} accessibilityLabel="Remove photo">
           <Ionicons name="close" size={16} color={AppColors.onSurface} />
         </Pressable>
       </View>
@@ -44,7 +44,7 @@ export function PhotoAttach({ uri, onChange }: PhotoAttachProps) {
 
   return (
     <Pressable style={styles.attachRow} onPress={handlePick}>
-      <Ionicons name="camera-outline" size={18} color={AppColors.onSurfaceVariant} />
+      <Ionicons name="camera-outline" size={18} color={AppColors.secondary} />
       <Text style={styles.attachText}>Attach photo (optional)</Text>
     </Pressable>
   );
@@ -54,34 +54,32 @@ const styles = StyleSheet.create({
   attachRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: `${AppColors.outlineVariant}50`,
-    borderRadius: 14,
-    padding: 16,
+    alignSelf: 'flex-start',
+    gap: 8,
+    minHeight: 44,
   },
-  attachText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 14, color: AppColors.onSurfaceVariant },
+  attachText: { fontFamily: 'Inter_600SemiBold', fontSize: 15, color: AppColors.secondary },
 
   previewRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.95)',
+    backgroundColor: AppColors.card,
     borderWidth: 1,
-    borderColor: `${AppColors.outlineVariant}30`,
-    borderRadius: 14,
-    padding: 10,
+    borderColor: AppColors.border,
+    borderRadius: 16,
+    borderCurve: 'continuous',
+    padding: 12,
   },
   preview: { width: 56, height: 56, borderRadius: 10, backgroundColor: AppColors.surfaceContainerHigh },
   meta: { flex: 1, gap: 2 },
-  metaText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: AppColors.onSurface },
-  metaSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: AppColors.onSurfaceVariant },
+  metaText: { fontFamily: 'Inter_600SemiBold', fontSize: 13, color: AppColors.onSurface },
+  metaSub: { fontFamily: 'Inter_400Regular', fontSize: 12, color: AppColors.muted },
   remove: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: `${AppColors.outlineVariant}30`,
+    backgroundColor: AppColors.surfaceContainer,
     alignItems: 'center',
     justifyContent: 'center',
   },

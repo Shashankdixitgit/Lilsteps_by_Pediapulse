@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 
@@ -6,18 +5,13 @@ import { AppColors } from '@/constants/theme';
 import { typography } from '@/styles/global';
 
 /**
- * The LittleSteps brand logo — gradient icon with dot pattern + brand name.
+ * The LittleSteps brand logo — forest-green tile with dot pattern + brand name.
  * Reusable on splash, onboarding, auth, and about screens.
  */
 export function AppLogo() {
   return (
     <Animated.View entering={FadeIn.duration(800)} style={styles.container}>
-      <LinearGradient
-        colors={[AppColors.primary, AppColors.primaryContainer]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.icon}
-      >
+      <View style={styles.icon}>
         <View style={styles.dotsContainer}>
           <View style={[styles.dot, styles.dotLarge]} />
           <View style={styles.dotRow}>
@@ -25,7 +19,7 @@ export function AppLogo() {
             <View style={[styles.dot, styles.dotSmall]} />
           </View>
         </View>
-      </LinearGradient>
+      </View>
 
       <Animated.Text
         entering={FadeInUp.delay(300).duration(600)}
@@ -45,14 +39,11 @@ const styles = StyleSheet.create({
   icon: {
     width: 96,
     height: 96,
-    borderRadius: 20,
+    borderRadius: 24,
+    borderCurve: 'continuous',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: AppColors.primary,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 24,
-    elevation: 12,
+    backgroundColor: AppColors.primary,
   },
   dotsContainer: {
     alignItems: 'center',
@@ -65,6 +56,7 @@ const styles = StyleSheet.create({
   dotLarge: {
     width: 14,
     height: 14,
+    backgroundColor: AppColors.mint,
   },
   dotSmall: {
     width: 10,

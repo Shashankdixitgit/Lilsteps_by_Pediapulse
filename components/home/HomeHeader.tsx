@@ -4,7 +4,8 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { ChildAvatar, childColorIndex } from '@/components/ChildAvatar';
+import { AppColors, CanvasFade, FontFamily, Radius, Shadow } from '@/constants/theme';
 import { useChild } from '@/context/child';
 
 interface HomeHeaderProps {
@@ -46,13 +47,13 @@ export function HomeHeader({
     <View style={[styles.wrapper, { paddingTop }]} pointerEvents="box-none">
       <LinearGradient
         colors={[
-          AppColors.surface,
-          AppColors.surface,
-          `${AppColors.surface}E8`,
-          `${AppColors.surface}B0`,
-          `${AppColors.surface}60`,
-          `${AppColors.surface}20`,
-          `${AppColors.surface}00`,
+          CanvasFade.solid,
+          CanvasFade.solid,
+          CanvasFade.a91,
+          CanvasFade.a69,
+          CanvasFade.a38,
+          CanvasFade.a13,
+          CanvasFade.a0,
         ]}
         locations={[0, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
         style={StyleSheet.absoluteFill}
@@ -68,31 +69,33 @@ export function HomeHeader({
           accessibilityRole="button"
           accessibilityLabel={`Switch child. Currently ${childName}.`}
         >
-          <View style={styles.avatarRing}>
-            <View style={styles.avatarFallback}>
-              <Text style={styles.avatarInitial}>{avatarInitial}</Text>
-            </View>
-          </View>
+          <ChildAvatar
+            name={childName || avatarInitial}
+            id={activeChild?.id}
+            colorIndex={childColorIndex(children, activeChild?.id)}
+            size={36}
+          />
           <View style={styles.namePill}>
             <Text style={styles.childNameLabel} numberOfLines={1}>
               {childName}
             </Text>
-            {canSwitch && children.length > 1 && (
+            {canSwitch && children.length > 1 ? (
               <Ionicons name="chevron-down" size={14} color={AppColors.primary} />
-            )}
+            ) : null}
           </View>
         </Pressable>
 
         <View style={styles.bellWrapper}>
           <Pressable
             onPress={onNotifications}
-            style={({ pressed }) => [styles.bellButton, { opacity: pressed ? 0.6 : 1 }]}
+            style={({ pressed }) => [styles.bellButton, pressed && styles.bellButtonPressed]}
+            hitSlop={4}
             accessibilityRole="button"
-            accessibilityLabel="Notifications and profile"
+            accessibilityLabel={hasUnread ? 'Notifications and profile, unread updates' : 'Notifications and profile'}
           >
-            <Ionicons name="notifications-outline" size={20} color={AppColors.primary} />
+            <Ionicons name="notifications-outline" size={22} color={AppColors.onSurface} />
           </Pressable>
-          {hasUnread && <View style={styles.unreadDot} />}
+          {hasUnread ? <View style={styles.unreadDot} /> : null}
         </View>
       </View>
 
@@ -107,34 +110,33 @@ export function HomeHeader({
             style={[styles.sheet, { marginTop: paddingTop + 64 }]}
             onPress={(e) => e.stopPropagation()}
           >
-            <Text style={styles.sheetEyebrow}>YOUR CHILDREN</Text>
+            <Text style={styles.sheetEyebrow}>Your children</Text>
             {children.map((c) => {
               const isActive = c.id === activeChild?.id;
               return (
                 <Pressable
                   key={c.id}
                   onPress={() => handleSelect(c.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isActive }}
                   style={({ pressed }) => [
                     styles.sheetItem,
                     isActive && styles.sheetItemActive,
-                    { opacity: pressed ? 0.7 : 1 },
+                    pressed && !isActive && styles.sheetItemPressed,
                   ]}
                 >
-                  <View style={styles.sheetAvatar}>
-                    <Text style={styles.sheetAvatarInitial}>{c.name.charAt(0)}</Text>
-                  </View>
+                  <ChildAvatar name={c.name} id={c.id} colorIndex={childColorIndex(children, c.id)} size={36} />
                   <Text style={[styles.sheetItemName, isActive && styles.sheetItemNameActive]}>
                     {c.name}
                   </Text>
-                  {isActive && (
-                    <Ionicons name="checkmark" size={18} color={AppColors.primary} />
-                  )}
+                  {isActive ? <Ionicons name="checkmark-circle" size={20} color={AppColors.secondary} /> : null}
                 </Pressable>
               );
             })}
             <Pressable
               onPress={handleAddChild}
-              style={({ pressed }) => [styles.addButton, { opacity: pressed ? 0.7 : 1 }]}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
             >
               <Ionicons name="add" size={18} color={AppColors.primary} />
               <Text style={styles.addButtonLabel}>Add another child</Text>
@@ -160,30 +162,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingTop: 8,
-    paddingBottom: 40,
+    paddingBottom: 24,
   },
   left: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-  },
-  avatarRing: {
-    padding: 2,
-    borderRadius: 24,
-    backgroundColor: AppColors.surfaceContainerLowest,
-  },
-  avatarFallback: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: AppColors.primaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarInitial: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 14,
-    color: AppColors.primary,
+    gap: 8,
   },
   namePill: {
     flexDirection: 'row',
@@ -191,12 +175,12 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: `${AppColors.surfaceContainerLowest}E0`,
+    borderRadius: Radius.full,
+    backgroundColor: AppColors.surfaceContainer,
   },
   childNameLabel: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 14,
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
     color: AppColors.onSurface,
     letterSpacing: -0.2,
     maxWidth: 140,
@@ -204,47 +188,45 @@ const styles = StyleSheet.create({
   bellWrapper: {
     position: 'relative',
   },
+  bellButtonPressed: {
+    backgroundColor: AppColors.surfaceContainer,
+  },
   bellButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: AppColors.surfaceContainerLowest,
   },
   unreadDot: {
     position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: AppColors.tertiary,
-    borderWidth: 1.5,
-    borderColor: AppColors.surfaceContainerLowest,
+    top: 6,
+    right: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: AppColors.peach,
+    borderWidth: 2,
+    borderColor: AppColors.surface,
     zIndex: 10,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(52, 44, 56, 0.18)',
+    backgroundColor: AppColors.overlay,
   },
   sheet: {
     marginHorizontal: 20,
     padding: 16,
-    borderRadius: 24,
-    backgroundColor: AppColors.surfaceContainerLowest,
+    borderRadius: Radius.xl,
+    borderCurve: 'continuous',
+    backgroundColor: AppColors.card,
     gap: 6,
-    shadowColor: '#342c38',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.12,
-    shadowRadius: 32,
-    elevation: 12,
+    boxShadow: Shadow.raised,
   },
   sheetEyebrow: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 10,
-    letterSpacing: 1.6,
-    color: AppColors.onSurfaceVariant,
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    color: AppColors.muted,
     marginBottom: 4,
     paddingHorizontal: 6,
   },
@@ -257,29 +239,22 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   sheetItemActive: {
-    backgroundColor: AppColors.surfaceContainer,
+    backgroundColor: AppColors.greenWash,
   },
-  sheetAvatar: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: AppColors.primaryContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
+  sheetItemPressed: {
+    backgroundColor: AppColors.surfaceContainerLow,
   },
-  sheetAvatarInitial: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 14,
-    color: AppColors.primary,
+  addButtonPressed: {
+    backgroundColor: AppColors.mintSurface,
   },
   sheetItemName: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
     color: AppColors.onSurface,
     flex: 1,
   },
   sheetItemNameActive: {
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: 'Inter_700Bold',
     color: AppColors.primary,
   },
   addButton: {
@@ -290,11 +265,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     marginTop: 4,
     borderRadius: 16,
-    backgroundColor: AppColors.surfaceContainer,
+    backgroundColor: AppColors.greenWash,
   },
   addButtonLabel: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 14,
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
     color: AppColors.primary,
   },
 });

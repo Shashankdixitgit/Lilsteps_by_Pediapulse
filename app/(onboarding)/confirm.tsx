@@ -1,17 +1,18 @@
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GradientBackground } from '@/components/gradient-background';
+import { ChildAvatar } from '@/components/ChildAvatar';
 import { GradientButton } from '@/components/gradient-button';
-import { AppColors } from '@/constants/theme';
+import { AppColors, Radius } from '@/constants/theme';
 import { useOnboarding } from '@/context/onboarding';
 import { useAuth } from '@/context/auth';
 import { supabase } from '@/lib/supabase';
 import { dbg } from '@/lib/debug';
+import { typography } from '@/styles/global';
 
 function getAge(dob: Date): string {
   const now = new Date();
@@ -160,68 +161,55 @@ export default function ConfirmScreen() {
 
   return (
     <View style={styles.screen}>
-      <GradientBackground />
-
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + 20, paddingBottom: insets.bottom + 24 }]}
+        style={styles.scroll}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + 24 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header label */}
-        <Animated.View entering={FadeIn.duration(500)} style={styles.headerLabel}>
-          <Text style={styles.headerLabelText}>Profile Ready</Text>
+        <Animated.View entering={FadeIn.duration(500)}>
+          <Text style={typography.heading}>{childName ? `Check ${childName}'s profile` : 'Check the profile'}</Text>
         </Animated.View>
 
         {/* Child profile card */}
         <Animated.View entering={FadeInUp.delay(150).duration(600)} style={styles.card}>
           {/* Avatar + identity */}
-          <LinearGradient
-            colors={[AppColors.primary, AppColors.primaryContainer]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.avatar}
-          >
-            <Text style={styles.avatarInitial}>{initial}</Text>
-          </LinearGradient>
+          <View style={styles.identity}>
+            <ChildAvatar name={displayName || initial} size={56} colorIndex={0} />
+            <View style={styles.identityText}>
+              <Text style={typography.heading} numberOfLines={1}>{displayName}</Text>
+              {!!(age || sexLabel) && (
+                <Text style={typography.meta}>
+                  {[age, sexLabel].filter(Boolean).join(' · ')}
+                </Text>
+              )}
+            </View>
+          </View>
 
-          <Text style={styles.childName}>{displayName}</Text>
-          {(age || sexLabel) && (
-            <Text style={styles.childMeta}>
-              {[age, sexLabel].filter(Boolean).join(' · ')}
-            </Text>
-          )}
-
-          {/* Divider */}
           <View style={styles.divider} />
 
           {/* Stats row */}
           <View style={styles.statsRow}>
             <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Weight</Text>
+              <Text style={typography.caption}>Weight</Text>
               <Text style={styles.statValue}>{weight ? `${weight} kg` : '—'}</Text>
             </View>
             <View style={styles.statDivider} />
-            <View style={styles.statBox}>
-              <Text style={styles.statLabel}>Blood Group</Text>
+            <View style={[styles.statBox, styles.statBoxRight]}>
+              <Text style={typography.caption}>Blood group</Text>
               <Text style={styles.statValue}>{bloodGroup || '—'}</Text>
             </View>
           </View>
 
-          {/* Allergies */}
+          {/* Allergies: safety info keeps colour + icon + label */}
           {hasAllergies && (
             <>
               <View style={styles.divider} />
               <View style={styles.section}>
                 <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.alertDot}>{'\u26A0\uFE0F'}</Text>
-                  <Text style={styles.allergyTitle}>ALLERGY ALERT</Text>
+                  <Ionicons name="alert-circle" size={14} color={AppColors.danger} />
+                  <Text style={styles.allergyTitle}>Allergy alert</Text>
                 </View>
-                <View style={styles.chipRow}>
-                  {allergies.map((a) => (
-                    <View key={a} style={styles.allergyChip}>
-                      <Text style={styles.allergyChipText}>{a}</Text>
-                    </View>
-                  ))}
-                </View>
+                <Text style={styles.allergyText}>{allergies.join(', ')}</Text>
               </View>
             </>
           )}
@@ -231,13 +219,8 @@ export default function ConfirmScreen() {
             <>
               <View style={styles.divider} />
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Chronic Conditions</Text>
-                {conditions.map((c) => (
-                  <View key={c} style={styles.conditionRow}>
-                    <View style={styles.conditionDot} />
-                    <Text style={styles.conditionText}>{c}</Text>
-                  </View>
-                ))}
+                <Text style={typography.caption}>Chronic conditions</Text>
+                <Text style={styles.conditionText}>{conditions.join(', ')}</Text>
               </View>
             </>
           )}
@@ -246,51 +229,54 @@ export default function ConfirmScreen() {
           {!hasAllergies && !hasConditions && (
             <>
               <View style={styles.divider} />
-              <Text style={styles.noFlagsText}>No known allergies or chronic conditions</Text>
+              <Text style={typography.meta}>No known allergies or chronic conditions</Text>
             </>
           )}
         </Animated.View>
 
-        {/* Error */}
-        {error && (
-          <Text style={styles.errorText}>{error}</Text>
+      </ScrollView>
+
+      {/* Footer: consent + the one primary, pinned to the bottom */}
+      <Animated.View
+        entering={FadeInUp.delay(400).duration(500)}
+        style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}
+      >
+        {error ? <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text> : null}
+        <Pressable
+          style={styles.checkboxRow}
+          onPress={() => setAgreed((v) => !v)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: agreed }}
+          hitSlop={8}
+        >
+          <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
+            {agreed ? <Ionicons name="checkmark" size={15} color={AppColors.onPrimary} /> : null}
+          </View>
+          <Text style={styles.checkboxLabel}>
+            All details are accurate to the best of my knowledge
+          </Text>
+        </Pressable>
+
+        {saving ? (
+          <View style={styles.loadingCta}>
+            <ActivityIndicator color={AppColors.primary} />
+            <Text style={styles.loadingText}>Saving profile...</Text>
+          </View>
+        ) : (
+          <GradientButton
+            label={`${displayName} is ready. Let's go.`}
+            onPress={handleConfirm}
+            disabled={!agreed}
+          />
         )}
 
-        {/* Accuracy checkbox */}
-        <Animated.View entering={FadeInUp.delay(400).duration(500)} style={styles.checkboxSection}>
-          <Pressable style={styles.checkboxRow} onPress={() => setAgreed((v) => !v)}>
-            <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
-              {agreed && <Text style={styles.checkmark}>{'\u2713'}</Text>}
-            </View>
-            <Text style={styles.checkboxLabel}>
-              All details are accurate to the best of my knowledge
-            </Text>
-          </Pressable>
-
-          <Text style={styles.termsText}>
-            By continuing you agree to our{' '}
-            <Text style={styles.termsLink}>Terms of Service</Text>
-            {' '}and{' '}
-            <Text style={styles.termsLink}>Privacy Policy</Text>
-          </Text>
-        </Animated.View>
-
-        {/* CTA */}
-        <Animated.View entering={FadeInUp.delay(550).duration(500)}>
-          {saving ? (
-            <View style={styles.loadingCta}>
-              <ActivityIndicator color={AppColors.primary} />
-              <Text style={styles.loadingText}>Saving profile...</Text>
-            </View>
-          ) : (
-            <GradientButton
-              label={`${displayName} is ready. Let's go.`}
-              onPress={handleConfirm}
-              style={[styles.cta, (!agreed || saving) && styles.ctaDisabled]}
-            />
-          )}
-        </Animated.View>
-      </ScrollView>
+        <Text style={styles.termsText}>
+          By continuing you agree to our{' '}
+          <Text style={styles.termsLink}>Terms of Service</Text>
+          {' '}and{' '}
+          <Text style={styles.termsLink}>Privacy Policy</Text>
+        </Text>
+      </Animated.View>
     </View>
   );
 }
@@ -300,219 +286,143 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: AppColors.surface,
   },
+  scroll: {
+    flex: 1,
+  },
   content: {
-    paddingHorizontal: 24,
-    gap: 20,
-  },
-  headerLabel: {
-    alignItems: 'center',
-  },
-  headerLabelText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 13,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    color: AppColors.primary,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    gap: 24,
   },
   card: {
-    backgroundColor: `${AppColors.surfaceContainerLowest}CC`,
-    borderRadius: 24,
-    padding: 24,
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    padding: 16,
     borderWidth: 1,
-    borderColor: `${AppColors.outlineVariant}33`,
+    borderColor: AppColors.border,
+  },
+  identity: {
+    flexDirection: 'row',
     alignItems: 'center',
-    gap: 0,
+    gap: 12,
   },
-  avatar: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  avatarInitial: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 32,
-    color: AppColors.onPrimary,
-  },
-  childName: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 26,
-    color: AppColors.onSurface,
-    letterSpacing: -0.3,
-  },
-  childMeta: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 14,
-    color: AppColors.onSurfaceVariant,
-    marginTop: 4,
+  identityText: {
+    flex: 1,
+    gap: 2,
   },
   divider: {
-    width: '100%',
-    height: 1,
-    backgroundColor: `${AppColors.outlineVariant}33`,
-    marginVertical: 16,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: AppColors.border,
+    marginVertical: 12,
   },
   statsRow: {
     flexDirection: 'row',
-    width: '100%',
   },
   statBox: {
     flex: 1,
-    alignItems: 'center',
-    gap: 4,
+    gap: 2,
+  },
+  statBoxRight: {
+    paddingLeft: 16,
   },
   statDivider: {
-    width: 1,
-    backgroundColor: `${AppColors.outlineVariant}33`,
-  },
-  statLabel: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 11,
-    color: AppColors.onSurfaceVariant,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: AppColors.border,
   },
   statValue: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 20,
-    color: AppColors.onSurface,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 17,
+    lineHeight: 24,
+    fontVariant: ['tabular-nums'],
+    color: AppColors.forestDeep,
   },
   section: {
-    width: '100%',
-    gap: 10,
+    gap: 2,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
-  alertDot: {
-    fontSize: 14,
+    gap: 4,
   },
   allergyTitle: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 11,
-    letterSpacing: 2,
-    color: AppColors.tertiary,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 12,
+    lineHeight: 16,
+    color: AppColors.danger,
   },
-  chipRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  allergyChip: {
-    backgroundColor: `${AppColors.tertiaryContainer}66`,
-    borderRadius: 9999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: `${AppColors.tertiary}33`,
-  },
-  allergyChipText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+  allergyText: {
+    fontFamily: 'Inter_500Medium',
     fontSize: 13,
-    color: AppColors.tertiary,
-  },
-  sectionTitle: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 11,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    color: AppColors.onSurfaceVariant,
-  },
-  conditionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  conditionDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: AppColors.primary,
+    lineHeight: 18,
+    color: AppColors.danger,
   },
   conditionText: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
   },
-  noFlagsText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 13,
-    color: AppColors.onSurfaceVariant,
-    fontStyle: 'italic',
-  },
   errorText: {
-    fontFamily: 'PlusJakartaSans_500Medium',
+    fontFamily: 'Inter_500Medium',
     fontSize: 13,
-    color: AppColors.tertiary,
+    color: AppColors.danger,
     textAlign: 'center',
   },
-  checkboxSection: {
+  footer: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
     gap: 12,
+    backgroundColor: AppColors.surface,
   },
   checkboxRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 12,
+    gap: 10,
   },
   checkbox: {
     width: 22,
     height: 22,
     borderRadius: 6,
-    borderWidth: 2,
-    borderColor: AppColors.outlineVariant,
+    borderWidth: 1.5,
+    borderColor: AppColors.fieldBorder,
+    backgroundColor: AppColors.card,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 1,
     flexShrink: 0,
   },
   checkboxChecked: {
     backgroundColor: AppColors.primary,
     borderColor: AppColors.primary,
   },
-  checkmark: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 13,
-    color: AppColors.onPrimary,
-  },
   checkboxLabel: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 20,
     color: AppColors.onSurface,
     flex: 1,
-    lineHeight: 20,
   },
   termsText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
+    fontFamily: 'Inter_400Regular',
     fontSize: 12,
-    color: AppColors.onSurfaceVariant,
+    lineHeight: 16,
+    color: AppColors.muted,
     textAlign: 'center',
-    lineHeight: 18,
   },
   termsLink: {
-    color: AppColors.primary,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-  },
-  cta: {
-    marginTop: 4,
-  },
-  ctaDisabled: {
-    opacity: 0.45,
+    color: AppColors.secondary,
+    fontFamily: 'Inter_600SemiBold',
   },
   loadingCta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    marginTop: 4,
-    height: 56,
+    height: 48,
   },
   loadingText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
-    color: AppColors.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    color: AppColors.secondary,
   },
 });

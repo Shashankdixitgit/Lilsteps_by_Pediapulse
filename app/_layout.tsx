@@ -2,18 +2,18 @@ import '../global.css';
 
 import { useFonts } from 'expo-font';
 import {
-  PlusJakartaSans_400Regular,
-  PlusJakartaSans_500Medium,
-  PlusJakartaSans_600SemiBold,
-  PlusJakartaSans_700Bold,
-  PlusJakartaSans_800ExtraBold,
-} from '@expo-google-fonts/plus-jakarta-sans';
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+} from '@expo-google-fonts/inter';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { HeroUINativeProvider } from 'heroui-native';
+import { Uniwind } from 'uniwind';
 
 import { AuthProvider } from '@/context/auth';
 import { ChildProvider } from '@/context/child';
@@ -21,6 +21,10 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { analytics, crash } from '@/lib/observability';
 
 SplashScreen.preventAutoHideAsync();
+
+// Light-only app (see DESIGN.md): AppColors has no dark palette, so lock
+// HeroUI/uniwind to light even when the phone is in dark mode.
+Uniwind.setTheme('light');
 
 // One-shot observability init. The current implementations are no-op stubs
 // (see lib/observability.ts) — they'll do real work once Sentry/PostHog are
@@ -30,11 +34,10 @@ analytics.init();
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
-    PlusJakartaSans_400Regular,
-    PlusJakartaSans_500Medium,
-    PlusJakartaSans_600SemiBold,
-    PlusJakartaSans_700Bold,
-    PlusJakartaSans_800ExtraBold,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
   });
 
   useEffect(() => {
