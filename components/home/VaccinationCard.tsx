@@ -17,7 +17,7 @@ export function VaccinationCard({ nextVaccine, nextDate, onViewSchedule, status 
   const derived = status ?? (nextVaccine.startsWith('Overdue') ? 'overdue' : nextVaccine.startsWith('All caught up') ? 'done' : 'upcoming');
   const pill: { tone: StatusTone; label: string } =
     derived === 'overdue'
-      ? { tone: 'danger', label: 'Overdue' }
+      ? { tone: 'danger', label: nextDate ? `Overdue · ${nextDate}` : 'Overdue' }
       : derived === 'done'
         ? { tone: 'success', label: 'All caught up' }
         : { tone: 'warning', label: `Next: ${nextDate}` };

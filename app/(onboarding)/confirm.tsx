@@ -234,8 +234,6 @@ export default function ConfirmScreen() {
           )}
         </Animated.View>
 
-        {/* Error */}
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
       </ScrollView>
 
       {/* Footer: consent + the one primary, pinned to the bottom */}
@@ -243,6 +241,7 @@ export default function ConfirmScreen() {
         entering={FadeInUp.delay(400).duration(500)}
         style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}
       >
+        {error ? <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text> : null}
         <Pressable
           style={styles.checkboxRow}
           onPress={() => setAgreed((v) => !v)}

@@ -23,9 +23,10 @@ const AuthContext = createContext<AuthState | null>(null);
  * Testing-only bypass (EXPO_PUBLIC_DEMO_LOGIN=1 in .env): no SMS is sent and
  * any code is accepted. Each phone number maps to its own email/password
  * account, so logging in again with the same number returns the same data.
- * Remove the env var to go back to real SMS OTP.
+ * Remove the env var to go back to real SMS OTP. Never active in release
+ * builds (__DEV__ is false there), even if the env var is set.
  */
-export const DEMO_LOGIN = process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
+export const DEMO_LOGIN = __DEV__ && process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
 
 async function demoSignIn(phone: string) {
   const digits = phone.replace(/\D/g, '');

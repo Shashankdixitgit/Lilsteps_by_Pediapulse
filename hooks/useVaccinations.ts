@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 
 export interface VaccinationRow {
@@ -18,12 +18,19 @@ export function useVaccinations(childId: string | null) {
   const [vaccinations, setVaccinations] = useState<VaccinationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadedFor = useRef<string | null>(null);
 
   const fetch = useCallback(async () => {
     if (!childId) {
       setVaccinations([]);
       setLoading(false);
       return;
+    }
+    // Switching child: drop the old child's rows so they can't be shown or
+    // marked under the new child's name while the fetch is in flight.
+    if (loadedFor.current !== childId) {
+      setVaccinations([]);
+      loadedFor.current = childId;
     }
     setLoading(true);
     setError(null);

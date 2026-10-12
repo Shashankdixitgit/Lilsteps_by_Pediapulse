@@ -173,7 +173,7 @@ export default function RecordsScreen() {
               <Text style={typography.meta}>Loading records…</Text>
             </View>
           ) : recordCount === 0 ? (
-            <RecordsEmptyState hasFilter={activeFilter !== 'all' || search.length > 0} />
+            <RecordsEmptyState hasFilter={hasAnyRecords && (activeFilter !== 'all' || search.length > 0)} />
           ) : (
             <View style={styles.listCard}>
               {filteredPrescriptions.map((p, i) => (
