@@ -1,9 +1,8 @@
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Card, PressableFeedback } from 'heroui-native';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { PressableScale } from '@/components/ui/PressableScale';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
+import { typography } from '@/styles/global';
 
 export interface GrowthData {
   weight: number | null;
@@ -12,166 +11,105 @@ export interface GrowthData {
 
 interface GrowthCardsProps {
   data: GrowthData;
+  /** Makes the whole card pressable (e.g. to the Growth tab). */
+  onPress?: () => void;
+  /** Legacy per-column handlers (kept for call-site compatibility). */
   onWeightPress?: () => void;
   onHeightPress?: () => void;
 }
 
-const WEIGHT_BARS = [0.45, 0.6, 0.5, 0.75, 1.0];
-const HEIGHT_BARS = [0.35, 0.5, 0.65, 0.8, 1.0];
+/**
+ * One white hairline card with two columns: Weight | Height. Numbers use the
+ * shared `number` preset (22) with a 13 muted unit. No sparklines, no icon
+ * wells (the Growth tab owns the chart).
+ */
+export function GrowthCards({ data, onPress, onWeightPress, onHeightPress }: GrowthCardsProps) {
+  const content = (
+    <>
+      <Column label="Weight" value={data.weight} unit="kg" onPress={onPress ? undefined : onWeightPress} />
+      <View style={styles.divider} />
+      <Column label="Height" value={data.height} unit="cm" onPress={onPress ? undefined : onHeightPress} />
+    </>
+  );
 
-interface MiniBarChartProps {
-  bars: number[];
-  color: string;
+  if (onPress) {
+    return (
+      <PressableScale
+        onPress={onPress}
+        scaleTo={0.98}
+        bg={AppColors.card}
+        bgPressed={AppColors.surfaceContainerLow}
+        accessibilityLabel={`Weight ${data.weight ?? 'not logged'} kg, height ${data.height ?? 'not logged'} cm`}
+        style={styles.card}
+      >
+        {content}
+      </PressableScale>
+    );
+  }
+  return <View style={[styles.card, styles.cardStatic]}>{content}</View>;
 }
 
-function MiniBarChart({ bars, color }: MiniBarChartProps) {
-  return (
-    <View style={chartStyles.container}>
-      {bars.map((h, i) => {
-        const isLast = i === bars.length - 1;
-        return (
-          <View key={`bar-${i}-${h}`} style={chartStyles.barWrapper}>
-            {isLast ? (
-              <LinearGradient
-                colors={[color, `${color}CC`]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 0, y: 1 }}
-                style={[
-                  chartStyles.bar,
-                  chartStyles.activeBar,
-                  { height: 36 * h },
-                ]}
-              />
-            ) : (
-              <View
-                style={[
-                  chartStyles.bar,
-                  chartStyles.inactiveBar,
-                  { height: 36 * h },
-                ]}
-              />
-            )}
-          </View>
-        );
-      })}
-    </View>
+function Column({
+  label,
+  value,
+  unit,
+  onPress,
+}: {
+  label: string;
+  value: number | null;
+  unit: string;
+  onPress?: () => void;
+}) {
+  const inner = (
+    <>
+      <Text style={styles.label}>{label}</Text>
+      <View style={styles.valueRow}>
+        <Text style={typography.number}>{value ?? '—'}</Text>
+        <Text style={typography.unit}>{unit}</Text>
+      </View>
+    </>
   );
-}
-
-const chartStyles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 6,
-    height: 36,
-  },
-  barWrapper: {
-    flex: 1,
-  },
-  bar: {
-    width: '100%',
-    borderRadius: 5,
-  },
-  inactiveBar: {
-    backgroundColor: `${AppColors.primaryContainer}55`,
-  },
-  activeBar: {},
-});
-
-export function GrowthCards({ data, onWeightPress, onHeightPress }: GrowthCardsProps) {
-  return (
-    <View style={styles.grid}>
-      <PressableFeedback onPress={onWeightPress} style={styles.cardWrapper}>
-        <Card style={styles.card} className="p-0 border-0 shadow-none">
-          <Card.Body style={styles.cardContent}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardLabel}>Weight</Text>
-              <View style={styles.iconContainer}>
-                <Ionicons name="scale-outline" size={14} color={AppColors.primary} />
-              </View>
-            </View>
-            <View style={styles.valueRow}>
-              <Text style={styles.value}>{data.weight ?? '—'}</Text>
-              <Text style={styles.unit}>kg</Text>
-            </View>
-            <MiniBarChart bars={WEIGHT_BARS} color={AppColors.primary} />
-          </Card.Body>
-        </Card>
-      </PressableFeedback>
-
-      <PressableFeedback onPress={onHeightPress} style={styles.cardWrapper}>
-        <Card style={styles.card} className="p-0 border-0 shadow-none">
-          <Card.Body style={styles.cardContent}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.cardLabel}>Height</Text>
-              <View style={styles.iconContainer}>
-                <Ionicons name="resize-outline" size={14} color={AppColors.primary} />
-              </View>
-            </View>
-            <View style={styles.valueRow}>
-              <Text style={styles.value}>{data.height ?? '—'}</Text>
-              <Text style={styles.unit}>cm</Text>
-            </View>
-            <MiniBarChart bars={HEIGHT_BARS} color={AppColors.primary} />
-          </Card.Body>
-        </Card>
-      </PressableFeedback>
-    </View>
-  );
+  if (onPress) {
+    return (
+      <PressableScale onPress={onPress} scaleTo={0.98} style={styles.column} accessibilityLabel={`${label} ${value ?? 'not logged'} ${unit}`}>
+        {inner}
+      </PressableScale>
+    );
+  }
+  return <View style={styles.column}>{inner}</View>;
 }
 
 const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  cardWrapper: {
-    flex: 1,
-  },
   card: {
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 20,
-    aspectRatio: 1,
-    overflow: 'hidden',
-  },
-  cardContent: {
-    flex: 1,
-    padding: 14,
-    paddingBottom: 12,
-    justifyContent: 'space-between',
-  },
-  cardHeader: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'stretch',
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    paddingVertical: 16,
   },
-  cardLabel: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
-    color: AppColors.onSurfaceVariant,
+  cardStatic: {
+    backgroundColor: AppColors.card,
   },
-  iconContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 9,
-    backgroundColor: `${AppColors.primaryContainer}40`,
-    alignItems: 'center',
-    justifyContent: 'center',
+  column: {
+    flex: 1,
+    paddingHorizontal: 16,
+    gap: 4,
+  },
+  divider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: AppColors.border,
+  },
+  label: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
+    color: AppColors.muted,
   },
   valueRow: {
     flexDirection: 'row',
     alignItems: 'baseline',
     gap: 4,
-  },
-  value: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 32,
-    color: AppColors.onSurface,
-    letterSpacing: -1,
-  },
-  unit: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 15,
-    color: AppColors.onSurfaceVariant,
   },
 });

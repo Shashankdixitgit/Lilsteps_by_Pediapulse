@@ -7,8 +7,9 @@ import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { TextInputField } from '@/components/text-input-field';
-import { AppColors } from '@/constants/theme';
+import { AppColors, Radius } from '@/constants/theme';
 import { useOnboarding } from '@/context/onboarding';
+import { typography } from '@/styles/global';
 
 const SEX_OPTIONS = ['Male', 'Female'];
 const RELATIONSHIP = ['Mother', 'Father', 'Grandparent', 'Guardian'];
@@ -97,13 +98,13 @@ export default function ChildBasicsScreen() {
   return (
     <OnboardingShell
       progress={0.18}
-      title="Child's Details"
-      subtitle="Basic information about your child"
+      title="Your child"
+      subtitle="The basics about your child"
       ctaLabel="Continue"
       onCta={handleContinue}
     >
       <TextInputField
-        label="First Name"
+        label="First name"
         placeholder="Child's first name"
         value={firstName}
         onChangeText={setFirstName}
@@ -112,17 +113,9 @@ export default function ChildBasicsScreen() {
 
       {/* Date of Birth — styled to match TextInputField */}
       <View>
-        <View style={styles.labelRow}>
-          <Text style={styles.dobLabel}>Date of Birth</Text>
-          <Text style={styles.fieldHint}>(Helps us tailor health advice by age)</Text>
-        </View>
+        <Text style={styles.dobLabel}>Date of birth</Text>
         {Platform.OS === 'web' ? (
           <View style={[styles.dateField, dob && styles.dateFieldFilled]}>
-            <Ionicons
-              name="calendar-outline"
-              size={18}
-              color={dob ? AppColors.primary : AppColors.outlineVariant}
-            />
             {/* Native browser date picker — react-native-web passes <input> to DOM */}
             <input
               type="date"
@@ -138,9 +131,9 @@ export default function ChildBasicsScreen() {
                 border: 'none',
                 outline: 'none',
                 background: 'transparent',
-                fontFamily: 'PlusJakartaSans_600SemiBold',
+                fontFamily: 'Inter_400Regular',
                 fontSize: 16,
-                color: dob ? AppColors.onSurface : AppColors.onSurfaceVariant,
+                color: dob ? AppColors.onSurface : AppColors.muted,
                 cursor: 'pointer',
               }}
             />
@@ -169,6 +162,9 @@ export default function ChildBasicsScreen() {
             />
           </Pressable>
         )}
+        {!dob && (
+          <Text style={[typography.caption, styles.dobHint]}>Helps us tailor health advice by age</Text>
+        )}
         {dob && !dobOutOfRange && bracket && (
           <View style={styles.ageRow}>
             <View style={styles.ageDot} />
@@ -188,12 +184,12 @@ export default function ChildBasicsScreen() {
       </View>
 
       <View>
-        <Text style={styles.fieldLabel}>Biological Sex</Text>
+        <Text style={styles.fieldLabel}>Biological sex</Text>
         <ChipGroup options={SEX_OPTIONS} selected={sex} onChange={setSex} />
       </View>
 
       <View>
-        <Text style={styles.fieldLabel}>Your Relationship to Child</Text>
+        <Text style={styles.fieldLabel}>Your relationship to the child</Text>
         <ChipGroup options={RELATIONSHIP} selected={relationship} onChange={setRelationship} />
       </View>
 
@@ -244,66 +240,61 @@ export default function ChildBasicsScreen() {
 }
 
 const styles = StyleSheet.create({
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    marginLeft: 4,
-    marginBottom: 8,
-  },
   dobLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
+    marginLeft: 2,
+    marginBottom: 6,
+  },
+  dobHint: {
+    marginTop: 6,
+    marginLeft: 2,
   },
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
-  fieldHint: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 12,
-    color: AppColors.onSurfaceVariant,
-  },
+  // Matches TextInputField: white field, 1.5px fieldBorder, 10 radius, 48 high.
   dateField: {
-    backgroundColor: AppColors.surfaceContainerLow,
-    borderRadius: 12,
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
     height: 48,
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderWidth: 1.5,
+    borderColor: AppColors.fieldBorder,
   },
-  dateFieldFilled: {
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderColor: `${AppColors.primary}33`,
-  },
+  dateFieldFilled: {},
   dateFieldPressed: {
     opacity: 0.85,
   },
   dateText: {
     flex: 1,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'Inter_400Regular',
     fontSize: 16,
     color: AppColors.onSurface,
   },
   datePlaceholder: {
     flex: 1,
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 15,
-    color: AppColors.onSurfaceVariant,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 16,
+    color: AppColors.placeholder,
   },
   ageRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    marginTop: 8,
-    marginLeft: 4,
+    marginTop: 6,
+    marginLeft: 2,
   },
   ageDot: {
     width: 6,
@@ -312,23 +303,23 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.primary,
   },
   ageText: {
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 12,
     color: AppColors.onSurface,
   },
   ageDivider: {
-    fontFamily: 'PlusJakartaSans_500Medium',
+    fontFamily: 'Inter_500Medium',
     fontSize: 12,
     color: AppColors.outlineVariant,
   },
   bracketText: {
-    fontFamily: 'PlusJakartaSans_500Medium',
+    fontFamily: 'Inter_500Medium',
     fontSize: 12,
-    color: AppColors.primary,
+    color: AppColors.muted,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(52, 44, 56, 0.4)',
+    backgroundColor: AppColors.overlay,
   },
   modalSheet: {
     backgroundColor: AppColors.surfaceContainerLowest,
@@ -353,18 +344,18 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   modalTitle: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 16,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 17,
     color: AppColors.onSurface,
   },
   modalCancel: {
-    fontFamily: 'PlusJakartaSans_500Medium',
+    fontFamily: 'Inter_500Medium',
     fontSize: 15,
     color: AppColors.onSurfaceVariant,
   },
   modalDone: {
-    fontFamily: 'PlusJakartaSans_700Bold',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
-    color: AppColors.primary,
+    color: AppColors.secondary,
   },
 });

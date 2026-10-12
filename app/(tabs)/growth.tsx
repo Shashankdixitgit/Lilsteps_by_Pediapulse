@@ -1,6 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Button, Card, Tabs } from 'heroui-native';
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
@@ -8,8 +6,10 @@ import { GrowthChart, valueForTab } from '@/components/growth/GrowthChart';
 import { LogMeasurementSheet } from '@/components/growth/LogMeasurementSheet';
 import { MeasurementRow } from '@/components/growth/MeasurementRow';
 import { ChartTab, TimeFilter, computePercentile, monthsBetween, ordinal } from '@/components/growth/whoData';
+import { EmptyState } from '@/components/EmptyState';
+import { HeaderChildAvatar } from '@/components/HeaderChildAvatar';
 import { TabScreenLayout } from '@/components/TabScreenLayout';
-import { AppColors } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useGrowth, type GrowthRow } from '@/hooks/useGrowth';
 import { typography } from '@/styles/global';
@@ -25,6 +25,7 @@ export default function GrowthScreen() {
   const [chartTab, setChartTab] = useState<ChartTab>('weight');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('All');
   const [showSheet, setShowSheet] = useState(false);
+  const [chartWidth, setChartWidth] = useState(0);
 
   const { child, bracket } = useChild();
   const { measurements: actualMeasurements, addMeasurement } = useGrowth(child?.id ?? null);
@@ -61,16 +62,28 @@ export default function GrowthScreen() {
   const childName = child?.name ?? 'Child';
   const dob = child ? new Date(child.dob) : new Date();
   const latestDateStr = latest
-    ? new Date(latest.measured_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-    : '—';
+    ? new Date(latest.measured_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    : null;
+  const fmt = (v: number | null | undefined) => (v == null ? '—' : Number(v).toFixed(1));
+
+  // BMI-for-age band from the WHO reference, replacing the old fixed "Healthy range" text.
+  const bmiStatus = useMemo(() => {
+    if (latestBmi == null || !child) return null;
+    const p = computePercentile(latestBmi, monthsBetween(new Date(child.dob), new Date(latest!.measured_at)), 'bmi');
+    if (p < 5) return { text: 'below the typical range', color: AppColors.warning };
+    if (p < 85) return { text: 'in the typical range', color: AppColors.successGreen };
+    if (p < 95) return { text: 'a little above the typical range', color: AppColors.warning };
+    return { text: 'above the typical range', color: AppColors.danger };
+  }, [latestBmi, child, latest]);
 
   const percentileText = useMemo(() => {
     if (!latest) return `Log a measurement to see ${childName}'s percentile`;
     const latestVal = valueForTab(latest, chartTab);
-    if (latestVal == null) return `Log ${chartTab} to see percentile`;
+    if (latestVal == null) return `Log ${chartTab === 'bmi' ? 'weight and height' : chartTab} to see the percentile`;
     const ageAtMeas = monthsBetween(new Date(child!.dob), new Date(latest.measured_at));
     const p = Math.round(computePercentile(latestVal, ageAtMeas, chartTab));
-    return `${childName} is at the ${ordinal(p)} percentile for ${chartTab}`;
+    const label = chartTab === 'bmi' ? 'BMI' : chartTab;
+    return `${childName} is at the ${ordinal(p)} percentile for ${label}`;
   }, [latest, chartTab, child, childName]);
 
   async function handleSaveMeasurement(data: { weight?: number; height?: number; note?: string }) {
@@ -89,84 +102,108 @@ export default function GrowthScreen() {
 
   const headerContent = (
     <>
-      <Text style={styles.headerTitle}>Growth</Text>
-      <Button variant="ghost" size="sm" onPress={() => setShowSheet(true)}>
-        <Ionicons name="add" size={18} color={AppColors.primary} />
-        <Button.Label style={{ color: AppColors.primary, fontFamily: 'PlusJakartaSans_700Bold' }}>Log</Button.Label>
-      </Button>
+      <Text style={typography.heading}>Growth</Text>
+      <View style={styles.headerRight}>
+        <Pressable
+          onPress={() => setShowSheet(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Log a measurement"
+          hitSlop={4}
+          style={({ pressed }) => [styles.logBtn, pressed && styles.logBtnPressed]}
+        >
+          <Ionicons name="add" size={18} color={AppColors.secondary} />
+          <Text style={styles.logLabel}>Log</Text>
+        </Pressable>
+        <HeaderChildAvatar />
+      </View>
     </>
   );
 
   return (
     <>
       <TabScreenLayout headerContent={headerContent}>
-        <View style={styles.metricsRow}>
-          <Card style={styles.metricCard}>
-            <Card.Body style={styles.metricCardBody}>
-              <Text style={styles.metricLabel}>Weight</Text>
-              <View style={styles.metricValueRow}>
-                <Text style={styles.metricValue}>{latest?.weight ?? child?.weight ?? '—'}</Text>
-                <Text style={styles.metricUnit}>kg</Text>
+        <View style={styles.metricsBlock}>
+          <View style={styles.metricsRow}>
+            <View style={styles.capsule}>
+              <Text style={styles.capsuleLabel}>Weight</Text>
+              <Text style={styles.capsuleValue} numberOfLines={1}>
+                {fmt(latest?.weight ?? child?.weight)}
+                <Text style={styles.capsuleUnit}> kg</Text>
+              </Text>
+            </View>
+            <View style={styles.capsule}>
+              <Text style={styles.capsuleLabel}>{isNewborn ? 'Length' : 'Height'}</Text>
+              <Text style={styles.capsuleValue} numberOfLines={1}>
+                {fmt(latest?.height ?? child?.height)}
+                <Text style={styles.capsuleUnit}> cm</Text>
+              </Text>
+            </View>
+            {showBMI && latestBmi != null ? (
+              <View style={styles.capsule}>
+                <Text style={styles.capsuleLabel}>BMI</Text>
+                <View style={styles.capsuleBmiRow}>
+                  {bmiStatus ? <View style={[styles.statusDot, { backgroundColor: bmiStatus.color }]} /> : null}
+                  <Text style={styles.capsuleValue} numberOfLines={1}>{latestBmi.toFixed(1)}</Text>
+                </View>
               </View>
-              <Text style={styles.metricDate}>As of {latestDateStr}</Text>
-            </Card.Body>
-          </Card>
-          <Card style={styles.metricCard}>
-            <Card.Body style={styles.metricCardBody}>
-              <Text style={styles.metricLabel}>{isNewborn ? 'Length' : 'Height'}</Text>
-              <View style={styles.metricValueRow}>
-                <Text style={styles.metricValue}>{latest?.height ?? child?.height ?? '—'}</Text>
-                <Text style={styles.metricUnit}>cm</Text>
-              </View>
-              <Text style={styles.metricDate}>As of {latestDateStr}</Text>
-              {isNewborn && <Text style={styles.newbornNote}>Measured lying down</Text>}
-            </Card.Body>
-          </Card>
-          {showBMI && latestBmi != null && (
-            <Card style={[styles.metricCard, { flex: 0.7 }]}>
-              <Card.Body style={styles.metricCardBody}>
-                <Text style={styles.metricLabel}>BMI</Text>
-                <Text style={[styles.metricValue, { fontSize: 26 }]}>{latestBmi.toFixed(1)}</Text>
-                <Text style={styles.metricDate}>Healthy range</Text>
-              </Card.Body>
-            </Card>
-          )}
+            ) : null}
+          </View>
+          {latestDateStr ? (
+            <Text style={styles.metricsNote}>
+              Last measured {latestDateStr}
+              {isNewborn ? ' · length measured lying down' : ''}
+              {bmiStatus ? ` · BMI is ${bmiStatus.text} for ${childName}'s age` : ''}
+            </Text>
+          ) : null}
         </View>
 
-        <Card style={styles.chartCard}>
-          <Card.Body style={styles.chartCardBody}>
-            <Tabs value={chartTab} onValueChange={(v) => setChartTab(v as ChartTab)} style={styles.tabs}>
-              <Tabs.List style={styles.tabsList}>
-                <Tabs.Indicator style={styles.tabIndicator} />
-                <Tabs.Trigger value="weight" style={styles.tabTrigger}>
-                  <Tabs.Label style={[styles.tabLabel, chartTab === 'weight' && styles.tabLabelActive]}>Weight</Tabs.Label>
-                </Tabs.Trigger>
-                <Tabs.Trigger value="height" style={styles.tabTrigger}>
-                  <Tabs.Label style={[styles.tabLabel, chartTab === 'height' && styles.tabLabelActive]}>Height</Tabs.Label>
-                </Tabs.Trigger>
-                {showBMI && (
-                  <Tabs.Trigger value="bmi" style={styles.tabTrigger}>
-                    <Tabs.Label style={[styles.tabLabel, chartTab === 'bmi' && styles.tabLabelActive]}>BMI</Tabs.Label>
-                  </Tabs.Trigger>
-                )}
-              </Tabs.List>
-            </Tabs>
-
-            <View style={styles.percentileBadge}>
-              <Ionicons name="information-circle-outline" size={13} color={AppColors.primary} />
-              <Text style={styles.percentileText}>{percentileText}</Text>
+        <View style={styles.chartCard}>
+            <View style={[styles.filterRow, styles.chartTabs]}>
+              {([
+                ['weight', 'Weight'],
+                ['height', 'Height'],
+                ...(showBMI ? [['bmi', 'BMI']] : []),
+              ] as [ChartTab, string][]).map(([value, label]) => (
+                <Pressable
+                  key={value}
+                  onPress={() => setChartTab(value)}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: chartTab === value }}
+                  style={[styles.filterChip, chartTab === value && styles.filterChipActive]}
+                >
+                  <Text style={[styles.filterText, chartTab === value && styles.filterTextActive]}>{label}</Text>
+                </Pressable>
+              ))}
             </View>
 
-            <View style={styles.chartContainer}>
-              <GrowthChart tab={chartTab} measurements={measurements} dob={dob} timeFilter={timeFilter} />
+            <Text style={typography.bodySM}>{percentileText}</Text>
+
+            <View style={styles.chartContainer} onLayout={(e) => setChartWidth(Math.floor(e.nativeEvent.layout.width))}>
+              {chartWidth > 0 ? (
+                <GrowthChart
+                  tab={chartTab}
+                  measurements={measurements}
+                  dob={dob}
+                  timeFilter={timeFilter}
+                  width={chartWidth}
+                  childName={childName}
+                />
+              ) : null}
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: AppColors.primary }]} />
+                  <View style={[styles.legendLine, { backgroundColor: AppColors.primary }]} />
                   <Text style={styles.legendText}>{childName}</Text>
                 </View>
                 <View style={styles.legendItem}>
-                  <View style={[styles.legendDot, { backgroundColor: `${AppColors.primary}30` }]} />
-                  <Text style={styles.legendText}>WHO bands</Text>
+                  <View style={styles.legendBand} />
+                  <Text style={styles.legendText}>WHO 3rd–97th</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={styles.legendDash}>
+                    <View style={styles.legendDashSeg} />
+                    <View style={styles.legendDashSeg} />
+                  </View>
+                  <Text style={styles.legendText}>WHO average</Text>
                 </View>
               </View>
             </View>
@@ -176,21 +213,29 @@ export default function GrowthScreen() {
                 <Pressable
                   key={f}
                   onPress={() => setTimeFilter(f)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: timeFilter === f }}
                   style={[styles.filterChip, timeFilter === f && styles.filterChipActive]}
                 >
                   <Text style={[styles.filterText, timeFilter === f && styles.filterTextActive]}>{f}</Text>
                 </Pressable>
               ))}
             </View>
-          </Card.Body>
-        </Card>
+        </View>
 
-        <View>
-          <Text style={[typography.headingMD, { marginBottom: 12 }]}>Measurement History</Text>
+        <View style={styles.section}>
+          <Text style={typography.headingSM}>Measurement history</Text>
           {measurements.length === 0 ? (
-            <Text style={styles.emptyText}>No measurements logged yet</Text>
+            <EmptyState
+              mood="happy"
+              prop="resize"
+              title={`Let's start ${childName}'s growth story`}
+              body="Log a height or weight and we'll draw the chart for you."
+              actionLabel="Log first measurement"
+              onAction={() => setShowSheet(true)}
+            />
           ) : (
-            <>
+            <View style={styles.historyCard}>
               <View style={styles.historyHeader}>
                 <Text style={styles.historyHeaderCell}>Date</Text>
                 <Text style={styles.historyHeaderCell}>Weight</Text>
@@ -199,21 +244,9 @@ export default function GrowthScreen() {
               {measurements.map((e, i) => (
                 <MeasurementRow key={e.id} entry={e} prev={measurements[i + 1]} />
               ))}
-            </>
+            </View>
           )}
         </View>
-
-        <Pressable style={styles.logBtn} onPress={() => setShowSheet(true)}>
-          <LinearGradient
-            colors={[AppColors.primary, AppColors.gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.logBtnGradient}
-          >
-            <Ionicons name="add-circle-outline" size={18} color={AppColors.onPrimary} />
-            <Text style={styles.logBtnText}>Log New Measurement</Text>
-          </LinearGradient>
-        </Pressable>
       </TabScreenLayout>
 
       <LogMeasurementSheet visible={showSheet} onClose={() => setShowSheet(false)} onSave={handleSaveMeasurement} />
@@ -222,95 +255,93 @@ export default function GrowthScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 22, color: AppColors.onSurface, letterSpacing: -0.3 },
-
-  emptyText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 14,
-    color: AppColors.onSurfaceVariant,
-    textAlign: 'center',
-    paddingVertical: 24,
-    lineHeight: 20,
-  },
-
-  metricsRow: { flexDirection: 'row', gap: 10 },
-  metricCard: {
-    flex: 1,
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: `${AppColors.outlineVariant}15`,
-  },
-  metricCardBody: { padding: 12, gap: 2 },
-  metricLabel: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: AppColors.onSurfaceVariant, letterSpacing: 0.2 },
-  metricValueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 3 },
-  metricValue: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 32, color: AppColors.onSurface, letterSpacing: -1.5 },
-  metricUnit: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: AppColors.onSurfaceVariant },
-  metricDate: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: AppColors.outlineVariant, marginTop: 2 },
-  newbornNote: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 10, color: AppColors.primary, marginTop: 4 },
-
-  chartCard: {
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: `${AppColors.outlineVariant}15`,
-  },
-  chartCardBody: { padding: 14, gap: 12 },
-  tabs: { alignSelf: 'flex-start' },
-  tabsList: { backgroundColor: AppColors.surfaceContainerLow, borderRadius: 10, padding: 3 },
-  tabIndicator: { backgroundColor: AppColors.surfaceContainerLowest, borderRadius: 8 },
-  tabTrigger: { paddingHorizontal: 16, paddingVertical: 7 },
-  tabLabel: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: AppColors.onSurfaceVariant },
-  tabLabelActive: { color: AppColors.primary, fontFamily: 'PlusJakartaSans_700Bold' },
-
-  percentileBadge: {
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  logBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: `${AppColors.primary}0c`,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    alignSelf: 'flex-start',
+    gap: 2,
+    minHeight: 44,
+    paddingHorizontal: 8,
   },
-  percentileText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: AppColors.primary, lineHeight: 16 },
+  logBtnPressed: { opacity: 0.6 },
+  logLabel: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.secondary },
 
-  chartContainer: { alignItems: 'center', gap: 8 },
-  chartLegend: { flexDirection: 'row', gap: 16 },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 11, color: AppColors.onSurfaceVariant },
+  metricsBlock: { gap: 8 },
+  metricsRow: { flexDirection: 'row', gap: 8 },
+  capsule: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.full,
+    gap: 2,
+  },
+  capsuleLabel: { ...typography.caption },
+  capsuleValue: { fontFamily: FontFamily.bold, fontSize: 17, lineHeight: 22, color: AppColors.forestDeep, letterSpacing: -0.3, fontVariant: ['tabular-nums'] },
+  capsuleUnit: { fontFamily: FontFamily.medium, fontSize: 12, color: AppColors.muted, letterSpacing: 0 },
+  capsuleBmiRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  metricsNote: { ...typography.meta, paddingHorizontal: 4 },
 
-  filterRow: { flexDirection: 'row', gap: 6 },
-  filterChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 8, backgroundColor: AppColors.surfaceContainerLow },
-  filterChipActive: { backgroundColor: `${AppColors.primary}12` },
-  filterText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: AppColors.onSurfaceVariant },
-  filterTextActive: { color: AppColors.primary },
+  chartCard: {
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    borderCurve: 'continuous',
+    padding: 16,
+    gap: 12,
+  },
+  chartTabs: { alignSelf: 'flex-start' },
 
+  chartContainer: { alignSelf: 'stretch', gap: 8 },
+  chartLegend: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 16, rowGap: 6 },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  legendLine: { width: 16, height: 3, borderRadius: 2 },
+  legendBand: { width: 16, height: 10, borderRadius: 3, backgroundColor: AppColors.infoSurface, borderWidth: 1, borderColor: AppColors.infoBorder },
+  legendDash: { flexDirection: 'row', gap: 3 },
+  legendDashSeg: { width: 6, height: 2, borderRadius: 1, backgroundColor: AppColors.info },
+  legendText: { ...typography.caption, color: AppColors.onSurfaceVariant },
+
+  // Segmented track shared by the W/H/BMI switch and the time filter, 32 high.
+  filterRow: {
+    flexDirection: 'row',
+    alignSelf: 'center',
+    height: 32,
+    padding: 3,
+    borderRadius: Radius.full,
+    backgroundColor: AppColors.surfaceContainer,
+  },
+  filterChip: {
+    minWidth: 52,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderRadius: Radius.full,
+  },
+  filterChipActive: { backgroundColor: AppColors.card },
+  filterText: { fontFamily: FontFamily.medium, fontSize: 13, color: AppColors.onSurfaceVariant },
+  filterTextActive: { color: AppColors.primary, fontFamily: FontFamily.semibold },
+
+  section: { gap: 8 },
+  historyCard: {
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    paddingHorizontal: 16,
+  },
   historyHeader: {
     flexDirection: 'row',
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: `${AppColors.outlineVariant}25`,
-    marginBottom: 4,
+    alignItems: 'center',
+    minHeight: 36,
   },
   historyHeaderCell: {
     flex: 1,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 11,
-    color: AppColors.outlineVariant,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    ...typography.caption,
   },
-
-  logBtn: { borderRadius: 999, overflow: 'hidden' },
-  logBtnGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-  },
-  logBtnText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: AppColors.onPrimary },
 });

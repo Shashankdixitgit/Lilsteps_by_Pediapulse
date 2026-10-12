@@ -1,18 +1,20 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { AiCheckinHeroCard } from '@/components/consult/AiCheckinHeroCard';
 import { AppointmentCard } from '@/components/consult/AppointmentCard';
 import { ConsultHistoryItem } from '@/components/consult/ConsultHistoryItem';
 import { DoctorCardCompact } from '@/components/consult/DoctorCardCompact';
 import { EmptyStateCard } from '@/components/consult/EmptyStateCard';
+import { HeaderChildAvatar } from '@/components/HeaderChildAvatar';
+import { HeaderIconButton } from '@/components/ScreenHeader';
 import { TabScreenLayout } from '@/components/TabScreenLayout';
-import { AppColors } from '@/constants/theme';
+import { AppColors, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useAppointments } from '@/hooks/useAppointments';
 import { useConsultations } from '@/hooks/useConsultations';
 import { useDoctors } from '@/hooks/useDoctors';
+import { typography } from '@/styles/global';
 
 export default function ConsultScreen() {
   const { child } = useChild();
@@ -32,13 +34,18 @@ export default function ConsultScreen() {
 
   const headerContent = (
     <>
-      <View style={styles.headerLeft}>
-        <Text style={styles.headerTitle}>LilSteps AI</Text>
-        <Text style={styles.headerSub}>Your pediatric assistant</Text>
+      <Text style={typography.heading} accessibilityRole="header">
+        LilSteps AI
+      </Text>
+      <View style={styles.headerRight}>
+        <HeaderIconButton
+          icon="add"
+          onPress={() => router.push('/consult/booking')}
+          accessibilityLabel="Book a consultation"
+          color={AppColors.primary}
+        />
+        <HeaderChildAvatar />
       </View>
-      <Pressable style={styles.addBtn} onPress={() => router.push('/consult/booking')}>
-        <Ionicons name="add" size={20} color={AppColors.primary} />
-      </Pressable>
     </>
   );
 
@@ -47,14 +54,7 @@ export default function ConsultScreen() {
       <AiCheckinHeroCard onStart={() => router.push('/checkin')} />
 
       <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Upcoming</Text>
-          {nextAppointment && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>1</Text>
-            </View>
-          )}
-        </View>
+        <Text style={typography.headingSM}>Upcoming</Text>
         {loadingAppts ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={AppColors.primary} />
@@ -72,55 +72,44 @@ export default function ConsultScreen() {
             onCancel={() => handleCancel(nextAppointment.id)}
           />
         ) : (
-          <EmptyStateCard
-            icon="calendar-outline"
-            title="No upcoming appointments"
-            body="Book one after completing a health check-in"
-          />
+          <EmptyStateCard icon="calendar-outline" title="No upcoming appointments" />
         )}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Your Doctors</Text>
+        <Text style={typography.headingSM}>Your doctors</Text>
         {loadingDocs ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={AppColors.primary} />
           </View>
         ) : doctors.length === 0 ? (
-          <EmptyStateCard
-            icon="people-outline"
-            title="No doctors yet"
-            body="Your pediatricians will appear here"
-          />
+          <EmptyStateCard icon="people-outline" title="No doctors yet" />
         ) : (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.doctorsRow}
-            style={styles.doctorsScroll}
-          >
-            {doctors.map((doc) => (
-              <DoctorCardCompact key={doc.id} doctor={doc} onBook={() => router.push('/consult/booking')} />
+          <View style={styles.listCard}>
+            {doctors.map((doc, i) => (
+              <DoctorCardCompact
+                key={doc.id}
+                doctor={doc}
+                inList
+                divider={i > 0}
+                onBook={() => router.push('/consult/booking')}
+              />
             ))}
-          </ScrollView>
+          </View>
         )}
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Consultation History</Text>
+        <Text style={typography.headingSM}>Past consultations</Text>
         {loadingConsult ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={AppColors.primary} />
           </View>
         ) : consultations.length === 0 ? (
-          <EmptyStateCard
-            icon="document-text-outline"
-            title="No past consultations"
-            body="Your visit history will appear here"
-          />
+          <EmptyStateCard icon="document-text-outline" title="No past consultations" />
         ) : (
-          <View style={styles.historyList}>
-            {consultations.map((c) => (
+          <View style={styles.listCard}>
+            {consultations.map((c, i) => (
               <ConsultHistoryItem
                 key={c.id}
                 id={c.id}
@@ -128,6 +117,7 @@ export default function ConsultScreen() {
                 doctorName={c.doctor_name}
                 chiefComplaint={c.chief_complaint}
                 outcome={c.outcome}
+                divider={i > 0}
                 onPress={(id) => router.push(`/consult/${id}`)}
               />
             ))}
@@ -139,45 +129,15 @@ export default function ConsultScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerLeft: { gap: 2 },
-  headerTitle: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 22,
-    color: AppColors.onSurface,
-    letterSpacing: -0.5,
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  section: { gap: 8 },
+  loadingRow: { paddingVertical: 16, alignItems: 'center' },
+  listCard: {
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    overflow: 'hidden',
   },
-  headerSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: AppColors.onSurfaceVariant },
-  addBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: `${AppColors.primary}12`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-
-  section: { gap: 12 },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  sectionTitle: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 17,
-    color: AppColors.onSurface,
-    letterSpacing: -0.3,
-  },
-  badge: {
-    backgroundColor: AppColors.primary,
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 11, color: AppColors.onPrimary },
-
-  loadingRow: { paddingVertical: 20, alignItems: 'center' },
-
-  doctorsScroll: { marginHorizontal: -20 },
-  doctorsRow: { gap: 10, paddingHorizontal: 20 },
-
-  historyList: { gap: 10 },
 });

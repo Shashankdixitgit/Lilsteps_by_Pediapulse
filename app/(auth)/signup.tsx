@@ -1,15 +1,15 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GradientBackground } from '@/components/gradient-background';
 import { GradientButton } from '@/components/gradient-button';
+import { Sprout } from '@/components/mascot/Sprout';
+import { HeaderIconButton } from '@/components/ScreenHeader';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
-import { useAuth } from '@/context/auth';
+import { DEMO_LOGIN, useAuth } from '@/context/auth';
 import { supabase } from '@/lib/supabase';
 import { dbg } from '@/lib/debug';
 
@@ -34,7 +34,7 @@ export default function SignupScreen() {
       setError('Please enter your name');
       return;
     }
-    if (!/^\+\d{10,15}$/.test(p)) {
+    if (!DEMO_LOGIN && !/^\+\d{10,15}$/.test(p)) {
       setError('Enter your phone number in international format (e.g. +919876543210)');
       return;
     }
@@ -55,7 +55,7 @@ export default function SignupScreen() {
   }
 
   async function handleVerifyOtp() {
-    if (otp.length !== 6) {
+    if (!DEMO_LOGIN && otp.length !== 6) {
       setError('Please enter the 6-digit code');
       return;
     }
@@ -111,14 +111,12 @@ export default function SignupScreen() {
 
   return (
     <View style={layout.screenContainer}>
-      <GradientBackground />
-
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'android' ? 'height' : undefined}
       >
         <ScrollView
-          contentContainerStyle={[styles.content, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 32 }]}
+          contentContainerStyle={[styles.content, { paddingTop: insets.top + 8, paddingBottom: insets.bottom + 32 }]}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
           automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
@@ -126,19 +124,22 @@ export default function SignupScreen() {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Pressable onPress={() => step === 'otp' ? setStep('details') : router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={20} color={AppColors.onSurface} />
-            </Pressable>
+            <HeaderIconButton
+              icon="arrow-back"
+              onPress={() => step === 'otp' ? setStep('details') : router.back()}
+              accessibilityLabel="Go back"
+            />
           </View>
 
           {/* Title */}
           <View style={styles.titleSection}>
-            <Text style={typography.headingXL}>
-              {step === 'details' ? 'Create\nAccount' : 'Enter\nCode'}
+            {step === 'details' ? <Sprout mood="happy" size={40} style={styles.sprout} /> : null}
+            <Text style={typography.heading}>
+              {step === 'details' ? 'Create your account' : 'Check your messages'}
             </Text>
-            <Text style={[typography.bodySM, styles.subtitle]}>
+            <Text style={[typography.body, styles.subtitle]}>
               {step === 'details'
-                ? 'Join thousands of parents protecting their children\'s health'
+                ? "A calm home for your child's health."
                 : `We sent a 6-digit code to ${phone}`}
             </Text>
           </View>
@@ -148,8 +149,9 @@ export default function SignupScreen() {
             {step === 'details' ? (
               <View style={styles.fields}>
                 <TextInputField
-                  label="Your Name"
+                  label="Your name"
                   hint="(Parent or Guardian)"
+                  hintInline
                   placeholder="e.g. Sarah Johnson"
                   autoCapitalize="words"
                   autoComplete="name"
@@ -158,7 +160,7 @@ export default function SignupScreen() {
                 />
                 <TextInputField
                   label="Phone"
-                  hint="(with country code)"
+                  hint="Include the country code"
                   placeholder="+919876543210"
                   keyboardType="phone-pad"
                   autoCapitalize="none"
@@ -170,10 +172,13 @@ export default function SignupScreen() {
             ) : (
               <View style={styles.fields}>
                 <TextInputField
-                  label="Verification Code"
+                  label="Verification code"
                   placeholder="000000"
                   keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  autoComplete="sms-otp"
                   maxLength={6}
+                  style={styles.otpInput}
                   value={otp}
                   onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, ''))}
                   autoFocus
@@ -181,43 +186,36 @@ export default function SignupScreen() {
               </View>
             )}
 
-            {error && (
-              <Text style={styles.errorText}>{error}</Text>
-            )}
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <GradientButton
-              label={loading ? '' : step === 'details' ? 'Create Account' : 'Verify'}
+              label={step === 'details' ? 'Create account' : 'Verify'}
+              loading={loading}
               onPress={step === 'details' ? handleSendOtp : handleVerifyOtp}
               style={styles.submitButton}
             />
-            {loading && (
-              <ActivityIndicator
-                color={AppColors.onPrimary}
-                style={styles.loadingOverlay}
-              />
-            )}
 
-            {step === 'details' && (
+            {step === 'details' ? (
               <Text style={styles.termsText}>
                 By signing up, you agree to our{' '}
                 <Text style={styles.termsLink}>Terms of Service</Text>
                 {' '}and{' '}
                 <Text style={styles.termsLink}>Privacy Policy</Text>
               </Text>
-            )}
+            ) : null}
 
-            {step === 'otp' && (
-              <Pressable onPress={handleSendOtp} style={styles.resendButton}>
+            {step === 'otp' ? (
+              <Pressable onPress={handleSendOtp} style={styles.resendButton} accessibilityRole="button" hitSlop={10}>
                 <Text style={styles.resendText}>Didn&apos;t receive it? Resend code</Text>
               </Pressable>
-            )}
+            ) : null}
           </View>
 
           {/* Footer */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account?</Text>
             <Pressable onPress={() => router.back()}>
-              <Text style={styles.linkText}>Sign In</Text>
+              <Text style={styles.linkText}>Sign in</Text>
             </Pressable>
           </View>
         </ScrollView>
@@ -227,47 +225,41 @@ export default function SignupScreen() {
 }
 
 const styles = StyleSheet.create({
+  sprout: {
+    marginBottom: 12,
+  },
+  otpInput: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 22,
+    letterSpacing: 6,
+    fontVariant: ['tabular-nums'],
+  },
   flex: {
     flex: 1,
   },
   content: {
     flexGrow: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   header: {
-    marginBottom: 8,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: `${AppColors.surfaceContainerLowest}B3`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: `${AppColors.outlineVariant}26`,
+    marginLeft: -8,
   },
   titleSection: {
-    marginTop: 24,
-    marginBottom: 32,
+    marginTop: 16,
+    marginBottom: 24,
   },
   subtitle: {
-    marginTop: 8,
+    marginTop: 4,
   },
   form: {},
   fields: {
-    gap: 14,
+    gap: 16,
   },
   submitButton: {
     marginTop: 24,
   },
-  loadingOverlay: {
-    position: 'absolute',
-    bottom: 18,
-    alignSelf: 'center',
-  },
   errorText: {
-    fontFamily: 'PlusJakartaSans_500Medium',
+    fontFamily: 'Inter_500Medium',
     fontSize: 13,
     color: AppColors.tertiary,
     marginTop: 10,
@@ -278,37 +270,37 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   resendText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 13,
-    color: AppColors.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    color: AppColors.secondary,
   },
   termsText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
+    fontFamily: 'Inter_400Regular',
     fontSize: 12,
-    color: AppColors.onSurfaceVariant,
+    lineHeight: 16,
+    color: AppColors.muted,
     textAlign: 'center',
-    marginTop: 14,
-    lineHeight: 18,
+    marginTop: 12,
   },
   termsLink: {
-    color: AppColors.primary,
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    color: AppColors.secondary,
+    fontFamily: 'Inter_600SemiBold',
   },
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingTop: 32,
+    paddingTop: 24,
     gap: 4,
   },
   footerText: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
     color: AppColors.onSurfaceVariant,
   },
   linkText: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 14,
-    color: AppColors.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    color: AppColors.secondary,
   },
 });

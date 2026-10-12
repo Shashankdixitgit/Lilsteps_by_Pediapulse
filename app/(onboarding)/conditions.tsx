@@ -3,9 +3,10 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ChipGroup } from '@/components/chip-group';
+import { TextButton } from '@/components/gradient-button';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { TextInputField } from '@/components/text-input-field';
-import { AppColors } from '@/constants/theme';
+import { AppColors, Radius } from '@/constants/theme';
 import { useOnboarding } from '@/context/onboarding';
 
 const CONDITIONS = [
@@ -48,7 +49,7 @@ export default function ConditionsScreen() {
   return (
     <OnboardingShell
       progress={0.48}
-      title="Conditions & Medications"
+      title="Conditions and medicines"
       subtitle="Helps doctors prepare before a consultation"
       ctaLabel="Continue"
       onCta={handleContinue}
@@ -63,7 +64,7 @@ export default function ConditionsScreen() {
           noneValue="None"
         />
         {conditions.includes('Other') && (
-          <View style={{ marginTop: 10 }}>
+          <View style={styles.otherField}>
             <TextInputField
               placeholder="Specify condition"
               value={conditionOther}
@@ -117,18 +118,14 @@ export default function ConditionsScreen() {
               </View>
 
               {med.name && med.dose && med.frequency && (
-                <View style={styles.previewBadge}>
-                  <Text style={styles.previewText}>
-                    {med.name} {med.dose} · {med.frequency}
-                  </Text>
-                </View>
+                <Text style={styles.previewText}>
+                  {med.name} {med.dose} · {med.frequency}
+                </Text>
               )}
             </View>
           ))}
 
-          <Pressable onPress={addMed} style={styles.addButton}>
-            <Text style={styles.addButtonText}>+ Add another medication</Text>
-          </Pressable>
+          <TextButton label="Add another medicine" onPress={addMed} style={styles.addButton} />
         </View>
       )}
     </OnboardingShell>
@@ -137,20 +134,27 @@ export default function ConditionsScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
   medsSection: {
     gap: 12,
   },
+  otherField: {
+    marginTop: 8,
+  },
   medCard: {
-    backgroundColor: AppColors.surfaceContainerLow,
-    borderRadius: 16,
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
     padding: 16,
-    gap: 12,
+    gap: 16,
   },
   medCardHeader: {
     flexDirection: 'row',
@@ -158,39 +162,27 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   medCardTitle: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 13,
-    color: AppColors.onSurfaceVariant,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    color: AppColors.onSurface,
   },
   removeText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
-    color: AppColors.tertiary,
+    color: AppColors.danger,
   },
   freqLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
     color: AppColors.onSurface,
     marginBottom: 8,
   },
-  previewBadge: {
-    backgroundColor: AppColors.primaryContainer,
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
   previewText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'Inter_500Medium',
     fontSize: 13,
-    color: AppColors.primary,
+    color: AppColors.secondary,
   },
   addButton: {
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  addButtonText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
-    color: AppColors.primary,
+    alignSelf: 'center',
   },
 });

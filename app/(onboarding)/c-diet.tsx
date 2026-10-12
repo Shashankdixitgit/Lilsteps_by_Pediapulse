@@ -16,9 +16,10 @@ export default function DietOlderScreen() {
 
   return (
     <OnboardingShell
+      sprout="happy"
       progress={0.65}
       title="Diet"
-      subtitle="Dietary patterns at this age are important for growth"
+      subtitle="Diet at this age matters for growth"
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/c-puberty')}
     >
@@ -42,10 +43,11 @@ export default function DietOlderScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

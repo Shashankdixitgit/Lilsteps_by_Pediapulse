@@ -1,6 +1,9 @@
+import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { AppColors } from '@/constants/theme';
+import { haptic } from '@/components/ui/useMotion';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 
 interface ChipGroupProps {
   options: string[];
@@ -20,6 +23,7 @@ export function ChipGroup({
 }: ChipGroupProps) {
   const handlePress = (option: string) => {
     if (!multiSelect) {
+      haptic('selection');
       onChange([option]);
       return;
     }
@@ -48,8 +52,16 @@ export function ChipGroup({
           <Pressable
             key={option}
             onPress={() => handlePress(option)}
-            style={[styles.chip, isSelected && styles.chipSelected]}
+            hitSlop={5}
+            accessibilityRole={multiSelect ? 'checkbox' : 'radio'}
+            accessibilityState={{ checked: isSelected, selected: isSelected }}
+            style={({ pressed }) => [styles.chip, isSelected && styles.chipSelected, pressed && !isSelected && styles.chipPressed]}
           >
+            {isSelected ? (
+              <Animated.View entering={FadeIn.duration(150)}>
+                <Ionicons name="checkmark" size={14} color={AppColors.primary} />
+              </Animated.View>
+            ) : null}
             <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
               {option}
             </Text>
@@ -67,20 +79,33 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   chip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 9999,
-    backgroundColor: AppColors.surfaceContainerLow,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    minHeight: 34,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: Radius.full,
+    backgroundColor: AppColors.card,
+    borderWidth: 1,
+    borderColor: AppColors.border,
   },
   chipSelected: {
-    backgroundColor: AppColors.primary,
+    backgroundColor: AppColors.mintSurface,
+    borderColor: AppColors.mintBorder,
+    paddingLeft: 10,
+  },
+  chipPressed: {
+    backgroundColor: AppColors.surfaceContainer,
   },
   chipText: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 14,
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurfaceVariant,
   },
   chipTextSelected: {
-    color: AppColors.onPrimary,
+    fontFamily: FontFamily.semibold,
+    color: AppColors.primary,
   },
 });

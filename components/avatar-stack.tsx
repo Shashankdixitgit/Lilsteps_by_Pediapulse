@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { AppColors } from '@/constants/theme';
@@ -15,19 +14,16 @@ interface AvatarStackProps {
 export function AvatarStack({ badgeLabel }: AvatarStackProps) {
   return (
     <View style={styles.stack}>
-      <View style={[styles.avatar, { zIndex: 3 }]}>
+      <View style={[styles.avatar, { zIndex: 1 }]}>
         <View style={[styles.fill, { backgroundColor: AppColors.surfaceContainerHighest }]} />
       </View>
       <View style={[styles.avatar, styles.overlap, { zIndex: 2 }]}>
         <View style={[styles.fill, { backgroundColor: AppColors.surfaceContainerHigh }]} />
       </View>
-      <View style={[styles.avatar, styles.overlap, { zIndex: 1 }]}>
-        <LinearGradient
-          colors={[AppColors.primaryContainer, AppColors.primary]}
-          style={styles.fill}
-        >
+      <View style={[styles.avatar, styles.overlap, { zIndex: 3 }]}>
+        <View style={[styles.fill, { backgroundColor: AppColors.primary }]}>
           <Text style={styles.badgeText}>{badgeLabel}</Text>
-        </LinearGradient>
+        </View>
       </View>
     </View>
   );
@@ -56,8 +52,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   badgeText: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 10,
-    color: AppColors.onPrimaryContainer,
+    fontFamily: 'Inter_700Bold',
+    fontSize: 12,
+    color: AppColors.onPrimary,
   },
 });

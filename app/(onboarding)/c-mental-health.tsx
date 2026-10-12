@@ -18,16 +18,14 @@ export default function MentalHealthScreen() {
   return (
     <OnboardingShell
       progress={0.83}
-      title="Mental Wellbeing"
-      subtitle="This section is optional but helps the doctor give better care"
+      title="Mental wellbeing"
+      subtitle="Optional, and helps the doctor give better care"
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/c-vaccination')}
     >
-      <View style={styles.notice}>
-        <Text style={[typography.bodySM, { color: AppColors.onSurfaceVariant }]}>
-          You can skip any question here. Everything shared is confidential and only visible to the consulting doctor.
-        </Text>
-      </View>
+      <Text style={typography.meta}>
+        You can skip any question. Only the consulting doctor sees your answers.
+      </Text>
 
       <View>
         <Text style={styles.fieldLabel}>
@@ -54,16 +52,12 @@ export default function MentalHealthScreen() {
 }
 
 const styles = StyleSheet.create({
-  notice: {
-    backgroundColor: `${AppColors.surfaceContainerLow}`,
-    borderRadius: 12,
-    padding: 14,
-  },
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

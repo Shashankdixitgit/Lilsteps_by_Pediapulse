@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import type { TimeSlotRow } from '@/hooks/useDoctors';
 
 export interface SlotPickerProps {
@@ -29,6 +29,8 @@ export function SlotPicker({ slots, selectedTime, onSelect, emptyText = 'No avai
               active && styles.selected,
             ]}
             onPress={() => onSelect(slot.time)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: active, disabled: !slot.is_available }}
           >
             <Text
               style={[
@@ -47,25 +49,21 @@ export function SlotPicker({ slots, selectedTime, onSelect, emptyText = 'No avai
 }
 
 const styles = StyleSheet.create({
-  empty: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 13,
-    color: AppColors.onSurfaceVariant,
-    textAlign: 'center',
-    paddingVertical: 20,
-  },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  empty: { fontFamily: FontFamily.regular, fontSize: 13, lineHeight: 18, color: AppColors.muted },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   chip: {
+    height: 40,
+    justifyContent: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderWidth: 1.5,
-    borderColor: `${AppColors.outlineVariant}20`,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    backgroundColor: AppColors.card,
+    borderWidth: 1,
+    borderColor: AppColors.border,
   },
-  disabled: { backgroundColor: AppColors.surfaceContainerHigh, borderColor: 'transparent' },
+  disabled: { backgroundColor: AppColors.surfaceContainer, borderColor: AppColors.surfaceContainer },
   selected: { backgroundColor: AppColors.primary, borderColor: AppColors.primary },
-  text: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: AppColors.onSurface },
-  textDisabled: { color: `${AppColors.onSurfaceVariant}50` },
+  text: { fontFamily: FontFamily.semibold, fontSize: 13, color: AppColors.onSurface },
+  textDisabled: { color: AppColors.muted, textDecorationLine: 'line-through' },
   textSelected: { color: AppColors.onPrimary },
 });

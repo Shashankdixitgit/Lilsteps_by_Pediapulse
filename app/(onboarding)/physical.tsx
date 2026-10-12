@@ -30,7 +30,7 @@ export default function PhysicalScreen() {
   return (
     <OnboardingShell
       progress={0.28}
-      title="Physical Measurements"
+      title="Physical measurements"
       subtitle="Helps ensure medication dosing is always accurate"
       ctaLabel="Continue"
       onCta={handleContinue}
@@ -38,6 +38,7 @@ export default function PhysicalScreen() {
       <TextInputField
         label="Weight"
         hint="(kg)"
+        hintInline
         placeholder="e.g. 12.5"
         value={weight}
         onChangeText={setWeight}
@@ -47,6 +48,7 @@ export default function PhysicalScreen() {
       <TextInputField
         label="Height"
         hint="(cm)"
+        hintInline
         placeholder="e.g. 85"
         value={height}
         onChangeText={setHeight}
@@ -54,7 +56,7 @@ export default function PhysicalScreen() {
       />
 
       <View>
-        <Text style={styles.fieldLabel}>Blood Group</Text>
+        <Text style={styles.fieldLabel}>Blood group</Text>
         <ChipGroup options={BLOOD_GROUPS} selected={bloodGroup} onChange={setBloodGroup} />
       </View>
     </OnboardingShell>
@@ -63,10 +65,11 @@ export default function PhysicalScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

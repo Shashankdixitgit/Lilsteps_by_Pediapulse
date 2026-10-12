@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -12,24 +11,35 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppColors } from '@/constants/theme';
+import { ChipGroup } from '@/components/chip-group';
+import { GradientButton } from '@/components/gradient-button';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { TextInputField } from '@/components/text-input-field';
+import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useDocuments, type DocumentRow } from '@/hooks/useDocuments';
+import { typography } from '@/styles/global';
 
 type DocCategory = DocumentRow['category'];
 
-const CATEGORIES: { id: DocCategory; label: string; icon: string }[] = [
-  { id: 'prescription', label: 'Prescription', icon: 'document-text-outline' },
-  { id: 'report', label: 'Report', icon: 'analytics-outline' },
-  { id: 'lab_test', label: 'Lab Test', icon: 'flask-outline' },
-  { id: 'visit_history', label: 'Visit History', icon: 'time-outline' },
-  { id: 'other', label: 'Other', icon: 'create-outline' },
+const CATEGORIES: { id: DocCategory; label: string }[] = [
+  { id: 'prescription', label: 'Prescription' },
+  { id: 'report', label: 'Report' },
+  { id: 'lab_test', label: 'Lab test' },
+  { id: 'visit_history', label: 'Visit history' },
+  { id: 'other', label: 'Other' },
 ];
+const CATEGORY_LABELS = CATEGORIES.map((c) => c.label);
+
+const SOURCES = [
+  { key: 'file', label: 'File', icon: 'document-outline' },
+  { key: 'gallery', label: 'Gallery', icon: 'image-outline' },
+  { key: 'camera', label: 'Camera', icon: 'camera-outline' },
+] as const;
 
 export default function UploadDocumentScreen() {
   const insets = useSafeAreaInsets();
@@ -139,161 +149,125 @@ export default function UploadDocumentScreen() {
       <View style={[styles.screen, { paddingTop: insets.top }]}>
         <View style={styles.successContainer}>
           <View style={styles.successIcon}>
-            <Ionicons name="checkmark" size={36} color={AppColors.successGreen} />
+            <Ionicons name="checkmark" size={32} color={AppColors.success} />
           </View>
-          <Text style={styles.successTitle}>Document Saved</Text>
-          <Text style={styles.successSub}>Added to health records.</Text>
+          <Text style={typography.heading}>Document saved</Text>
+          <Text style={typography.meta}>Added to health records.</Text>
         </View>
       </View>
     );
   }
+
+  const pickers = { file: pickDocument, gallery: pickImage, camera: takePhoto } as const;
+  const activeLabel = CATEGORIES.find((c) => c.id === category)?.label ?? CATEGORY_LABELS[0];
 
   return (
     <KeyboardAvoidingView
       style={[styles.screen, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Header */}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={22} color={AppColors.onSurface} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Upload Document</Text>
-        <View style={{ width: 22 }} />
-      </View>
+      <ScreenHeader title="Upload document" />
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: 32 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         {/* File picker */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Select File</Text>
+          <Text style={typography.sectionLabel}>File</Text>
           {fileUri ? (
             <View style={styles.fileCard}>
-              <Ionicons
-                name={fileType.includes('pdf') ? 'document-text' : 'image'}
-                size={28}
-                color={AppColors.primary}
-              />
+              <View style={styles.well}>
+                <Ionicons
+                  name={fileType.includes('pdf') ? 'document-text-outline' : 'image-outline'}
+                  size={Size.iconRow}
+                  color={AppColors.secondary}
+                />
+              </View>
               <View style={styles.fileInfo}>
-                <Text style={styles.fileName} numberOfLines={1}>{fileName}</Text>
-                <Text style={styles.fileSize}>
+                <Text style={typography.title} numberOfLines={1}>{fileName}</Text>
+                <Text style={typography.meta}>
                   {fileSize > 0 ? `${(fileSize / 1024).toFixed(0)} KB` : fileType}
                 </Text>
               </View>
-              <Pressable onPress={() => { setFileUri(''); setFileName(''); }}>
-                <Ionicons name="close-circle" size={22} color={AppColors.onSurfaceVariant} />
+              <Pressable
+                onPress={() => { setFileUri(''); setFileName(''); }}
+                accessibilityRole="button"
+                accessibilityLabel="Remove file"
+                style={styles.removeBtn}
+              >
+                <Ionicons name="close" size={Size.iconRow} color={AppColors.onSurfaceVariant} />
               </Pressable>
             </View>
           ) : (
             <View style={styles.pickerRow}>
-              <Pressable style={styles.pickerBtn} onPress={pickDocument}>
-                <Ionicons name="document-outline" size={24} color={AppColors.primary} />
-                <Text style={styles.pickerLabel}>File</Text>
-              </Pressable>
-              <Pressable style={styles.pickerBtn} onPress={pickImage}>
-                <Ionicons name="image-outline" size={24} color={AppColors.secondary} />
-                <Text style={styles.pickerLabel}>Gallery</Text>
-              </Pressable>
-              <Pressable style={styles.pickerBtn} onPress={takePhoto}>
-                <Ionicons name="camera-outline" size={24} color={AppColors.tertiary} />
-                <Text style={styles.pickerLabel}>Camera</Text>
-              </Pressable>
+              {SOURCES.map((src) => (
+                <Pressable
+                  key={src.key}
+                  style={({ pressed }) => [styles.pickerBtn, pressed && styles.pickerBtnPressed]}
+                  onPress={pickers[src.key]}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name={src.icon} size={20} color={AppColors.secondary} />
+                  <Text style={styles.pickerLabel}>{src.label}</Text>
+                </Pressable>
+              ))}
             </View>
           )}
         </View>
 
         {/* Category */}
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Category</Text>
-          <View style={styles.catGrid}>
-            {CATEGORIES.map((cat) => {
-              const active = category === cat.id;
-              return (
-                <Pressable
-                  key={cat.id}
-                  style={[styles.catChip, active && styles.catChipActive]}
-                  onPress={() => setCategory(cat.id)}
-                >
-                  <Ionicons
-                    name={cat.icon as any}
-                    size={16}
-                    color={active ? AppColors.primary : AppColors.onSurfaceVariant}
-                  />
-                  <Text style={[styles.catLabel, active && styles.catLabelActive]}>{cat.label}</Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <Text style={typography.sectionLabel}>Category</Text>
+          <ChipGroup
+            options={CATEGORY_LABELS}
+            selected={[activeLabel]}
+            onChange={(sel) => {
+              const next = CATEGORIES.find((c) => c.label === sel[0]);
+              if (next) setCategory(next.id);
+            }}
+          />
         </View>
 
-        {/* Title */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Title</Text>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.inputSingle}
-              placeholder="e.g. Blood Test Results"
-              placeholderTextColor={`${AppColors.onSurfaceVariant}60`}
-              value={title}
-              onChangeText={setTitle}
-            />
-          </View>
-        </View>
+        <TextInputField
+          label="Title"
+          placeholder="e.g. Blood test results"
+          value={title}
+          onChangeText={setTitle}
+        />
 
-        {/* Doctor name */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Doctor (Optional)</Text>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.inputSingle}
-              placeholder="e.g. Dr. Sarah Miller"
-              placeholderTextColor={`${AppColors.onSurfaceVariant}60`}
-              value={doctorName}
-              onChangeText={setDoctorName}
-            />
-          </View>
-        </View>
+        <TextInputField
+          label="Doctor"
+          hint="(optional)"
+          hintInline
+          placeholder="e.g. Dr. Sarah Miller"
+          value={doctorName}
+          onChangeText={setDoctorName}
+        />
 
-        {/* Notes */}
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Notes (Optional)</Text>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              style={styles.inputMulti}
-              placeholder="Add any notes about this document..."
-              placeholderTextColor={`${AppColors.onSurfaceVariant}60`}
-              multiline
-              numberOfLines={3}
-              value={notes}
-              onChangeText={setNotes}
-              textAlignVertical="top"
-            />
-          </View>
-        </View>
+        <TextInputField
+          label="Notes"
+          hint="(optional)"
+          hintInline
+          placeholder="Add any notes about this document..."
+          multiline
+          numberOfLines={3}
+          value={notes}
+          onChangeText={setNotes}
+          textAlignVertical="top"
+          style={styles.inputMulti}
+        />
       </ScrollView>
 
       {/* Bottom CTA */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-        <Pressable
-          style={({ pressed }) => [styles.saveBtn, !canSave && styles.saveBtnDisabled, { opacity: pressed ? 0.88 : 1 }]}
-          disabled={!canSave || saving}
+        <GradientButton
+          label={saving ? 'Saving...' : 'Upload document'}
           onPress={handleSave}
-        >
-          <LinearGradient
-            colors={canSave ? [AppColors.primary, AppColors.gradientEnd] : [AppColors.surfaceContainerHigh, AppColors.surfaceContainerHigh]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.saveGrad}
-          >
-            <Ionicons name="cloud-upload-outline" size={18} color={canSave ? AppColors.onPrimary : AppColors.onSurfaceVariant} />
-            <Text style={[styles.saveText, !canSave && styles.saveTextDisabled]}>
-              {saving ? 'Saving...' : 'Upload Document'}
-            </Text>
-          </LinearGradient>
-        </Pressable>
+          disabled={!canSave}
+          loading={saving}
+        />
       </View>
     </KeyboardAvoidingView>
   );
@@ -301,78 +275,72 @@ export default function UploadDocumentScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: AppColors.surface },
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 24, paddingVertical: 14,
-  },
-  headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: AppColors.onSurface },
-  scroll: { paddingHorizontal: 20, paddingTop: 4, gap: 24 },
+  scroll: { paddingHorizontal: 20, paddingTop: 8, gap: 24 },
 
-  section: { gap: 10 },
-  sectionLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: AppColors.onSurfaceVariant,
-    textTransform: 'uppercase', letterSpacing: 0.5,
-  },
+  section: { gap: 8 },
 
-  pickerRow: { flexDirection: 'row', gap: 12 },
+  pickerRow: { flexDirection: 'row', gap: 8 },
   pickerBtn: {
-    flex: 1, alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 16,
-    borderWidth: 1.5, borderStyle: 'dashed', borderColor: `${AppColors.outlineVariant}50`,
-    paddingVertical: 24,
+    flex: 1,
+    height: 72,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
   },
-  pickerLabel: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: AppColors.onSurfaceVariant },
+  pickerBtnPressed: { backgroundColor: AppColors.surfaceContainerLow },
+  pickerLabel: { fontFamily: FontFamily.medium, fontSize: 13, color: AppColors.onSurface },
 
   fileCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 14, padding: 16,
-    borderWidth: 1.5, borderColor: `${AppColors.primary}30`,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: AppColors.border,
+  },
+  well: {
+    width: Size.iconWell,
+    height: Size.iconWell,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    backgroundColor: AppColors.mintSurface,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   fileInfo: { flex: 1, gap: 2 },
-  fileName: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 14, color: AppColors.onSurface },
-  fileSize: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: AppColors.onSurfaceVariant },
+  removeBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
 
-  catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  catChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 1.5, borderColor: `${AppColors.outlineVariant}35`,
-  },
-  catChipActive: { borderColor: AppColors.primary, backgroundColor: `${AppColors.primary}08` },
-  catLabel: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: AppColors.onSurface },
-  catLabelActive: { color: AppColors.primary, fontFamily: 'PlusJakartaSans_700Bold' },
-
-  inputWrapper: {
-    backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 16,
-    borderWidth: 1.5, borderColor: `${AppColors.outlineVariant}30`,
-    padding: 14,
-    shadowColor: AppColors.onSurface, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
-  },
-  inputSingle: {
-    fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: AppColors.onSurface, lineHeight: 22,
-  },
   inputMulti: {
-    fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: AppColors.onSurface, lineHeight: 22,
-    minHeight: 70,
+    minHeight: 96,
+    paddingTop: 12,
+    paddingBottom: 12,
+    // Web: drop the browser focus outline so the token focus ring shows.
+    ...(Platform.OS === 'web' ? { outlineStyle: 'solid' as const, outlineWidth: 0 } : null),
   },
 
   bottomBar: {
-    paddingHorizontal: 20, paddingTop: 12,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    borderTopWidth: 1, borderTopColor: `${AppColors.outlineVariant}20`,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: AppColors.surface,
   },
-  saveBtn: { borderRadius: 999, overflow: 'hidden' },
-  saveBtnDisabled: { opacity: 0.5 },
-  saveGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16 },
-  saveText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: AppColors.onPrimary },
-  saveTextDisabled: { color: AppColors.onSurfaceVariant },
 
-  successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
   successIcon: {
-    width: 72, height: 72, borderRadius: 36, backgroundColor: AppColors.successGreenSurface,
-    alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: AppColors.successGreenBright,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: AppColors.successSurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
-  successTitle: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 22, color: AppColors.onSurface },
-  successSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: AppColors.onSurfaceVariant },
 });

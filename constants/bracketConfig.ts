@@ -1,3 +1,5 @@
+import { AppColors } from './theme';
+
 export type AgeBracket =
   | 'NEWBORN'
   | 'EARLY_INFANT'
@@ -35,8 +37,8 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
       name: 'Tummy time',
       duration: '2–3 min sessions',
       description: 'Place baby on tummy while supervised to strengthen neck muscles.',
-      tint: '#e8f5e9',
-      accentColor: '#2e7d32',
+      tint: AppColors.mintSurface,
+      accentColor: AppColors.secondary,
     },
   },
   EARLY_INFANT: {
@@ -48,8 +50,8 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
       name: 'Sensory play',
       duration: '5 min',
       description: 'Introduce textures — soft cloth, crinkle toy, your face.',
-      tint: '#e3f2fd',
-      accentColor: '#1565c0',
+      tint: AppColors.skySurface,
+      accentColor: AppColors.info,
     },
   },
   INFANT: {
@@ -61,8 +63,8 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
       name: 'Peek-a-boo',
       duration: '5–10 min',
       description: 'Builds object permanence — a key developmental milestone.',
-      tint: '#fce4ec',
-      accentColor: '#c62828',
+      tint: AppColors.peachSurface,
+      accentColor: AppColors.peachText,
     },
   },
   TODDLER_EARLY: {
@@ -74,8 +76,8 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
       name: 'Stacking blocks',
       duration: '10 min',
       description: 'Stack 4–6 blocks high. Encourages hand-eye coordination.',
-      tint: '#fff3e0',
-      accentColor: '#e65100',
+      tint: AppColors.sunshineSurface,
+      accentColor: AppColors.sunshineText,
     },
   },
   TODDLER: {
@@ -87,8 +89,8 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
       name: 'Shape sorting',
       duration: '10–15 min',
       description: 'Match shapes to holes. Name each shape as they go.',
-      tint: '#f3e5f5',
-      accentColor: '#6a1b9a',
+      tint: AppColors.greenWash,
+      accentColor: AppColors.primary,
     },
   },
   PRESCHOOL: {
@@ -100,8 +102,8 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
       name: 'Counting & sorting',
       duration: '15 min',
       description: 'Sort objects by colour and count each group. Up to 10.',
-      tint: '#e8f5e9',
-      accentColor: '#2e7d32',
+      tint: AppColors.mintSurface,
+      accentColor: AppColors.secondary,
     },
   },
   SCHOOL_EARLY: {
@@ -113,8 +115,8 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
       name: "2×2 Rubik's cube",
       duration: '15–20 min',
       description: 'Learn the first layer. Focus on pattern recognition.',
-      tint: '#e3f2fd',
-      accentColor: '#1565c0',
+      tint: AppColors.skySurface,
+      accentColor: AppColors.info,
     },
   },
   SCHOOL_MID: {
@@ -126,8 +128,8 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
       name: 'Chess openings',
       duration: '20 min',
       description: 'Practice 3 openings: Italian, London, and Ruy López.',
-      tint: '#fff3e0',
-      accentColor: '#e65100',
+      tint: AppColors.sunshineSurface,
+      accentColor: AppColors.sunshineText,
     },
   },
   ADOLESCENT: {
@@ -139,8 +141,8 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
       name: "Rubik's cube — beat your time",
       duration: '20–30 min',
       description: 'Full 3×3 solve. Track your personal best.',
-      tint: '#f3e5f5',
-      accentColor: '#6a1b9a',
+      tint: AppColors.greenWash,
+      accentColor: AppColors.primary,
     },
   },
 };

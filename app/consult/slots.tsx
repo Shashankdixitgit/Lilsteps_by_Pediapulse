@@ -4,8 +4,6 @@
  * Real time_slots via useTimeSlots(). Past slots for today are filtered in
  * the hook. "Booked" = is_available=false.
  */
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -18,7 +16,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppColors } from '@/constants/theme';
+import { GradientButton } from '@/components/gradient-button';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
+import { typography } from '@/styles/global';
 import { supabase } from '@/lib/supabase';
 import { useTimeSlots } from '@/hooks/useDoctors';
 
@@ -94,16 +95,7 @@ export default function SlotsScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={AppColors.onSurface} />
-        </Pressable>
-        <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Pick a Slot</Text>
-          <Text style={styles.headerSub}>{doctorName}</Text>
-        </View>
-        <View style={{ width: 36 }} />
-      </View>
+      <ScreenHeader title="Pick a time" subtitle={doctorName} />
 
       <View style={styles.steps}>
         {[1, 2, 3].map((s) => (
@@ -112,14 +104,17 @@ export default function SlotsScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: 100 + insets.bottom }]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: 32 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
+        <Text style={typography.meta}>Video consultation · 30 min · times in IST</Text>
+
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Choose a date</Text>
+          <Text style={typography.headingSM}>Choose a date</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.dateScroll}
             contentContainerStyle={styles.dateStrip}
           >
             {DAYS.map((d, i) => {
@@ -129,6 +124,9 @@ export default function SlotsScreen() {
                   key={i}
                   style={[styles.dayChip, active && styles.dayChipActive]}
                   onPress={() => setSelectedDay(i)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={d.fullLabel}
                 >
                   <Text style={[styles.dayLabel, active && styles.dayLabelActive]}>{d.label}</Text>
                   <Text style={[styles.dayDate, active && styles.dayDateActive]}>{d.date}</Text>
@@ -139,21 +137,16 @@ export default function SlotsScreen() {
         </View>
 
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Available times</Text>
-          <Text style={styles.sectionSub}>All times are in IST</Text>
+          <Text style={typography.headingSM}>Available times</Text>
 
           {loading ? (
             <View style={styles.center}>
               <ActivityIndicator size="small" color={AppColors.primary} />
             </View>
           ) : slots.length === 0 ? (
-            <View style={styles.emptyCard}>
-              <Ionicons name="calendar-clear-outline" size={28} color={AppColors.onSurfaceVariant} />
-              <Text style={styles.emptyText}>
-                {doctorName} has no slots on {DAYS[selectedDay].fullLabel}.
-                Try another date.
-              </Text>
-            </View>
+            <Text style={typography.meta}>
+              No slots on {DAYS[selectedDay].fullLabel}. Try another date.
+            </Text>
           ) : (
             <View style={styles.slotsGrid}>
               {slots.map((slot) => {
@@ -165,26 +158,9 @@ export default function SlotsScreen() {
                     disabled={unavailable}
                     style={[styles.slotChip, unavailable && styles.slotDisabled, active && styles.slotActive]}
                     onPress={() => setSelectedTime(slot.time)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: active, disabled: unavailable }}
                   >
-                    {active && (
-                      <LinearGradient
-                        colors={[AppColors.primary, AppColors.gradientEnd]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={StyleSheet.absoluteFill}
-                      />
-                    )}
-                    <Ionicons
-                      name={unavailable ? 'close-outline' : 'time-outline'}
-                      size={14}
-                      color={
-                        unavailable
-                          ? `${AppColors.onSurfaceVariant}50`
-                          : active
-                            ? AppColors.onPrimary
-                            : AppColors.primary
-                      }
-                    />
                     <Text
                       style={[
                         styles.slotText,
@@ -201,51 +177,16 @@ export default function SlotsScreen() {
             </View>
           )}
         </View>
-
-        <View style={styles.infoRow}>
-          <InfoChip icon="videocam-outline" label="Video consultation" />
-          <InfoChip icon="time-outline" label="30 min session" />
-        </View>
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
         {selectedTime && (
-          <View style={styles.selectedSummary}>
-            <Ionicons name="calendar-outline" size={14} color={AppColors.primary} />
-            <Text style={styles.selectedSummaryText}>
-              {DAYS[selectedDay].fullLabel} · {formatTime(selectedTime)}
-            </Text>
-          </View>
+          <Text style={[typography.sectionLabel, styles.center0]}>
+            {DAYS[selectedDay].fullLabel} · {formatTime(selectedTime)}
+          </Text>
         )}
-        <Pressable
-          style={({ pressed }) => [
-            styles.continueBtn,
-            !selectedTime && styles.continueBtnDisabled,
-            { opacity: pressed ? 0.87 : 1 },
-          ]}
-          disabled={!selectedTime}
-          onPress={goToConfirm}
-        >
-          <LinearGradient
-            colors={[AppColors.primary, AppColors.gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.continueBtnGrad}
-          >
-            <Text style={styles.continueBtnText}>Continue</Text>
-            <Ionicons name="arrow-forward" size={18} color={AppColors.onPrimary} />
-          </LinearGradient>
-        </Pressable>
+        <GradientButton label="Continue" disabled={!selectedTime} onPress={goToConfirm} />
       </View>
-    </View>
-  );
-}
-
-function InfoChip({ icon, label }: { icon: string; label: string }) {
-  return (
-    <View style={styles.infoChip}>
-      <Ionicons name={icon as never} size={14} color={AppColors.primary} />
-      <Text style={styles.infoChipText}>{label}</Text>
     </View>
   );
 }
@@ -253,86 +194,66 @@ function InfoChip({ icon, label }: { icon: string; label: string }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: AppColors.surface },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 14,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    borderBottomWidth: 1, borderBottomColor: `${AppColors.outlineVariant}15`,
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: `${AppColors.surfaceContainerHigh}80`,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerCenter: { alignItems: 'center', gap: 2 },
-  headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: AppColors.onSurface },
-  headerSub: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: AppColors.primary },
-
-  steps: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingBottom: 8 },
-  stepDot: { flex: 1, height: 3, borderRadius: 999, backgroundColor: `${AppColors.outlineVariant}30` },
+  steps: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingTop: 4, paddingBottom: 8 },
+  stepDot: { flex: 1, height: 3, borderRadius: 999, backgroundColor: AppColors.border },
   stepDotActive: { backgroundColor: AppColors.primary },
 
-  scroll: { paddingHorizontal: 20, paddingTop: 20, gap: 24 },
+  scroll: { paddingHorizontal: 20, paddingTop: 8, gap: 24 },
 
-  section: { gap: 12 },
-  sectionTitle: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 20, color: AppColors.onSurface, letterSpacing: -0.4 },
-  sectionSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: AppColors.onSurfaceVariant, marginTop: -8 },
+  section: { gap: 8 },
 
-  dateStrip: { gap: 10 },
+  dateScroll: { marginHorizontal: -20 },
+  dateStrip: { gap: 8, paddingHorizontal: 20 },
   dayChip: {
-    alignItems: 'center', gap: 4, paddingHorizontal: 18, paddingVertical: 14,
-    borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 1.5, borderColor: 'transparent', minWidth: 88,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
+    minWidth: 76,
+    paddingHorizontal: 14,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    backgroundColor: AppColors.card,
+    borderWidth: 1,
+    borderColor: AppColors.border,
   },
   dayChipActive: { backgroundColor: AppColors.primary, borderColor: AppColors.primary },
-  dayLabel: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: AppColors.onSurface },
+  dayLabel: { fontFamily: FontFamily.semibold, fontSize: 13, lineHeight: 18, color: AppColors.onSurface },
   dayLabelActive: { color: AppColors.onPrimary },
-  dayDate: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 11, color: AppColors.onSurfaceVariant },
-  dayDateActive: { color: 'rgba(255,255,255,0.8)' },
+  dayDate: { fontFamily: FontFamily.regular, fontSize: 12, lineHeight: 16, color: AppColors.muted },
+  dayDateActive: { color: AppColors.onDarkMuted },
 
-  center: { paddingVertical: 28, alignItems: 'center' },
-  emptyCard: {
-    alignItems: 'center', gap: 10,
-    backgroundColor: `${AppColors.surfaceContainerHigh}80`, borderRadius: 14, padding: 20,
-  },
-  emptyText: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: AppColors.onSurfaceVariant, textAlign: 'center', lineHeight: 18 },
+  center: { paddingVertical: 24, alignItems: 'center' },
+  center0: { textAlign: 'center' },
 
-  slotsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  slotsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   slotChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 16, paddingVertical: 13,
-    borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.9)',
-    borderWidth: 1.5, borderColor: `${AppColors.outlineVariant}30`,
-    overflow: 'hidden', minWidth: '45%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    height: 44,
+    flexBasis: '30%',
+    flexGrow: 1,
+    paddingHorizontal: 12,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    backgroundColor: AppColors.card,
+    borderWidth: 1,
+    borderColor: AppColors.border,
   },
-  slotDisabled: { backgroundColor: `${AppColors.surfaceContainerHigh}80`, borderColor: 'transparent', opacity: 0.55 },
-  slotActive: { borderColor: 'transparent', backgroundColor: 'transparent' },
-  slotText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: AppColors.onSurface, flex: 1 },
-  slotTextDisabled: { color: `${AppColors.onSurfaceVariant}50` },
+  slotDisabled: { backgroundColor: AppColors.surfaceContainer, borderColor: AppColors.surfaceContainer },
+  slotActive: { backgroundColor: AppColors.primary, borderColor: AppColors.primary },
+  slotText: { fontFamily: FontFamily.semibold, fontSize: 13, color: AppColors.onSurface },
+  slotTextDisabled: { color: AppColors.muted, textDecorationLine: 'line-through' },
   slotTextActive: { color: AppColors.onPrimary },
-  bookedLabel: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 10, color: `${AppColors.onSurfaceVariant}60` },
-
-  infoRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
-  infoChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: `${AppColors.primary}10`, borderRadius: 999,
-    paddingHorizontal: 12, paddingVertical: 7,
-  },
-  infoChipText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 12, color: AppColors.primary },
+  bookedLabel: { fontFamily: FontFamily.medium, fontSize: 12, color: AppColors.muted },
 
   bottomBar: {
-    paddingHorizontal: 20, paddingTop: 12, gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderTopWidth: 1, borderTopColor: `${AppColors.outlineVariant}15`,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    gap: 8,
+    backgroundColor: AppColors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: AppColors.border,
   },
-  selectedSummary: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: `${AppColors.primary}08`, borderRadius: 10,
-    paddingHorizontal: 14, paddingVertical: 8,
-  },
-  selectedSummaryText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 13, color: AppColors.primary },
-  continueBtn: { borderRadius: 999, overflow: 'hidden' },
-  continueBtnDisabled: { opacity: 0.45 },
-  continueBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16 },
-  continueBtnText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: AppColors.onPrimary },
 });

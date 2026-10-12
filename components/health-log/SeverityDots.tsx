@@ -30,6 +30,9 @@ export function SeverityDots({ value, onChange }: SeverityDotsProps) {
               isFilled && { backgroundColor: COLORS[level], borderColor: 'transparent' },
             ]}
             onPress={() => onChange(level)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`Severity ${LABELS[level]}`}
           />
         );
       })}
@@ -44,12 +47,12 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: `${AppColors.outlineVariant}25`,
+    backgroundColor: AppColors.border,
     borderWidth: 1.5,
     borderColor: 'transparent',
   },
   label: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
     color: AppColors.onSurface,
     marginLeft: 4,

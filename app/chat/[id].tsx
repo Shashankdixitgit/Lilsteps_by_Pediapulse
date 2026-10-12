@@ -1,21 +1,19 @@
-import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GradientBackground } from '@/components/gradient-background';
+import { ChatComposer } from '@/components/chat/ChatComposer';
 import { MessageBubble } from '@/components/chat/MessageBubble';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { AppColors } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
 import { supabase } from '@/lib/supabase';
@@ -105,24 +103,8 @@ export default function ChatScreen() {
   }
 
   return (
-    <View style={layout.screenContainer}>
-      <GradientBackground />
-
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={20} color={AppColors.onSurface} />
-        </Pressable>
-        <View style={styles.headerText}>
-          <Text style={typography.headingMD} numberOfLines={1}>
-            {info?.doctor_name ?? 'Chat'}
-          </Text>
-          {!!headerSubtitle && (
-            <Text style={[typography.bodySM, styles.headerSubtitle]} numberOfLines={1}>
-              {headerSubtitle}
-            </Text>
-          )}
-        </View>
-      </View>
+    <View style={[layout.screenContainer, { paddingTop: insets.top }]}>
+      <ScreenHeader title={info?.doctor_name ?? 'Chat'} subtitle={headerSubtitle || undefined} />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -135,7 +117,7 @@ export default function ChatScreen() {
           </View>
         ) : messages.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={typography.bodyMD}>No messages yet — say hello.</Text>
+            <Text style={[typography.body, styles.emptyText]}>No messages yet. Say hello.</Text>
           </View>
         ) : (
           <FlatList
@@ -158,25 +140,14 @@ export default function ChatScreen() {
         )}
 
         <View style={[styles.composer, { paddingBottom: insets.bottom + 8 }]}>
-          <TextInput
+          <ChatComposer
             value={draft}
             onChangeText={setDraft}
+            onSend={handleSend}
+            sendDisabled={sending || draft.trim().length === 0}
             placeholder="Type a message…"
-            placeholderTextColor={AppColors.onSurfaceVariant}
-            style={styles.input}
-            multiline
             maxLength={4000}
           />
-          <Pressable
-            onPress={handleSend}
-            disabled={sending || draft.trim().length === 0}
-            style={({ pressed }) => [
-              styles.sendButton,
-              { opacity: pressed || sending || draft.trim().length === 0 ? 0.6 : 1 },
-            ]}
-          >
-            <Ionicons name="send" size={18} color={AppColors.onPrimary} />
-          </Pressable>
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -185,57 +156,15 @@ export default function ChatScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    gap: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: `${AppColors.surfaceContainerLowest}B3`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerText: { flex: 1, minWidth: 0 },
-  headerSubtitle: { marginTop: 2, color: AppColors.onSurfaceVariant },
 
   list: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
   loadingState: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
+  emptyText: { color: AppColors.muted, textAlign: 'center' },
 
   composer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
     paddingHorizontal: 16,
-    paddingTop: 12,
-    gap: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: `${AppColors.outlineVariant}40`,
-    backgroundColor: AppColors.surfaceContainerLowest,
-  },
-  input: {
-    flex: 1,
-    minHeight: 44,
-    maxHeight: 140,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-    borderRadius: 22,
-    backgroundColor: AppColors.surfaceContainer,
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 16,
-    color: AppColors.onSurface,
-  },
-  sendButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: AppColors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    paddingTop: 8,
+    backgroundColor: AppColors.surface,
   },
 });

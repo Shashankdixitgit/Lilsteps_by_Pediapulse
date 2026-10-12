@@ -3,7 +3,7 @@ import React, { memo, ReactNode } from 'react';
 import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppColors } from '@/constants/theme';
+import { AppColors, CanvasFade } from '@/constants/theme';
 
 interface TabScreenLayoutProps {
   children: ReactNode;
@@ -12,7 +12,9 @@ interface TabScreenLayoutProps {
   headerPaddingBottom?: number;
 }
 
-const HEADER_HEIGHT = 70;
+/** Space reserved under the floating header (title row + fade). */
+export const TAB_HEADER_HEIGHT = 64;
+const HEADER_HEIGHT = TAB_HEADER_HEIGHT;
 
 const GradientFade = memo(function GradientFade() {
   return (
@@ -20,13 +22,13 @@ const GradientFade = memo(function GradientFade() {
       colors={[
         AppColors.surface,
         AppColors.surface,
-        `${AppColors.surface}E8`,
-        `${AppColors.surface}B0`,
-        `${AppColors.surface}60`,
-        `${AppColors.surface}20`,
-        `${AppColors.surface}00`,
+        CanvasFade.a91,
+        CanvasFade.a69,
+        CanvasFade.a38,
+        CanvasFade.a13,
+        CanvasFade.a0,
       ]}
-      locations={[0, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
+      locations={[0, 0.72, 0.8, 0.86, 0.91, 0.96, 1]} // solid behind the title, fade only below it
       style={StyleSheet.absoluteFill}
       start={{ x: 0, y: 0 }}
       end={{ x: 0, y: 1 }}
@@ -39,7 +41,7 @@ export const TabScreenLayout = memo(function TabScreenLayout({
   children,
   headerContent,
   scrollContentStyle,
-  headerPaddingBottom = 40,
+  headerPaddingBottom = 12,
 }: TabScreenLayoutProps) {
   const insets = useSafeAreaInsets();
 
@@ -88,6 +90,6 @@ const styles = StyleSheet.create({
   },
   scroll: {
     paddingHorizontal: 20,
-    gap: 20,
+    gap: 24,
   },
 });

@@ -9,12 +9,13 @@
 // the browser otherwise.
 
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GradientBackground } from '@/components/gradient-background';
+import { GradientButton } from '@/components/gradient-button';
+import { ScreenHeader } from '@/components/ScreenHeader';
 import { AppColors } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
 import { supabase } from '@/lib/supabase';
@@ -45,7 +46,8 @@ export default function ParentVideoScreen() {
         }>();
 
       if (err) {
-        setError(err.message);
+        // Copy only: show a friendly line instead of the raw database message.
+        setError("We couldn't open this video room. Please go back and try again.");
       } else {
         if (data?.doctors?.name) setDoctorName(data.doctors.name);
         const link = data?.meet_link ?? data?.doctors?.default_meet_link ?? null;
@@ -64,38 +66,24 @@ export default function ParentVideoScreen() {
   }
 
   return (
-    <View style={layout.screenContainer}>
-      <GradientBackground />
-
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={20} color={AppColors.onSurface} />
-        </Pressable>
-        <Text style={typography.headingMD}>Video consult</Text>
-      </View>
+    <View style={[layout.screenContainer, { paddingTop: insets.top }]}>
+      <ScreenHeader title="Video consult" />
 
       <View style={styles.body}>
         {loading ? (
           <ActivityIndicator color={AppColors.primary} />
         ) : error ? (
-          <Text style={[typography.bodyMD, styles.errorText]}>{error}</Text>
+          <Text style={[typography.body, styles.errorText]}>{error}</Text>
         ) : (
           <>
             <View style={styles.iconWrap}>
-              <Ionicons name="videocam" size={36} color={AppColors.primary} />
+              <Ionicons name="videocam" size={28} color={AppColors.primary} />
             </View>
-            <Text style={[typography.headingMD, styles.title]}>Ready to connect</Text>
-            <Text style={[typography.bodySM, styles.subtitle]}>
+            <Text style={[typography.headingSM, styles.center]}>Ready to connect</Text>
+            <Text style={[typography.bodySM, styles.center]}>
               You&apos;ll join {doctorName} in Google Meet. They&apos;ll let you in from the waiting room.
             </Text>
-
-            <Pressable
-              style={({ pressed }) => [styles.joinBtn, { opacity: pressed ? 0.85 : 1 }]}
-              onPress={openRoom}
-            >
-              <Ionicons name="videocam" size={18} color={AppColors.onPrimary} />
-              <Text style={styles.joinBtnText}>Open Meet</Text>
-            </Pressable>
+            <GradientButton label="Open Meet" onPress={openRoom} style={styles.joinBtn} />
           </>
         )}
       </View>
@@ -104,57 +92,23 @@ export default function ParentVideoScreen() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-    gap: 12,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: `${AppColors.surfaceContainerLowest}B3`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   body: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
-    gap: 16,
+    gap: 8,
   },
   iconWrap: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: `${AppColors.primary}14`,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: AppColors.mintSurface,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
-  title: { textAlign: 'center' },
-  subtitle: {
-    textAlign: 'center',
-    color: AppColors.onSurfaceVariant,
-    lineHeight: 22,
-  },
-  errorText: { color: AppColors.tertiary, textAlign: 'center', lineHeight: 22 },
-  joinBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: AppColors.primary,
-    paddingHorizontal: 32,
-    paddingVertical: 16,
-    borderRadius: 9999,
-    marginTop: 8,
-  },
-  joinBtnText: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 16,
-    color: AppColors.onPrimary,
-  },
+  center: { textAlign: 'center' },
+  errorText: { color: AppColors.danger, textAlign: 'center' },
+  joinBtn: { marginTop: 16, alignSelf: 'stretch' },
 });

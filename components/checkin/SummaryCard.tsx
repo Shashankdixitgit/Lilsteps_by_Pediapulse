@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Card } from 'heroui-native';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 
 export interface SummaryDetail {
   label: string;
@@ -21,129 +20,110 @@ export interface SummaryCardProps {
   childName: string;
 }
 
+/**
+ * One white hairline card: "AI summary · Child" label, chief complaint (17),
+ * detail rows with hairline separators, then history / allergy as plain rows
+ * (no nested boxes). The allergy note keeps warning colour + icon + text.
+ */
 export function SummaryCard({ summary, childName }: SummaryCardProps) {
   return (
-    <Card style={styles.card}>
-      <Card.Body style={styles.body}>
-        <View style={styles.header}>
-          <View style={styles.aiBadge}>
-            <Ionicons name="sparkles" size={12} color={AppColors.primary} />
-            <Text style={styles.aiBadgeText}>AI Summary</Text>
-          </View>
-          <Text style={styles.childName}>{childName}</Text>
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <Ionicons name="sparkles" size={14} color={AppColors.secondary} />
+        <Text style={styles.aiLabel}>AI summary</Text>
+        <Text style={styles.childName} numberOfLines={1}>
+          · {childName}
+        </Text>
+      </View>
+      <Text style={styles.complaint}>{summary.chiefComplaint}</Text>
+
+      {summary.details.length > 0 ? (
+        <View>
+          {summary.details.map((d) => (
+            <View key={d.label} style={styles.detailRow}>
+              <Text style={styles.detailLabel}>{d.label}</Text>
+              <Text style={styles.detailValue}>{d.value}</Text>
+            </View>
+          ))}
         </View>
-        <Text style={styles.complaint}>{summary.chiefComplaint}</Text>
+      ) : null}
 
-        <View style={styles.divider} />
+      {!!summary.relevantHistory && (
+        <View style={styles.noteRow}>
+          <Ionicons name="time-outline" size={14} color={AppColors.outline} style={styles.noteIcon} />
+          <Text style={styles.noteText}>{summary.relevantHistory}</Text>
+        </View>
+      )}
 
-        {summary.details.map((d, i) => (
-          <View
-            key={d.label}
-            style={[styles.detailRow, i === summary.details.length - 1 && styles.detailRowLast]}
-          >
-            <Text style={styles.detailLabel}>{d.label}</Text>
-            <Text style={styles.detailValue}>{d.value}</Text>
-          </View>
-        ))}
-
-        {summary.relevantHistory && (
-          <View style={styles.infoRow}>
-            <Ionicons name="time-outline" size={14} color={AppColors.primary} />
-            <Text style={styles.infoText}>{summary.relevantHistory}</Text>
-          </View>
-        )}
-
-        {summary.allergyNote && (
-          <View style={styles.warningRow}>
-            <Ionicons name="warning-outline" size={14} color={AppColors.warningAmber} />
-            <Text style={styles.warningText}>{summary.allergyNote}</Text>
-          </View>
-        )}
-      </Card.Body>
-    </Card>
+      {!!summary.allergyNote && (
+        <View style={styles.noteRow}>
+          <Ionicons name="warning-outline" size={14} color={AppColors.warning} style={styles.noteIcon} />
+          <Text style={[styles.noteText, styles.warningText]}>{summary.allergyNote}</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 20,
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
     borderWidth: 1,
-    borderColor: `${AppColors.primary}20`,
+    borderColor: AppColors.border,
+    padding: 16,
+    gap: 8,
   },
-  body: { padding: 18, gap: 12 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  aiBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: `${AppColors.primary}12`,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-  },
-  aiBadgeText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 11, color: AppColors.primary },
-  childName: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: AppColors.onSurfaceVariant },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  aiLabel: { fontFamily: FontFamily.semibold, fontSize: 12, lineHeight: 16, color: AppColors.secondary },
+  childName: { flexShrink: 1, fontFamily: FontFamily.regular, fontSize: 12, lineHeight: 16, color: AppColors.muted },
   complaint: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 18,
+    fontFamily: FontFamily.semibold,
+    fontSize: 17,
+    lineHeight: 24,
+    letterSpacing: -0.2,
     color: AppColors.onSurface,
-    letterSpacing: -0.3,
   },
-  divider: { height: 1, backgroundColor: `${AppColors.outlineVariant}20`, marginVertical: 4 },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: `${AppColors.outlineVariant}15`,
+    gap: 12,
+    paddingVertical: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: AppColors.border,
   },
-  detailRowLast: { borderBottomWidth: 0 },
   detailLabel: {
-    fontFamily: 'PlusJakartaSans_500Medium',
+    fontFamily: FontFamily.regular,
     fontSize: 13,
-    color: AppColors.onSurfaceVariant,
+    lineHeight: 18,
+    color: AppColors.muted,
     flex: 1,
   },
   detailValue: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
+    fontFamily: FontFamily.semibold,
     fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
     flex: 2,
     textAlign: 'right',
   },
-  infoRow: {
+  noteRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     alignItems: 'flex-start',
-    backgroundColor: `${AppColors.primary}08`,
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 4,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: AppColors.border,
   },
-  infoText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
+  noteIcon: { marginTop: 2 },
+  noteText: {
+    fontFamily: FontFamily.regular,
     fontSize: 13,
-    color: AppColors.onSurface,
-    flex: 1,
     lineHeight: 18,
-  },
-  warningRow: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'flex-start',
-    backgroundColor: `${AppColors.warningAmber}10`,
-    borderRadius: 12,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: `${AppColors.warningAmber}30`,
-  },
-  warningText: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 13,
-    color: AppColors.onSurface,
+    color: AppColors.onSurfaceVariant,
     flex: 1,
-    lineHeight: 18,
   },
+  warningText: { color: AppColors.warning },
 });

@@ -1,46 +1,67 @@
-import { useState } from 'react';
-import { StyleSheet, TextInput, TextInputProps, View, Text } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { ReactNode, useState } from 'react';
+import { Platform, StyleSheet, Text, TextInput, TextInputProps, View } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { AppColors, FontFamily, Radius, Shadow } from '@/constants/theme';
 
 interface TextInputFieldProps extends TextInputProps {
   label?: string;
+  /** 12 muted helper shown UNDER the field (e.g. "With country code"). */
   hint?: string;
+  /** Show `hint` beside the label instead of under the field (short units like "(kg)"). */
+  hintInline?: boolean;
+  /** Error message shown under the field (danger border + icon). */
+  error?: string;
+  /** Leading icon / element inside the field. */
+  leading?: ReactNode;
 }
 
 /**
- * Styled text input following DESIGN.md input field spec.
- * surfaceContainerLow bg, transitions to surfaceContainerLowest on focus
- * with a ghost border in primary at 30% opacity.
+ * Text input per DESIGN.md: white field, always-present 1.5px `fieldBorder`
+ * (3.6:1, WCAG 1.4.11), 10px radius. Focus swaps the border to secondary and
+ * adds a mint focus ring via box-shadow (no layout shift).
  */
-export function TextInputField({ label, hint, style, ...props }: TextInputFieldProps) {
+export function TextInputField({ label, hint, hintInline, error, leading, style, ...props }: TextInputFieldProps) {
   const [focused, setFocused] = useState(false);
+  const hasError = !!error;
 
   return (
     <View style={styles.wrapper}>
-      {(label || hint) && (
-        <View style={styles.labelRow}>
-          {label && <Text style={styles.label}>{label}</Text>}
-          {hint && <Text style={styles.hint}>{hint}</Text>}
-        </View>
-      )}
-      <TextInput
-        placeholderTextColor={AppColors.outlineVariant}
+      {label ? (
+        <Text style={styles.label}>
+          {label}
+          {hint && hintInline ? <Text style={styles.hintInline}>{`  ${hint}`}</Text> : null}
+        </Text>
+      ) : null}
+      <View
         style={[
-          styles.input,
-          focused && styles.inputFocused,
-          style,
+          styles.field,
+          focused && styles.fieldFocused,
+          hasError && styles.fieldError,
         ]}
-        onFocus={(e) => {
-          setFocused(true);
-          props.onFocus?.(e);
-        }}
-        onBlur={(e) => {
-          setFocused(false);
-          props.onBlur?.(e);
-        }}
-        {...props}
-      />
+      >
+        {leading ? <View style={styles.leading}>{leading}</View> : null}
+        <TextInput
+          placeholderTextColor={AppColors.placeholder}
+          style={[styles.input, style]}
+          onFocus={(e) => {
+            setFocused(true);
+            props.onFocus?.(e);
+          }}
+          onBlur={(e) => {
+            setFocused(false);
+            props.onBlur?.(e);
+          }}
+          {...props}
+        />
+      </View>
+      {hint && !hintInline && !hasError ? <Text style={styles.hint}>{hint}</Text> : null}
+      {hasError ? (
+        <View style={styles.errorRow}>
+          <Ionicons name="alert-circle" size={14} color={AppColors.danger} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -49,35 +70,68 @@ const styles = StyleSheet.create({
   wrapper: {
     gap: 6,
   },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    gap: 6,
-    marginLeft: 4,
-  },
   label: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: FontFamily.semibold,
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
+    marginLeft: 2,
   },
   hint: {
-    fontFamily: 'PlusJakartaSans_400Regular',
+    fontFamily: FontFamily.regular,
     fontSize: 12,
-    color: AppColors.onSurfaceVariant,
+    lineHeight: 16,
+    color: AppColors.muted,
+    marginLeft: 2,
+  },
+  hintInline: {
+    fontFamily: FontFamily.regular,
+    fontSize: 12,
+    color: AppColors.muted,
+  },
+  field: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    borderWidth: 1.5,
+    borderColor: AppColors.fieldBorder,
+    minHeight: 48,
+  },
+  fieldFocused: {
+    borderColor: AppColors.secondary,
+    boxShadow: Shadow.focusRing,
+  },
+  fieldError: {
+    borderColor: AppColors.danger,
+  },
+  leading: {
+    paddingLeft: 14,
   },
   input: {
-    backgroundColor: AppColors.surfaceContainerLow,
-    borderRadius: 12,
-    height: 48,
-    paddingHorizontal: 16,
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 16,
+    flex: 1,
+    minHeight: 45,
+    paddingHorizontal: 14,
+    fontFamily: FontFamily.regular,
+    fontSize: 16, // 16 keeps iOS from zooming on focus
     color: AppColors.onSurface,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    // The token focus ring replaces the browser's blue outline on web.
+    // outlineStyle is needed too, or Chrome still draws it on multi-line fields;
+    // resize: none hides the textarea drag handle.
+    ...(Platform.OS === 'web'
+      ? ({ outlineStyle: 'solid', outlineWidth: 0, resize: 'none' } as object)
+      : null),
   },
-  inputFocused: {
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderColor: `${AppColors.primary}4D`,
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginLeft: 2,
+  },
+  errorText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 12,
+    color: AppColors.danger,
   },
 });

@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Card } from 'heroui-native';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { PressableScale } from '@/components/ui/PressableScale';
+import { AppColors, FontFamily, Size } from '@/constants/theme';
 
 export interface ConsultHistoryItemProps {
   id: string;
@@ -11,8 +11,15 @@ export interface ConsultHistoryItemProps {
   chiefComplaint: string | null;
   outcome: string | null;
   onPress: (id: string) => void;
+  /** Hairline top divider when stacked inside one parent list card. */
+  divider?: boolean;
 }
 
+/**
+ * Past consultation as a list row (sits inside one parent card): complaint
+ * 15 SemiBold, plain meta "12 Oct · Dr Name" 13 muted, optional 1-line
+ * outcome, trailing chevron. No date badge or meta icons.
+ */
 export function ConsultHistoryItem({
   id,
   createdAt,
@@ -20,59 +27,51 @@ export function ConsultHistoryItem({
   chiefComplaint,
   outcome,
   onPress,
+  divider,
 }: ConsultHistoryItemProps) {
   const d = new Date(createdAt);
+  const date = `${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`;
+  const meta = doctorName ? `${date} · ${doctorName}` : date;
 
   return (
-    <Pressable
-      style={({ pressed }) => [{ opacity: pressed ? 0.85 : 1 }]}
+    <PressableScale
       onPress={() => onPress(id)}
+      scaleTo={0.99}
+      bg={AppColors.card}
+      bgPressed={AppColors.surfaceContainerLow}
+      accessibilityLabel={`${chiefComplaint ?? 'Consultation'}, ${meta}`}
+      style={[styles.row, divider && styles.divider]}
     >
-      <Card style={styles.card}>
-        <Card.Body style={styles.body}>
-          <View style={styles.left}>
-            <View style={styles.dateBadge}>
-              <Text style={styles.dateDay}>{d.getDate()}</Text>
-              <Text style={styles.dateMonth}>{d.toLocaleDateString('en-US', { month: 'short' })}</Text>
-            </View>
-            <View style={styles.info}>
-              <Text style={styles.complaint}>{chiefComplaint ?? 'Consultation'}</Text>
-              <Text style={styles.outcome} numberOfLines={1}>{outcome ?? ''}</Text>
-              <View style={styles.doctorRow}>
-                <Ionicons name="person-outline" size={12} color={AppColors.primary} />
-                <Text style={styles.doctor}>{doctorName}</Text>
-              </View>
-            </View>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={AppColors.outlineVariant} />
-        </Card.Body>
-      </Card>
-    </Pressable>
+      <View style={styles.info}>
+        <Text style={styles.complaint} numberOfLines={1}>
+          {chiefComplaint ?? 'Consultation'}
+        </Text>
+        <Text style={styles.meta} numberOfLines={1}>
+          {meta}
+        </Text>
+        {outcome ? (
+          <Text style={styles.outcome} numberOfLines={1}>
+            {outcome}
+          </Text>
+        ) : null}
+      </View>
+      <Ionicons name="chevron-forward" size={Size.iconRow} color={AppColors.outlineVariant} />
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: AppColors.surfaceContainerLowest, borderRadius: 14 },
-  body: {
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 14,
+    gap: 12,
+    minHeight: 60,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  left: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  dateBadge: {
-    backgroundColor: `${AppColors.primary}08`,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    alignItems: 'center',
-    minWidth: 44,
-  },
-  dateDay: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 16, color: AppColors.primary },
-  dateMonth: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 10, color: AppColors.primary },
-  info: { flex: 1, gap: 3 },
-  complaint: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 14, color: AppColors.onSurface },
-  outcome: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: AppColors.onSurfaceVariant },
-  doctorRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  doctor: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: AppColors.primary },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: AppColors.border },
+  info: { flex: 1, gap: 2 },
+  complaint: { fontFamily: FontFamily.semibold, fontSize: 15, lineHeight: 20, color: AppColors.onSurface },
+  meta: { fontFamily: FontFamily.regular, fontSize: 13, lineHeight: 18, color: AppColors.muted },
+  outcome: { fontFamily: FontFamily.regular, fontSize: 13, lineHeight: 18, color: AppColors.onSurfaceVariant },
 });

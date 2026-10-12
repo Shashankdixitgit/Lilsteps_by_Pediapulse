@@ -21,8 +21,8 @@ export default function MilestonesScreen() {
   return (
     <OnboardingShell
       progress={0.78}
-      title="Developmental Milestones"
-      subtitle="Just tick what applies — this helps us understand development stage"
+      title="Milestones"
+      subtitle="Tick what applies."
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/a-vaccination')}
     >
@@ -41,10 +41,11 @@ export default function MilestonesScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

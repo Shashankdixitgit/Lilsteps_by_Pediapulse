@@ -19,9 +19,10 @@ export default function SleepDentalScreen() {
 
   return (
     <OnboardingShell
+      sprout="sleepy"
       progress={1}
-      title="Sleep & Dental"
-      subtitle="These patterns help us flag potential concerns early"
+      title="Sleep and dental"
+      subtitle="Helps us flag concerns early"
       ctaLabel="Finish"
       onCta={() => router.push('/(onboarding)/confirm')}
     >
@@ -62,10 +63,11 @@ export default function SleepDentalScreen() {
 
 const styles = StyleSheet.create({
   fieldLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    lineHeight: 18,
     color: AppColors.onSurface,
-    marginLeft: 4,
+    marginLeft: 2,
     marginBottom: 8,
   },
 });

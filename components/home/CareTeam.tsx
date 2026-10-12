@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Card, PressableFeedback } from 'heroui-native';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { TextButton } from '@/components/gradient-button';
+import { PressableScale } from '@/components/ui/PressableScale';
+import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { typography } from '@/styles/global';
 
 export interface CareProvider {
@@ -18,148 +19,105 @@ interface CareTeamProps {
   onProviderPress?: (providerId: string) => void;
 }
 
+/**
+ * Care team as compact rows inside one hairline card: 36 initial avatar,
+ * name 15 SemiBold, role 13 muted, chevron. "Add a doctor" is a ghost text
+ * button under the list. Same handlers as before.
+ */
 export function CareTeam({ providers, onAddProvider, onProviderPress }: CareTeamProps) {
   return (
     <View style={styles.section}>
-      <Text style={[typography.headingMD, styles.heading]}>Care Team</Text>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-      >
-        {providers.map((p) => (
-          <PressableFeedback key={p.id} onPress={() => onProviderPress?.(p.id)}>
-            <Card style={styles.card} className="p-0 border-0 shadow-none">
-              <Card.Header style={styles.cardHeader}>
-                <View style={styles.avatarContainer}>
-                  <View style={styles.avatarRing}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{p.initial}</Text>
-                    </View>
-                  </View>
-                </View>
-              </Card.Header>
-              <Card.Body style={styles.cardBody}>
-                <Card.Title style={styles.name} numberOfLines={2}>
+      <Text style={typography.headingSM}>Care team</Text>
+      {providers.length > 0 ? (
+        <View style={styles.card}>
+          {providers.map((p, i) => (
+            <PressableScale
+              key={p.id}
+              onPress={() => onProviderPress?.(p.id)}
+              scaleTo={0.99}
+              bg={AppColors.card}
+              bgPressed={AppColors.surfaceContainerLow}
+              accessibilityLabel={`${p.name}, ${p.role}`}
+              style={[styles.row, i > 0 && styles.rowDivider]}
+            >
+              <View style={styles.avatar}>
+                <Text style={styles.avatarText}>{p.initial}</Text>
+              </View>
+              <View style={styles.text}>
+                <Text style={styles.name} numberOfLines={1}>
                   {p.name}
-                </Card.Title>
-                <Card.Description style={styles.role} numberOfLines={2}>
+                </Text>
+                <Text style={styles.role} numberOfLines={1}>
                   {p.role}
-                </Card.Description>
-              </Card.Body>
-            </Card>
-          </PressableFeedback>
-        ))}
-
-        <PressableFeedback onPress={onAddProvider}>
-          <View style={styles.addCard}>
-            <View style={styles.addIconCircle}>
-              <Ionicons name="add" size={22} color={AppColors.primary} />
-            </View>
-            <Text style={styles.addLabel}>Add{'\n'}Provider</Text>
-          </View>
-        </PressableFeedback>
-      </ScrollView>
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={AppColors.outline} />
+            </PressableScale>
+          ))}
+        </View>
+      ) : null}
+      {onAddProvider ? (
+        <TextButton label="Add a doctor" onPress={onAddProvider} chevron style={styles.add} />
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   section: {
-    gap: 16,
-  },
-  heading: {
-    paddingHorizontal: 0,
-  },
-  scroll: {
-    gap: 12,
-    paddingRight: 8,
+    gap: 8,
   },
   card: {
-    width: 120,
-    height: 170,
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 20,
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
     overflow: 'hidden',
   },
-  cardHeader: {
-    paddingTop: 16,
-    paddingHorizontal: 12,
+  row: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    minHeight: 60,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  avatarContainer: {
-    alignItems: 'center',
-  },
-  avatarRing: {
-    padding: 4,
-    borderRadius: 40,
-    backgroundColor: `${AppColors.primaryContainer}25`,
+  rowDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: AppColors.border,
   },
   avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: `${AppColors.primaryContainer}50`,
+    width: Size.iconWell,
+    height: Size.iconWell,
+    borderRadius: Size.iconWell / 2,
+    backgroundColor: AppColors.mintSurface,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: `${AppColors.primary}20`,
   },
   avatarText: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 20,
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
     color: AppColors.primary,
   },
-  cardBody: {
-    paddingHorizontal: 10,
-    paddingTop: 12,
-    paddingBottom: 16,
-    alignItems: 'center',
-    gap: 4,
+  text: {
+    flex: 1,
+    gap: 2,
   },
   name: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 13,
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 20,
     color: AppColors.onSurface,
-    textAlign: 'center',
-    lineHeight: 16,
   },
   role: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 9,
-    color: AppColors.onSurfaceVariant,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    textAlign: 'center',
-    lineHeight: 12,
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    lineHeight: 18,
+    color: AppColors.muted,
   },
-  addCard: {
-    width: 120,
-    height: 170,
-    backgroundColor: `${AppColors.surfaceContainer}30`,
-    borderRadius: 20,
-    paddingVertical: 20,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    borderColor: `${AppColors.outlineVariant}35`,
-  },
-  addIconCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: `${AppColors.primaryContainer}35`,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addLabel: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 11,
-    color: AppColors.onSurfaceVariant,
-    textAlign: 'center',
-    lineHeight: 14,
+  add: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 0,
   },
 });

@@ -6,21 +6,16 @@
  * proposal MVP does not include payment.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppColors } from '@/constants/theme';
+import { GradientButton } from '@/components/gradient-button';
+import { Sprout } from '@/components/mascot/Sprout';
+import { ScreenHeader } from '@/components/ScreenHeader';
+import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
+import { typography } from '@/styles/global';
 import { useChild } from '@/context/child';
 import { supabase } from '@/lib/supabase';
 import { useAppointments } from '@/hooks/useAppointments';
@@ -90,54 +85,27 @@ export default function ConfirmScreen() {
 
   // ── Success state ──────────────────────────────────────────────────────────
   if (confirmed) {
+    const when = [dateLabel, time ? formatTime(time) : null].filter(Boolean).join(' at ');
     return (
-      <View style={[styles.screen, styles.successScreen, { paddingTop: insets.top + 32 }]}>
-        <View style={styles.successIcon}>
-          <LinearGradient
-            colors={[AppColors.successGreen, AppColors.successGreenBright ?? AppColors.successGreen]}
-            style={styles.successIconGrad}
-          >
-            <Ionicons name="checkmark" size={44} color={AppColors.onPrimary} />
-          </LinearGradient>
+      <View style={[styles.screen, styles.successScreen, { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 16 }]}>
+        <View style={styles.successBody}>
+          <Sprout mood="cheer" size={64} entrance />
+          <Text style={[typography.heading, styles.centerText]}>You&apos;re booked</Text>
+          <Text style={[typography.body, styles.centerText]}>
+            {childName} will see {doctor?.name ?? 'the doctor'}
+            {when ? ` on ${when}` : ''}.
+          </Text>
         </View>
-        <Text style={styles.successTitle}>Booking confirmed</Text>
-        <Text style={styles.successSub}>
-          {childName}&apos;s appointment with {doctor?.name ?? 'the doctor'} is set.
-        </Text>
-
-        <View style={styles.successCard}>
-          <SuccessRow icon="person-outline" label="Doctor" value={doctor?.name ?? '—'} />
-          <SuccessRow icon="calendar-outline" label="Date" value={dateLabel ?? '—'} />
-          <SuccessRow icon="time-outline" label="Time" value={time ? formatTime(time) : '—'} />
-        </View>
-
-        <Pressable
-          style={({ pressed }) => [styles.doneBtn, { opacity: pressed ? 0.85 : 1 }]}
-          onPress={() => router.replace('/(tabs)')}
-        >
-          <LinearGradient
-            colors={[AppColors.primary, AppColors.gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.doneBtnGrad}
-          >
-            <Text style={styles.doneBtnText}>Back to home</Text>
-          </LinearGradient>
-        </Pressable>
+        <GradientButton label="Back to home" onPress={() => router.replace('/(tabs)')} />
       </View>
     );
   }
 
   // ── Review state ───────────────────────────────────────────────────────────
+  const initial = doctor?.name.split(' ').slice(-1)[0]?.charAt(0) ?? 'D';
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
-        <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={20} color={AppColors.onSurface} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Confirm Booking</Text>
-        <View style={{ width: 36 }} />
-      </View>
+      <ScreenHeader title="Confirm booking" backDisabled={booking} />
 
       <View style={styles.steps}>
         {[1, 2, 3].map((s) => (
@@ -146,100 +114,57 @@ export default function ConfirmScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scroll, { paddingBottom: 110 + insets.bottom }]}
+        contentContainerStyle={[styles.scroll, { paddingBottom: 32 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.pageTitle}>Almost there.</Text>
-        <Text style={styles.pageSub}>Review the details and confirm.</Text>
+        <Text style={typography.heading}>Review and confirm</Text>
 
-        <View style={styles.doctorCard}>
-          <LinearGradient
-            colors={[`${AppColors.primary}20`, `${AppColors.primary}08`]}
-            style={styles.docAvatarBg}
-          >
-            <Text style={styles.docAvatarInitial}>
-              {doctor?.name.split(' ').slice(-1)[0]?.charAt(0) ?? 'D'}
-            </Text>
-          </LinearGradient>
-          <View style={styles.docDetails}>
-            <Text style={styles.docName}>{doctor?.name ?? 'Doctor'}</Text>
-            <Text style={styles.docRole}>{doctor?.specialisation ?? ''}</Text>
-            <Text style={styles.docHospital}>{doctor?.hospital ?? ''}</Text>
-          </View>
-        </View>
-
-        <View style={styles.detailsCard}>
-          <Text style={styles.cardLabel}>Appointment</Text>
-          <DetailRow icon="person-outline" label="Patient" value={childName} />
-          <DetailRow icon="calendar-outline" label="Date" value={dateLabel ?? ''} />
-          <DetailRow icon="time-outline" label="Time" value={time ? formatTime(time) : ''} />
-          <DetailRow icon="videocam-outline" label="Mode" value="Video consultation" />
-          <DetailRow icon="hourglass-outline" label="Duration" value="30 minutes" />
-        </View>
-
-        {issueText.length > 0 && (
-          <View style={styles.issueCard}>
-            <View style={styles.issueTitleRow}>
-              <Ionicons name="chatbubble-ellipses-outline" size={16} color={AppColors.primary} />
-              <Text style={styles.issueTitleText}>Your concern</Text>
+        <View style={styles.card}>
+          <View style={styles.docRow}>
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>{initial}</Text>
             </View>
-            <Text style={styles.issueBody}>{issueText}</Text>
+            <View style={styles.docText}>
+              <Text style={styles.docName} numberOfLines={1}>
+                {doctor?.name ?? 'Doctor'}
+              </Text>
+              {doctor?.specialisation ? (
+                <Text style={typography.meta} numberOfLines={1}>
+                  {doctor.specialisation}
+                </Text>
+              ) : null}
+              {doctor?.hospital ? (
+                <Text style={typography.caption} numberOfLines={1}>
+                  {doctor.hospital}
+                </Text>
+              ) : null}
+            </View>
           </View>
-        )}
+          <DetailRow label="Patient" value={childName} />
+          <DetailRow label="Date" value={dateLabel ?? ''} />
+          <DetailRow label="Time" value={time ? formatTime(time) : ''} />
+          <DetailRow label="Mode" value="Video · 30 min" />
+          {issueText.length > 0 && <DetailRow label="Concern" value={issueText} />}
+        </View>
 
         <View style={styles.policyNote}>
-          <Ionicons name="shield-checkmark-outline" size={16} color={AppColors.primary} />
-          <Text style={styles.policyText}>
-            Free cancellation up to 2 hours before the appointment.
-          </Text>
+          <Ionicons name="shield-checkmark-outline" size={Size.iconMeta} color={AppColors.secondary} />
+          <Text style={typography.caption}>Free cancellation up to 2 hours before.</Text>
         </View>
       </ScrollView>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-        <Pressable
-          style={({ pressed }) => [styles.payBtn, { opacity: pressed && !booking ? 0.87 : 1 }]}
-          onPress={confirmBooking}
-          disabled={booking}
-        >
-          <LinearGradient
-            colors={[AppColors.primary, AppColors.gradientEnd]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.payBtnGrad}
-          >
-            {booking ? (
-              <ActivityIndicator size="small" color={AppColors.onPrimary} />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle-outline" size={16} color={AppColors.onPrimary} />
-                <Text style={styles.payBtnText}>Confirm booking</Text>
-              </>
-            )}
-          </LinearGradient>
-        </Pressable>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
+        <GradientButton label="Confirm booking" onPress={confirmBooking} loading={booking} disabled={booking} />
       </View>
     </View>
   );
 }
 
-function DetailRow({ icon, label, value }: { icon: string; label: string; value: string }) {
+function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <View style={styles.detailRow}>
-      <View style={styles.detailIconWrap}>
-        <Ionicons name={icon as never} size={16} color={AppColors.primary} />
-      </View>
-      <Text style={styles.detailLabel}>{label}</Text>
+      <Text style={[typography.meta, styles.detailLabel]}>{label}</Text>
       <Text style={styles.detailValue}>{value}</Text>
-    </View>
-  );
-}
-
-function SuccessRow({ icon, label, value }: { icon: string; label: string; value: string }) {
-  return (
-    <View style={styles.successRow}>
-      <Ionicons name={icon as never} size={15} color={AppColors.onSurfaceVariant} />
-      <Text style={styles.successRowLabel}>{label}</Text>
-      <Text style={styles.successRowValue}>{value}</Text>
     </View>
   );
 }
@@ -247,98 +172,57 @@ function SuccessRow({ icon, label, value }: { icon: string; label: string; value
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: AppColors.surface },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingVertical: 14,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-  },
-  backBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: `${AppColors.surfaceContainerHigh}80`,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  headerTitle: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 17, color: AppColors.onSurface },
-
   steps: { flexDirection: 'row', gap: 6, paddingHorizontal: 20, paddingBottom: 8 },
-  stepDot: { flex: 1, height: 3, borderRadius: 999, backgroundColor: `${AppColors.outlineVariant}30` },
+  stepDot: { flex: 1, height: 3, borderRadius: 999, backgroundColor: AppColors.border },
   stepDotActive: { backgroundColor: AppColors.primary },
 
-  scroll: { paddingHorizontal: 20, paddingTop: 20, gap: 20 },
+  scroll: { paddingHorizontal: 20, paddingTop: 16, gap: 16 },
 
-  pageTitle: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 26, color: AppColors.onSurface, letterSpacing: -0.5 },
-  pageSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: AppColors.onSurfaceVariant, lineHeight: 20, marginTop: -8 },
+  card: {
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 4,
+  },
+  docRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 12 },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: AppColors.mintSurface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.primary },
+  docText: { flex: 1, gap: 2 },
+  docName: { ...typography.title, lineHeight: 20 },
 
-  doctorCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 14,
-    backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 20, padding: 18,
-    shadowColor: AppColors.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 3,
-  },
-  docAvatarBg: {
-    width: 60, height: 60, borderRadius: 16,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  docAvatarInitial: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 24, color: AppColors.primary },
-  docDetails: { flex: 1, gap: 2 },
-  docName: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 15, color: AppColors.onSurface },
-  docRole: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 12, color: AppColors.primary },
-  docHospital: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: AppColors.onSurfaceVariant },
-
-  detailsCard: {
-    backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 20, padding: 18, gap: 2,
-    shadowColor: AppColors.onSurface, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 2,
-  },
-  cardLabel: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: AppColors.onSurfaceVariant, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   detailRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: `${AppColors.outlineVariant}15`,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: AppColors.border,
   },
-  detailIconWrap: {
-    width: 30, height: 30, borderRadius: 10,
-    backgroundColor: `${AppColors.primary}10`, alignItems: 'center', justifyContent: 'center',
-  },
-  detailLabel: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: AppColors.onSurfaceVariant, flex: 1 },
-  detailValue: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: AppColors.onSurface, textAlign: 'right', maxWidth: '55%' },
+  detailLabel: { width: 72, lineHeight: 20 },
+  detailValue: { ...typography.title, lineHeight: 20, flex: 1, textAlign: 'right' },
 
-  issueCard: {
-    backgroundColor: `${AppColors.primary}08`, borderRadius: 16, padding: 16, gap: 8,
-    borderWidth: 1, borderColor: `${AppColors.primary}15`,
-  },
-  issueTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  issueTitleText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: AppColors.primary },
-  issueBody: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 13, color: AppColors.onSurface, lineHeight: 20 },
-
-  policyNote: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: 10,
-    backgroundColor: `${AppColors.primary}08`, borderRadius: 12, padding: 14,
-  },
-  policyText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 12, color: AppColors.onSurfaceVariant, lineHeight: 18, flex: 1 },
+  policyNote: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 },
 
   bottomBar: {
-    paddingHorizontal: 20, paddingTop: 12,
-    backgroundColor: 'rgba(255,255,255,0.95)',
-    borderTopWidth: 1, borderTopColor: `${AppColors.outlineVariant}15`,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    backgroundColor: AppColors.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: AppColors.border,
   },
-  payBtn: { borderRadius: 999, overflow: 'hidden' },
-  payBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 16 },
-  payBtnText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: AppColors.onPrimary },
 
-  successScreen: { alignItems: 'center', justifyContent: 'flex-start', padding: 32, gap: 16 },
-  successIcon: { borderRadius: 999, overflow: 'hidden' },
-  successIconGrad: { width: 96, height: 96, borderRadius: 48, alignItems: 'center', justifyContent: 'center' },
-  successTitle: { fontFamily: 'PlusJakartaSans_800ExtraBold', fontSize: 26, color: AppColors.onSurface, textAlign: 'center', letterSpacing: -0.5 },
-  successSub: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 15, color: AppColors.onSurfaceVariant, textAlign: 'center', lineHeight: 22 },
-  successCard: {
-    width: '100%', backgroundColor: 'rgba(255,255,255,0.9)', borderRadius: 20, padding: 20, gap: 4, marginTop: 8,
-    shadowColor: AppColors.onSurface, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
-  },
-  successRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 9,
-    borderBottomWidth: 1, borderBottomColor: `${AppColors.outlineVariant}15`,
-  },
-  successRowLabel: { fontFamily: 'PlusJakartaSans_500Medium', fontSize: 13, color: AppColors.onSurfaceVariant, flex: 1 },
-  successRowValue: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 13, color: AppColors.onSurface, textAlign: 'right', flex: 2 },
-
-  doneBtn: { width: '100%', borderRadius: 999, overflow: 'hidden', marginTop: 16 },
-  doneBtnGrad: { paddingVertical: 16, alignItems: 'center' },
-  doneBtnText: { fontFamily: 'PlusJakartaSans_700Bold', fontSize: 16, color: AppColors.onPrimary },
+  successScreen: { paddingHorizontal: 20, justifyContent: 'space-between' },
+  successBody: { alignItems: 'center', gap: 12, paddingTop: 48 },
+  centerText: { textAlign: 'center' },
 });

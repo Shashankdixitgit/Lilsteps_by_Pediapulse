@@ -1,80 +1,69 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Card, PressableFeedback } from 'heroui-native';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { AppColors } from '@/constants/theme';
+import { PressableScale } from '@/components/ui/PressableScale';
+import { StatusPill, StatusTone } from '@/components/ui/StatusPill';
+import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 
 interface VaccinationCardProps {
   nextVaccine: string;
   nextDate: string;
   onViewSchedule?: () => void;
+  /** Optional status for the pill; derived from the label when omitted. */
+  status?: 'overdue' | 'upcoming' | 'done';
 }
 
-export function VaccinationCard({ nextVaccine, nextDate, onViewSchedule }: VaccinationCardProps) {
+export function VaccinationCard({ nextVaccine, nextDate, onViewSchedule, status }: VaccinationCardProps) {
+  const derived = status ?? (nextVaccine.startsWith('Overdue') ? 'overdue' : nextVaccine.startsWith('All caught up') ? 'done' : 'upcoming');
+  const pill: { tone: StatusTone; label: string } =
+    derived === 'overdue'
+      ? { tone: 'danger', label: 'Overdue' }
+      : derived === 'done'
+        ? { tone: 'success', label: 'All caught up' }
+        : { tone: 'warning', label: `Next: ${nextDate}` };
+  const name = derived === 'overdue' ? nextVaccine.replace(/^Overdue:\s*/, '') : nextVaccine;
+
   return (
-    <PressableFeedback onPress={onViewSchedule}>
-      <Card style={styles.card} className="p-0 border-0 shadow-none">
-        <Card.Body style={styles.content}>
-          <View style={styles.iconContainer}>
-            <LinearGradient
-              colors={[`${AppColors.primary}20`, `${AppColors.primaryContainer}40`]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.iconGradient}
-            >
-              <View style={styles.iconInner}>
-                <Ionicons name="calendar" size={18} color={AppColors.primary} />
-              </View>
-            </LinearGradient>
-          </View>
-          
-          <View style={styles.textContainer}>
-            <View style={styles.labelRow}>
-              <Text style={styles.label}>UPCOMING</Text>
-              <View style={styles.dateBadge}>
-                <Text style={styles.dateText}>{nextDate}</Text>
-              </View>
-            </View>
-            <Text style={styles.vaccineName} numberOfLines={1}>{nextVaccine}</Text>
-          </View>
-          
-          <View style={styles.actionContainer}>
-            <View style={styles.arrowCircle}>
-              <Ionicons name="arrow-forward" size={14} color={AppColors.primary} />
-            </View>
-          </View>
-        </Card.Body>
-      </Card>
-    </PressableFeedback>
+    <PressableScale
+      onPress={onViewSchedule}
+      accessibilityLabel={`Vaccines. ${pill.label}. ${name}. View schedule`}
+      bg={AppColors.card}
+      bgPressed={AppColors.surfaceContainerLow}
+      style={styles.card}
+    >
+      <View style={styles.iconWell}>
+        <Ionicons name="shield-checkmark" size={18} color={AppColors.secondary} />
+      </View>
+
+      <View style={styles.textContainer}>
+        <StatusPill dot tone={pill.tone} label={pill.label} />
+        <Text style={styles.vaccineName} numberOfLines={1}>
+          {derived === 'done' ? 'Lovely work, nothing due right now' : name}
+        </Text>
+      </View>
+
+      <Ionicons name="chevron-forward" size={16} color={AppColors.outline} />
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  content: {
-    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 12,
+    padding: 16,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
   },
-  iconContainer: {
-    flexShrink: 0,
-  },
-  iconGradient: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    padding: 3,
-  },
-  iconInner: {
-    flex: 1,
-    backgroundColor: AppColors.surfaceContainerLowest,
-    borderRadius: 11,
+  iconWell: {
+    width: Size.iconWell,
+    height: Size.iconWell,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    backgroundColor: AppColors.mintSurface,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -82,43 +71,11 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 4,
   },
-  labelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  label: {
-    fontFamily: 'PlusJakartaSans_700Bold',
-    fontSize: 9,
-    color: AppColors.primary,
-    letterSpacing: 1,
-  },
-  dateBadge: {
-    backgroundColor: `${AppColors.primary}12`,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  dateText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 10,
-    color: AppColors.primary,
-  },
   vaccineName: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    lineHeight: 22,
     color: AppColors.onSurface,
-    letterSpacing: -0.2,
-  },
-  actionContainer: {
-    flexShrink: 0,
-  },
-  arrowCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: `${AppColors.primaryContainer}35`,
-    alignItems: 'center',
-    justifyContent: 'center',
+    letterSpacing: -0.1,
   },
 });

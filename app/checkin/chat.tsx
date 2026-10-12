@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -6,7 +5,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -19,7 +17,10 @@ import { AiMessage } from '@/components/checkin/AiMessage';
 import { CHECKIN_HEADER_HEIGHT, CheckinHeader } from '@/components/checkin/CheckinHeader';
 import { TypingIndicator } from '@/components/checkin/TypingIndicator';
 import { UserMessage } from '@/components/checkin/UserMessage';
-import { AppColors } from '@/constants/theme';
+import { ChatComposer } from '@/components/chat/ChatComposer';
+import { GradientButton } from '@/components/gradient-button';
+import { AppColors, CanvasFade } from '@/constants/theme';
+import { typography } from '@/styles/global';
 import { useChild } from '@/context/child';
 import { useCheckin } from '@/hooks/useCheckin';
 
@@ -101,9 +102,7 @@ export default function CheckinChatScreen() {
           scrollEventThrottle={16}
           removeClippedSubviews={Platform.OS === 'android'}
         >
-          <View style={styles.sessionHeader}>
-            <Text style={styles.sessionLabel}>Health check-in for {childName}</Text>
-          </View>
+          <Text style={[typography.caption, styles.sessionLabel]}>Health check-in for {childName}</Text>
 
           {checkin.messages.map((msg, index) => {
             const isLastAi = msg.role === 'ai' && index === checkin.messages.length - 1;
@@ -121,41 +120,21 @@ export default function CheckinChatScreen() {
 
           {checkin.loading && <TypingIndicator />}
 
-          {checkin.error && (
-            <View style={styles.errorRow}>
-              <Text style={styles.errorText}>{checkin.error}</Text>
-            </View>
-          )}
+          {checkin.error && <Text style={[typography.bodySM, styles.errorText]}>{checkin.error}</Text>}
 
           {checkin.aiReady && !generatingSummary && (
             <View style={styles.summarySection}>
-              <View style={styles.summaryCard}>
-                <Ionicons name="checkmark-circle" size={20} color={AppColors.successGreen} />
-                <Text style={styles.summaryText}>
-                  Ready to generate {childName}&apos;s pre-visit summary
-                </Text>
-              </View>
-              <Pressable
-                style={({ pressed }) => [styles.summaryBtn, { opacity: pressed ? 0.9 : 1 }]}
-                onPress={handleGenerateSummary}
-              >
-                <LinearGradient
-                  colors={[AppColors.primary, AppColors.gradientEnd]}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.summaryBtnGrad}
-                >
-                  <Text style={styles.summaryBtnText}>Generate Summary</Text>
-                  <Ionicons name="arrow-forward" size={18} color={AppColors.onPrimary} />
-                </LinearGradient>
-              </Pressable>
+              <Text style={[typography.bodySM, styles.centerText]}>
+                Ready to make {childName}&apos;s pre-visit summary.
+              </Text>
+              <GradientButton label="Generate summary" onPress={handleGenerateSummary} />
             </View>
           )}
 
           {generatingSummary && (
             <View style={styles.loadingRow}>
               <ActivityIndicator size="small" color={AppColors.primary} />
-              <Text style={styles.loadingText}>Generating summary…</Text>
+              <Text style={typography.meta}>Generating summary…</Text>
             </View>
           )}
         </ScrollView>
@@ -164,9 +143,9 @@ export default function CheckinChatScreen() {
           <View style={styles.inputWrapper} pointerEvents="box-none">
             <LinearGradient
               colors={[
-                `${AppColors.surface}00`,
-                `${AppColors.surface}40`,
-                `${AppColors.surface}B0`,
+                CanvasFade.a0,
+                CanvasFade.a25,
+                CanvasFade.a69,
                 AppColors.surface,
               ]}
               locations={[0, 0.25, 0.5, 0.7]}
@@ -176,32 +155,15 @@ export default function CheckinChatScreen() {
               pointerEvents="none"
             />
             <View style={[styles.inputBar, { paddingBottom: Math.max(insets.bottom, 12) }]}>
-              <View style={styles.inputContainer}>
-                <TextInput
-                  ref={inputRef}
-                  style={styles.textInput}
-                  placeholder="Message"
-                  placeholderTextColor={AppColors.outlineVariant}
-                  value={inputText}
-                  onChangeText={setInputText}
-                  onSubmitEditing={() => sendReply()}
-                  returnKeyType="send"
-                  blurOnSubmit={false}
-                  editable={!checkin.loading}
-                  multiline
-                />
-                <Pressable
-                  style={[styles.sendBtn, (!inputText.trim() || checkin.loading) && styles.sendBtnDisabled]}
-                  onPress={() => sendReply()}
-                  disabled={!inputText.trim() || checkin.loading}
-                >
-                  <Ionicons
-                    name="arrow-up"
-                    size={18}
-                    color={inputText.trim() && !checkin.loading ? AppColors.onPrimary : AppColors.outlineVariant}
-                  />
-                </Pressable>
-              </View>
+              <ChatComposer
+                inputRef={inputRef}
+                value={inputText}
+                onChangeText={setInputText}
+                onSend={() => sendReply()}
+                sendDisabled={!inputText.trim() || checkin.loading}
+                editable={!checkin.loading}
+                submitOnEnter
+              />
             </View>
           </View>
         )}
@@ -215,55 +177,15 @@ const styles = StyleSheet.create({
   keyboardView: { flex: 1 },
   scroll: { paddingHorizontal: 16, paddingTop: 8 },
 
-  sessionHeader: { paddingVertical: 12, marginBottom: 8 },
-  sessionLabel: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 13,
-    color: AppColors.onSurfaceVariant,
-    textAlign: 'center',
-  },
+  sessionLabel: { textAlign: 'center', paddingVertical: 12, marginBottom: 8 },
 
-  errorRow: { paddingVertical: 8, paddingHorizontal: 40 },
-  errorText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: AppColors.errorRed },
+  errorText: { color: AppColors.danger, paddingVertical: 8, paddingLeft: 44 },
 
-  summarySection: { marginTop: 12, gap: 16 },
-  summaryCard: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 40 },
-  summaryText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: AppColors.onSurfaceVariant, flex: 1 },
-  summaryBtn: { borderRadius: 999, overflow: 'hidden' },
-  summaryBtnGrad: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14 },
-  summaryBtnText: { fontFamily: 'PlusJakartaSans_600SemiBold', fontSize: 16, color: AppColors.onPrimary },
+  summarySection: { marginTop: 8, gap: 12 },
+  centerText: { textAlign: 'center' },
 
-  loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 20 },
-  loadingText: { fontFamily: 'PlusJakartaSans_400Regular', fontSize: 14, color: AppColors.onSurfaceVariant },
+  loadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 16 },
 
   inputWrapper: { position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10 },
   inputBar: { paddingHorizontal: 16, paddingTop: 12 },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    backgroundColor: AppColors.surfaceContainerLow,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: `${AppColors.outlineVariant}20`,
-    paddingLeft: 16,
-    paddingRight: 5,
-    paddingVertical: 5,
-  },
-  textInput: {
-    flex: 1,
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 16,
-    color: AppColors.onSurface,
-    paddingVertical: 8,
-    maxHeight: 120,
-  },
-  sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: AppColors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sendBtnDisabled: { backgroundColor: `${AppColors.outlineVariant}30` },
 });

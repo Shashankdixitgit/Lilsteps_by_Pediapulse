@@ -5,7 +5,10 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { GradientBackground } from '@/components/gradient-background';
 import { GradientButton } from '@/components/gradient-button';
-import { AppColors } from '@/constants/theme';
+import { Sprout, type SproutMood } from '@/components/mascot/Sprout';
+import { HeaderIconButton } from '@/components/ScreenHeader';
+import { AnimatedProgress } from '@/components/ui/AnimatedProgress';
+import { AppColors, FontFamily } from '@/constants/theme';
 import { typography } from '@/styles/global';
 
 interface OnboardingShellProps {
@@ -17,6 +20,8 @@ interface OnboardingShellProps {
   subLink?: { label: string; onPress: () => void };
   footerExtra?: React.ReactNode;
   onBack?: () => void;
+  /** Optional static Sprout mood shown beside the title (topic intros). */
+  sprout?: SproutMood;
   children: React.ReactNode;
 }
 
@@ -29,6 +34,7 @@ export function OnboardingShell({
   subLink,
   footerExtra,
   onBack,
+  sprout,
   children,
 }: OnboardingShellProps) {
   const insets = useSafeAreaInsets();
@@ -40,11 +46,15 @@ export function OnboardingShell({
       <View style={[styles.inner, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 12 }]}>
         {/* Header */}
         <View style={styles.header}>
-          <Pressable onPress={onBack ?? (() => router.back())} style={styles.backButton}>
-            <Text style={styles.backArrow}>{'\u2190'}</Text>
-          </Pressable>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${Math.round(progress * 100)}%` }]} />
+          <HeaderIconButton icon="arrow-back" onPress={onBack ?? (() => router.back())} accessibilityLabel="Go back" />
+          <View style={styles.progressWrap}>
+            <AnimatedProgress
+              value={progress}
+              animateFrom={Math.max(0, progress - 0.1)}
+              fillColor={AppColors.primary}
+              thumb
+              accessibilityLabel="Profile setup progress"
+            />
           </View>
         </View>
 
@@ -56,8 +66,11 @@ export function OnboardingShell({
           keyboardShouldPersistTaps="handled"
         >
           <Animated.View entering={FadeInUp.duration(400)}>
-            <Text style={typography.headingLG}>{title}</Text>
-            {subtitle && <Text style={[typography.bodySM, styles.subtitle]}>{subtitle}</Text>}
+            <View style={styles.titleRow}>
+              <Text style={[typography.heading, styles.title]}>{title}</Text>
+              {sprout ? <Sprout mood={sprout} size={48} /> : null}
+            </View>
+            {subtitle ? <Text style={[typography.bodySM, styles.subtitle]} numberOfLines={2}>{subtitle}</Text> : null}
           </Animated.View>
 
           <View style={styles.content}>{children}</View>
@@ -65,12 +78,12 @@ export function OnboardingShell({
 
         {/* Footer */}
         <View style={styles.footer}>
-          <GradientButton label={ctaLabel} onPress={onCta} />
-          {subLink && (
-            <Pressable onPress={subLink.onPress} style={styles.subLinkButton}>
+          <GradientButton label={ctaLabel} onPress={onCta} size="md" />
+          {subLink ? (
+            <Pressable onPress={subLink.onPress} style={styles.subLinkButton} accessibilityRole="button">
               <Text style={styles.subLinkText}>{subLink.label}</Text>
             </Pressable>
-          )}
+          ) : null}
           {footerExtra}
         </View>
       </View>
@@ -85,40 +98,17 @@ const styles = StyleSheet.create({
   },
   inner: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginBottom: 20,
+    gap: 8,
+    marginLeft: -8,
+    marginBottom: 16,
   },
-  backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: `${AppColors.surfaceContainerLowest}B3`,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: `${AppColors.outlineVariant}26`,
-  },
-  backArrow: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 18,
-    color: AppColors.onSurface,
-  },
-  progressTrack: {
+  progressWrap: {
     flex: 1,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: `${AppColors.outlineVariant}33`,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
-    backgroundColor: AppColors.primary,
   },
   scroll: {
     flex: 1,
@@ -128,7 +118,15 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   subtitle: {
-    marginTop: 6,
+    marginTop: 4,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+  },
+  title: {
+    flex: 1,
   },
   content: {
     marginTop: 24,
@@ -140,11 +138,13 @@ const styles = StyleSheet.create({
   },
   subLinkButton: {
     alignSelf: 'center',
-    paddingVertical: 4,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
   },
   subLinkText: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 14,
-    color: AppColors.primary,
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    color: AppColors.secondary,
   },
 });

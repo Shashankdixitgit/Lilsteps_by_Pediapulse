@@ -1,30 +1,40 @@
-import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import Animated, { FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AllergyBanner } from '@/components/home/AllergyBanner';
 import { CareTeam, type CareProvider } from '@/components/home/CareTeam';
 import { GrowthCards } from '@/components/home/GrowthCards';
-import { DailyInsight } from '@/components/home/DailyInsight';
 import { HomeHeader } from '@/components/home/HomeHeader';
 import { PrimaryCtaCard } from '@/components/home/PrimaryCtaCard';
-import { QuickActions } from '@/components/home/QuickActions';
 import { VaccinationCard } from '@/components/home/VaccinationCard';
 import { AppointmentCard } from '@/components/consult/AppointmentCard';
+import { TextButton } from '@/components/gradient-button';
 import { BRACKET_CONFIG } from '@/constants/bracketConfig';
-import { AppColors } from '@/constants/theme';
+import { AppColors, Motion } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useVaccinations } from '@/hooks/useVaccinations';
 import { useDoctors } from '@/hooks/useDoctors';
 import { useConversations } from '@/hooks/useConversations';
 import { useAppointments } from '@/hooks/useAppointments';
+import { typography } from '@/styles/global';
 
 function getGreeting(): string {
   const h = new Date().getHours();
   if (h < 12) return 'Good morning';
   if (h < 17) return 'Good afternoon';
   return 'Good evening';
+}
+
+/** Section title (h2) with an optional ghost link on the right. */
+function SectionHeader({ title, linkLabel, onLink }: { title: string; linkLabel?: string; onLink?: () => void }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={typography.headingSM}>{title}</Text>
+      {linkLabel && onLink ? <TextButton label={linkLabel} onPress={onLink} chevron style={styles.sectionLink} /> : null}
+    </View>
+  );
 }
 
 export default function HomeScreen() {
@@ -69,60 +79,45 @@ export default function HomeScreen() {
     id: doc.id,
     name: doc.name,
     role: doc.specialisation,
-    initial: doc.name.charAt(0),
+    // Last-name initial ("Dr. Emily Chen" -> "C"), like the consult screens.
+    initial: doc.name.trim().split(' ').slice(-1)[0]?.charAt(0) ?? doc.name.charAt(0),
   }));
-
-  const headerHeight = insets.top + 56;
 
   return (
     <View style={styles.screen}>
       <ScrollView
         contentContainerStyle={[
-          styles.scroll, 
-          { 
-            paddingTop: headerHeight,
-            paddingBottom: 100 + insets.bottom 
-          }
+          styles.scroll,
+          { paddingTop: insets.top + 64, paddingBottom: 100 + insets.bottom },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={styles.section}>
-          <Text style={styles.greetingTop}>
-            {getGreeting()}, {parentName || 'there'}.
+        <Animated.View entering={FadeInUp.duration(Motion.enter)} style={styles.greeting}>
+          <Text style={typography.heading} numberOfLines={1}>
+            Here&apos;s {childName}&apos;s day
           </Text>
-          <Text style={styles.greetingItalic}>
-            {childName} <Text style={styles.greetingItalicSoft}>is thriving today.</Text>
+          <Text style={typography.meta} numberOfLines={1}>
+            {parentName ? `${getGreeting()}, ${parentName}` : getGreeting()}
           </Text>
-          <Text style={styles.greetingSub}>
-            {bracketCfg.greetingSubtext(childName)}
-          </Text>
-        </View>
+        </Animated.View>
 
-        <QuickActions
-          onBook={() => router.push('/consult/booking')}
-          onGrowth={() => router.navigate('/(tabs)/growth')}
-          onVaccines={() => router.navigate('/(tabs)/vaccine')}
-          onRecords={() => router.navigate('/(tabs)/records')}
-        />
-
-        {allergies.length > 0 && (
-          <AllergyBanner allergies={allergies} />
-        )}
+        {allergies.length > 0 ? <AllergyBanner allergies={allergies} /> : null}
 
         <PrimaryCtaCard
           title={bracketCfg.ctaTitle}
           subtitle="Log symptoms or daily wellness"
           onPress={() => router.push('/checkin')}
+          secondaryLabel="Book a doctor"
+          onSecondary={() => router.push('/consult/booking')}
         />
 
-        {nextTwo.length > 0 && (
-          <View style={styles.upcomingBlock}>
-            <View style={styles.upcomingHeader}>
-              <Text style={styles.sectionTitle}>Upcoming consultations</Text>
-              <Pressable onPress={() => router.navigate('/(tabs)/consult')}>
-                <Text style={styles.seeAll}>See all →</Text>
-              </Pressable>
-            </View>
+        {nextTwo.length > 0 ? (
+          <View style={styles.section}>
+            <SectionHeader
+              title="Upcoming consultations"
+              linkLabel="See all"
+              onLink={() => router.navigate('/(tabs)/consult')}
+            />
             {nextTwo.map((a) => (
               <AppointmentCard
                 key={a.id}
@@ -138,23 +133,28 @@ export default function HomeScreen() {
               />
             ))}
           </View>
-        )}
+        ) : null}
 
-        <GrowthCards data={{ weight: child?.weight ?? 0, height: child?.height ?? 0 }} />
+        <View style={styles.section}>
+          <SectionHeader title="Growth" linkLabel="See chart" onLink={() => router.navigate('/(tabs)/growth')} />
+          <GrowthCards data={{ weight: child?.weight ?? 0, height: child?.height ?? 0 }} />
+        </View>
 
-        <VaccinationCard
-          nextVaccine={vaccineLabel}
-          nextDate={vaccineDate}
-          onViewSchedule={() => router.navigate('/(tabs)/vaccine')}
-        />
+        <View style={styles.section}>
+          <SectionHeader title="Vaccines" />
+          <VaccinationCard
+            nextVaccine={vaccineLabel}
+            nextDate={vaccineDate}
+            status={overdueVaccine ? 'overdue' : upcomingVaccine ? 'upcoming' : 'done'}
+            onViewSchedule={() => router.navigate('/(tabs)/vaccine')}
+          />
+        </View>
 
         <CareTeam
           providers={careProviders}
-          onAddProvider={() => router.push('/consult/booking')}
+          onAddProvider={careProviders.length === 0 ? () => router.push('/consult/booking') : undefined}
           onProviderPress={handleProviderPress}
         />
-
-        <DailyInsight bracket={bracketKey} />
       </ScrollView>
 
       <HomeHeader
@@ -174,56 +174,23 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.surface,
   },
   scroll: {
-    paddingHorizontal: 24,
-    gap: 28,
-    paddingTop: 12,
+    paddingHorizontal: 20,
+    gap: 24,
+  },
+  greeting: {
+    gap: 4,
   },
   section: {
-    gap: 6,
+    gap: 8,
   },
-  upcomingBlock: {
-    gap: 12,
-  },
-  upcomingHeader: {
+  sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 32,
   },
-  sectionTitle: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 18,
-    color: AppColors.onSurface,
-    letterSpacing: -0.3,
-  },
-  seeAll: {
-    fontFamily: 'PlusJakartaSans_600SemiBold',
-    fontSize: 13,
-    color: AppColors.primary,
-  },
-  greetingTop: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    fontSize: 13,
-    letterSpacing: 1.6,
-    textTransform: 'uppercase',
-    color: AppColors.onSurfaceVariant,
-    marginBottom: 6,
-  },
-  greetingItalic: {
-    fontFamily: 'PlusJakartaSans_800ExtraBold',
-    fontSize: 36,
-    color: AppColors.onSurface,
-    letterSpacing: -1,
-    lineHeight: 42,
-  },
-  greetingItalicSoft: {
-    fontFamily: 'PlusJakartaSans_500Medium',
-    color: AppColors.primary,
-  },
-  greetingSub: {
-    fontFamily: 'PlusJakartaSans_400Regular',
-    fontSize: 15,
-    color: AppColors.onSurfaceVariant,
-    lineHeight: 22,
-    marginTop: 4,
+  sectionLink: {
+    minHeight: 32,
+    paddingVertical: 0,
   },
 });
