@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { GrowthChart, valueForTab } from '@/components/growth/GrowthChart';
@@ -12,6 +12,7 @@ import { TabScreenLayout } from '@/components/TabScreenLayout';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useGrowth, type GrowthRow } from '@/hooks/useGrowth';
+import { formatDate, parseDateOnly, toDateOnlyString } from '@/lib/date';
 import { typography } from '@/styles/global';
 
 function bmiOf(m: GrowthRow): number | null {
@@ -22,7 +23,7 @@ function bmiOf(m: GrowthRow): number | null {
 }
 
 export default function GrowthScreen() {
-  const [chartTab, setChartTab] = useState<ChartTab>('weight');
+  const [selectedTab, setChartTab] = useState<ChartTab>('weight');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('All');
   const [showSheet, setShowSheet] = useState(false);
   const [chartWidth, setChartWidth] = useState(0);
@@ -44,7 +45,8 @@ export default function GrowthScreen() {
       weight: child.weight,
       height: child.height,
       note: null,
-      measured_at: stamp.slice(0, 10),
+      // Local calendar day of the stamp (slicing the UTC string can give yesterday in IST).
+      measured_at: toDateOnlyString(new Date(stamp)),
       created_at: stamp,
     };
     return [synthetic];
@@ -53,38 +55,37 @@ export default function GrowthScreen() {
   const isNewborn = ['NEWBORN', 'EARLY_INFANT'].includes(bracket ?? '');
   const showBMI = !['NEWBORN', 'EARLY_INFANT', 'INFANT', 'TODDLER_EARLY'].includes(bracket ?? '');
 
-  useEffect(() => {
-    if (chartTab === 'bmi' && !showBMI) setChartTab('weight');
-  }, [chartTab, showBMI]);
+  // No BMI tab for infants: fall back to weight without an extra render.
+  const chartTab: ChartTab = selectedTab === 'bmi' && !showBMI ? 'weight' : selectedTab;
 
   const latest = measurements[0];
   const latestBmi = latest ? bmiOf(latest) : null;
   const childName = child?.name ?? 'Child';
-  const dob = child ? new Date(child.dob) : new Date();
-  const latestDateStr = latest
-    ? new Date(latest.measured_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-    : null;
+  // DOB / measured_at are 'YYYY-MM-DD': read them as local dates, never UTC.
+  const dob = useMemo(() => (child ? parseDateOnly(child.dob) : new Date()), [child]);
+  const latestDateStr = latest ? formatDate(latest.measured_at) : null;
   const fmt = (v: number | null | undefined) => (v == null ? '—' : Number(v).toFixed(1));
 
   // BMI-for-age band from the WHO reference, replacing the old fixed "Healthy range" text.
   const bmiStatus = useMemo(() => {
-    if (latestBmi == null || !child) return null;
-    const p = computePercentile(latestBmi, monthsBetween(new Date(child.dob), new Date(latest!.measured_at)), 'bmi');
+    // Infants have no BMI card, so no BMI caption either.
+    if (!showBMI || latestBmi == null || !child) return null;
+    const p = computePercentile(latestBmi, monthsBetween(dob, parseDateOnly(latest!.measured_at)), 'bmi');
     if (p < 5) return { text: 'below the typical range', color: AppColors.warning };
     if (p < 85) return { text: 'in the typical range', color: AppColors.successGreen };
     if (p < 95) return { text: 'a little above the typical range', color: AppColors.warning };
     return { text: 'above the typical range', color: AppColors.danger };
-  }, [latestBmi, child, latest]);
+  }, [showBMI, latestBmi, child, latest, dob]);
 
   const percentileText = useMemo(() => {
     if (!latest) return `Log a measurement to see ${childName}'s percentile`;
     const latestVal = valueForTab(latest, chartTab);
     if (latestVal == null) return `Log ${chartTab === 'bmi' ? 'weight and height' : chartTab} to see the percentile`;
-    const ageAtMeas = monthsBetween(new Date(child!.dob), new Date(latest.measured_at));
+    const ageAtMeas = monthsBetween(dob, parseDateOnly(latest.measured_at));
     const p = Math.round(computePercentile(latestVal, ageAtMeas, chartTab));
     const label = chartTab === 'bmi' ? 'BMI' : chartTab;
     return `${childName} is at the ${ordinal(p)} percentile for ${label}`;
-  }, [latest, chartTab, child, childName]);
+  }, [latest, chartTab, dob, childName]);
 
   async function handleSaveMeasurement(data: { weight?: number; height?: number; note?: string }) {
     try {
@@ -152,7 +153,7 @@ export default function GrowthScreen() {
             <Text style={styles.metricsNote}>
               Last measured {latestDateStr}
               {isNewborn ? ' · length measured lying down' : ''}
-              {bmiStatus ? ` · BMI is ${bmiStatus.text} for ${childName}'s age` : ''}
+              {showBMI && bmiStatus ? ` · BMI is ${bmiStatus.text} for ${childName}'s age` : ''}
             </Text>
           ) : null}
         </View>

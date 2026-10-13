@@ -1,22 +1,23 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
+import { fromChips, toChips } from '@/components/onboarding/chips';
 import { AppColors } from '@/constants/theme';
+import { useOnboarding } from '@/context/onboarding';
 
 const FEEDING = ['Breastfed', 'Formula', 'Both', 'Solid foods started'];
 const DIFFICULTIES = ['Reflux', 'Poor latch', 'Slow weight gain', 'None'];
 
 export default function FeedingScreen() {
-  const [feeding, setFeeding] = useState<string[]>([]);
-  const [difficulties, setDifficulties] = useState<string[]>([]);
+  const { aFeeding: answers, updateSection } = useOnboarding();
+  const set = (patch: Partial<typeof answers>) => updateSection('aFeeding', patch);
 
   return (
     <OnboardingShell
+      screen="a-feeding"
       sprout="happy"
-      progress={0.68}
       title="Feeding"
       subtitle="Helps us understand nutrition"
       ctaLabel="Continue"
@@ -24,15 +25,19 @@ export default function FeedingScreen() {
     >
       <View>
         <Text style={styles.fieldLabel}>Current feeding</Text>
-        <ChipGroup options={FEEDING} selected={feeding} onChange={setFeeding} />
+        <ChipGroup
+          options={FEEDING}
+          selected={toChips(answers.feeding)}
+          onChange={(v) => set({ feeding: fromChips(v) })}
+        />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Any feeding difficulties?</Text>
         <ChipGroup
           options={DIFFICULTIES}
-          selected={difficulties}
-          onChange={setDifficulties}
+          selected={answers.difficulties}
+          onChange={(difficulties) => set({ difficulties })}
           multiSelect
           noneValue="None"
         />

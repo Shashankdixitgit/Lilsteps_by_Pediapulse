@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { todayDateOnly } from '@/lib/date';
 
 export interface VaccinationRow {
   id: string;
@@ -56,7 +57,7 @@ export function useVaccinations(childId: string | null) {
       .from('vaccinations')
       .update({
         status: 'done',
-        administered_date: administeredDate ?? new Date().toISOString().split('T')[0],
+        administered_date: administeredDate ?? todayDateOnly(),
       })
       .eq('id', vaccinationId);
 

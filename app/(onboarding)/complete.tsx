@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 
@@ -11,8 +11,10 @@ import { layout, typography } from '@/styles/global';
 import { useOnboarding } from '@/context/onboarding';
 
 export default function CompleteScreen() {
-  const { childName } = useOnboarding();
-  const displayName = childName || 'Your child';
+  const { childName, reset } = useOnboarding();
+  // Keep the name for this screen: the onboarding answers are cleared on
+  // "Go to home" so the next "Add child" starts empty.
+  const [displayName] = useState(() => childName.trim() || 'Your child');
   const celebrateRef = useRef<CelebrateHandle>(null);
 
   // One confetti burst on arrival (skipped under reduced motion inside Celebrate).
@@ -20,6 +22,11 @@ export default function CompleteScreen() {
     const t = setTimeout(() => celebrateRef.current?.fire({ title: "You're all set", big: true, card: false }), 350);
     return () => clearTimeout(t);
   }, []);
+
+  function goHome() {
+    router.replace('/(tabs)');
+    reset();
+  }
 
   return (
     <View style={layout.screenContainer}>
@@ -37,7 +44,7 @@ export default function CompleteScreen() {
         </Animated.View>
 
         <Animated.View entering={FadeInUp.delay(600).duration(600)} style={styles.footer}>
-          <GradientButton label="Go to home" onPress={() => router.replace('/(tabs)')} />
+          <GradientButton label="Go to home" onPress={goHome} />
         </Animated.View>
       </View>
 

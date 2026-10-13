@@ -15,9 +15,9 @@ import { BRACKET_CONFIG } from '@/constants/bracketConfig';
 import { AppColors, Motion } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useVaccinations } from '@/hooks/useVaccinations';
-import { useDoctors } from '@/hooks/useDoctors';
 import { useConversations } from '@/hooks/useConversations';
 import { useAppointments } from '@/hooks/useAppointments';
+import { formatDate } from '@/lib/date';
 import { typography } from '@/styles/global';
 
 function getGreeting(): string {
@@ -41,9 +41,8 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { child, parentName, bracket } = useChild();
   const { vaccinations } = useVaccinations(child?.id ?? null);
-  const { doctors } = useDoctors();
   const { startConversation } = useConversations(child?.id ?? null);
-  const { upcoming, cancelAppointment } = useAppointments(child?.id ?? null);
+  const { appointments, upcoming, cancelAppointment } = useAppointments(child?.id ?? null);
   const nextTwo = upcoming.slice(0, 2);
 
   async function handleProviderPress(doctorId: string) {
@@ -71,17 +70,27 @@ export default function HomeScreen() {
   const vaccineLabel = overdueVaccine
     ? `Overdue: ${overdueVaccine.vaccine_name}`
     : upcomingVaccine?.vaccine_name ?? 'All caught up!';
-  const vaccineDate = vaccineToShow?.scheduled_date
-    ? new Date(vaccineToShow.scheduled_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : '—';
+  const vaccineDate = formatDate(vaccineToShow?.scheduled_date) || '—';
 
-  const careProviders: CareProvider[] = doctors.slice(0, 3).map((doc) => ({
-    id: doc.id,
-    name: doc.name,
-    role: doc.specialisation,
+  // Care team = doctors this child actually has (non-cancelled) appointments
+  // with, most recent first. No appointments → no section (we never suggest
+  // a doctor the family hasn't chosen).
+  const careProviders: CareProvider[] = [];
+  const seenDoctors = new Set<string>();
+  for (const a of [...appointments].reverse()) {
+    if (a.status === 'cancelled' || !a.doctors || seenDoctors.has(a.doctor_id)) continue;
+    seenDoctors.add(a.doctor_id);
+    const name = a.doctors.name;
     // Last-name initial ("Dr. Emily Chen" -> "C"), like the consult screens.
-    initial: doc.name.trim().split(' ').slice(-1)[0]?.charAt(0) ?? doc.name.charAt(0),
-  }));
+    const lastWord = name.trim().split(' ').slice(-1)[0] ?? name;
+    careProviders.push({
+      id: a.doctor_id,
+      name,
+      role: a.doctors.specialisation,
+      initial: Array.from(lastWord)[0] ?? '',
+    });
+    if (careProviders.length === 3) break;
+  }
 
   return (
     <View style={styles.screen}>
@@ -150,16 +159,14 @@ export default function HomeScreen() {
           />
         </View>
 
-        <CareTeam
-          providers={careProviders}
-          onAddProvider={careProviders.length === 0 ? () => router.push('/consult/booking') : undefined}
-          onProviderPress={handleProviderPress}
-        />
+        {careProviders.length > 0 ? (
+          <CareTeam providers={careProviders} onProviderPress={handleProviderPress} />
+        ) : null}
       </ScrollView>
 
       <HomeHeader
         childName={childName}
-        avatarInitial={childName.charAt(0)}
+        avatarInitial={Array.from(childName)[0] ?? ''}
         hasUnread={false}
         paddingTop={insets.top}
         onNotifications={() => router.push('/profile')}

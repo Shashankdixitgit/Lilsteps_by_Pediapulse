@@ -16,12 +16,16 @@ export interface ChildRow {
   created_at: string;
 }
 
+export type AllergyType = 'food' | 'medication' | 'environmental';
+export type AllergySeverity = 'mild' | 'moderate' | 'severe' | 'unknown';
+
 export interface AllergyRow {
   id: string;
   child_id: string;
-  type: 'food' | 'medication' | 'environmental';
+  type: AllergyType;
   name: string;
-  severity: 'mild' | 'moderate' | 'severe';
+  /** 'unknown' when the parent was not asked (onboarding default, migration 0014). */
+  severity: AllergySeverity;
 }
 
 export interface ConditionRow {
@@ -104,7 +108,7 @@ export function useChildren() {
     blood_group?: string;
     weight?: number;
     height?: number;
-    allergies?: { type: 'food' | 'medication' | 'environmental'; name: string; severity?: string }[];
+    allergies?: { type: AllergyType; name: string; severity?: AllergySeverity }[];
     conditions?: { name: string; details?: string }[];
     medications?: { name: string; dosage?: string; frequency?: string }[];
   }) {
@@ -138,7 +142,7 @@ export function useChildren() {
             child_id: child.id,
             type: a.type,
             name: a.name,
-            severity: a.severity || 'mild',
+            severity: a.severity || 'unknown',
           }))
         )      );
     }

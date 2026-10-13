@@ -10,26 +10,13 @@ import { HeroCard } from '@/components/ui/HeroCard';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { StatusPill, type StatusTone } from '@/components/ui/StatusPill';
 import { Sticker } from '@/components/ui/Sticker';
+import { BRACKET_LABELS } from '@/constants/bracketConfig';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { HeaderChildAvatar } from '@/components/HeaderChildAvatar';
 import { useChild } from '@/context/child';
 import { useVaccinations, type VaccinationRow } from '@/hooks/useVaccinations';
+import { formatDate } from '@/lib/date';
 import { typography } from '@/styles/global';
-
-// Human-readable bracket label
-const BRACKET_LABEL: Record<string, string> = {
-  NEWBORN: 'Newborn (0–3 months)',
-  EARLY_INFANT: 'Early infant (3–6 months)',
-  INFANT: 'Infant (6–12 months)',
-  TODDLER_EARLY: 'Toddler early (12–18 months)',
-  TODDLER: 'Toddler (18 months – 3 years)',
-  PRESCHOOL: 'Preschool (3–5 years)',
-  SCHOOL_EARLY: 'School early (5–8 years)',
-  SCHOOL_MID: 'School mid (8–12 years)',
-  ADOLESCENT: 'Adolescent (12+ years)',
-};
-
-const SHORT_DATE: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
 
 export default function VaccineScreen() {
   const { bracket, child } = useChild();
@@ -38,7 +25,7 @@ export default function VaccineScreen() {
   // One-shot per session (no persistence; UI-only).
   const celebratedCaughtUp = useRef(false);
 
-  const bracketLabel = BRACKET_LABEL[bracket ?? ''] ?? bracket ?? '';
+  const bracketLabel = bracket ? BRACKET_LABELS[bracket] : '';
   const childName = child?.name ?? 'Your child';
 
   const doneCount = vaccinations.filter((v) => v.status === 'done').length;
@@ -57,7 +44,7 @@ export default function VaccineScreen() {
     nextDue
       ? `due now: ${nextDue.vaccine_name}`
       : nextUpcoming
-        ? `next: ${nextUpcoming.vaccine_name}, ${new Date(nextUpcoming.scheduled_date).toLocaleDateString('en-US', SHORT_DATE)}`
+        ? `next: ${nextUpcoming.vaccine_name}, ${formatDate(nextUpcoming.scheduled_date)}`
         : null,
   ]
     .filter(Boolean)
@@ -203,12 +190,20 @@ const VaccineListItem = memo(function VaccineListItem({
   isFirst: boolean;
 }) {
   const { status, vaccine_name: name, dose_label } = vaccine;
-  const dateStr = new Date(vaccine.scheduled_date).toLocaleDateString('en-US', SHORT_DATE);
+  // "13 Oct" this year, "13 Oct 2014" otherwise, so an old due date never
+  // reads like today.
+  const dateStr = formatDate(vaccine.scheduled_date);
   const displayName = dose_label ? `${name} (${dose_label})` : name;
   const ui = STATUS_UI[status];
-  const givenStr = vaccine.administered_date
-    ? new Date(vaccine.administered_date).toLocaleDateString('en-US', SHORT_DATE)
-    : null;
+  // Doses ticked during onboarding are saved with no date: show "Given"
+  // without inventing one.
+  const givenStr = formatDate(vaccine.administered_date);
+  const metaStr =
+    status === 'done'
+      ? givenStr
+        ? `Given ${givenStr}`
+        : 'Given, date not recorded'
+      : dateStr;
   const isDue = status === 'due_soon';
 
   return (
@@ -223,7 +218,7 @@ const VaccineListItem = memo(function VaccineListItem({
         <Text style={[styles.listItemTitle, status === 'done' && styles.listItemTitleDone]} numberOfLines={2}>
           {displayName}
         </Text>
-        <Text style={typography.meta}>{status === 'done' && givenStr ? `Given ${givenStr}` : dateStr}</Text>
+        <Text style={typography.meta}>{metaStr}</Text>
       </View>
       {isDue ? (
         <View style={styles.markPill}>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuth } from '@/context/auth';
 import { useChildren, ChildWithDetails } from '@/hooks/useChildren';
 import { getBracket, formatAge, AgeBracket } from '@/constants/bracketConfig';
@@ -20,8 +20,11 @@ interface ChildContextState {
   loading: boolean;
   /** Switch to a different child */
   selectChild: (childId: string) => void;
-  /** Refetch children from DB */
+  /** Reload children (and their allergies, conditions, medicines) from the DB.
+   *  Await it after creating or editing a child, before navigating home. */
   refetch: () => Promise<void>;
+  /** Reload the parent's name (call after saving parents.name). */
+  refetchParentName: () => Promise<void>;
 }
 
 const ChildContext = createContext<ChildContextState | null>(null);
@@ -40,25 +43,27 @@ export function ChildProvider({ children: providerChildren }: { children: ReactN
   }, [children, selectedId]);
 
   const child = children.find(c => c.id === selectedId) ?? children[0] ?? null;
-  const bracket = child ? getBracket(new Date(child.dob)) : null;
-  const age = child ? formatAge(new Date(child.dob)) : '';
+  // child.dob is a 'YYYY-MM-DD' string; pass it as-is so it is read as a local date.
+  const bracket = child ? getBracket(child.dob) : null;
+  const age = child ? formatAge(child.dob) : '';
 
   // Get parent name
   const [parentName, setParentName] = useState('');
-  useEffect(() => {
+  const refetchParentName = useCallback(async () => {
     if (!user) return;
-    (async () => {
-      const { data } = await supabase
-        .from('parents')
-        .select('name')
-        .eq('id', user.id)
-        .single();
-      if (data?.name) {
-        dbg.hook('ChildProvider: parent name loaded', { name: data.name });
-        setParentName(data.name);
-      }
-    })();
+    const { data } = await supabase
+      .from('parents')
+      .select('name')
+      .eq('id', user.id)
+      .maybeSingle();
+    if (data?.name) {
+      dbg.hook('ChildProvider: parent name loaded', { name: data.name });
+      setParentName(data.name);
+    }
   }, [user]);
+  useEffect(() => {
+    refetchParentName();
+  }, [refetchParentName]);
 
   function selectChild(childId: string) {
     dbg.hook('ChildProvider: selecting child', { childId });
@@ -76,6 +81,7 @@ export function ChildProvider({ children: providerChildren }: { children: ReactN
         loading,
         selectChild,
         refetch,
+        refetchParentName,
       }}
     >
       {providerChildren}

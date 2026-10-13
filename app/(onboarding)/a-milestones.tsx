@@ -1,11 +1,13 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { AppColors } from '@/constants/theme';
+import { MILESTONE_NONE, useOnboarding } from '@/context/onboarding';
 
+// Which milestones to show for which age is a clinical decision (pending);
+// "None yet" lets the parent of a young baby answer honestly meanwhile.
 const MILESTONES = [
   'Holds head up steadily',
   'Rolls over',
@@ -13,14 +15,15 @@ const MILESTONES = [
   'Pulls to stand',
   'First words spoken',
   'Walks independently',
+  MILESTONE_NONE,
 ];
 
 export default function MilestonesScreen() {
-  const [achieved, setAchieved] = useState<string[]>([]);
+  const { aMilestones: answers, updateSection } = useOnboarding();
 
   return (
     <OnboardingShell
-      progress={0.78}
+      screen="a-milestones"
       title="Milestones"
       subtitle="Tick what applies."
       ctaLabel="Continue"
@@ -30,9 +33,10 @@ export default function MilestonesScreen() {
         <Text style={styles.fieldLabel}>What can your child do?</Text>
         <ChipGroup
           options={MILESTONES}
-          selected={achieved}
-          onChange={setAchieved}
+          selected={answers.achieved}
+          onChange={(achieved) => updateSection('aMilestones', { achieved })}
           multiSelect
+          noneValue={MILESTONE_NONE}
         />
       </View>
     </OnboardingShell>

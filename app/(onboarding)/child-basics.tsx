@@ -8,70 +8,50 @@ import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors, Radius } from '@/constants/theme';
-import { useOnboarding } from '@/context/onboarding';
+import { useOnboarding, type ChildSex } from '@/context/onboarding';
+import {
+  formatAgeLabel,
+  getOnboardingPath,
+  isDobInFuture,
+  isDobInRange,
+  minAllowedDob,
+  ONBOARDING_PATH_LABELS,
+} from '@/lib/age';
+import { formatDate, parseDateOnly, toDateOnlyString, todayDateOnly } from '@/lib/date';
 import { typography } from '@/styles/global';
 
 const SEX_OPTIONS = ['Male', 'Female'];
 const RELATIONSHIP = ['Mother', 'Father', 'Grandparent', 'Guardian'];
 
-// Pedia Pulse serves children 0–15. Anything past the 16th birthday is
-// out of scope per Proposal §4 ("target users: parents of children 0–15").
-const MAX_AGE_YEARS = 16;
-
-function ageYears(dob: Date): number {
-  return (Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000);
+function sexLabel(sex: ChildSex): string {
+  return sex === 'male' ? 'Male' : sex === 'female' ? 'Female' : '';
 }
 
-function isDobInRange(dob: Date): boolean {
-  if (dob.getTime() > Date.now()) return false; // future
-  return ageYears(dob) < MAX_AGE_YEARS;
-}
-
-function minAllowedDobIso(): string {
-  // Earliest acceptable DOB = exactly 16 years ago today.
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - MAX_AGE_YEARS);
-  return d.toISOString().split('T')[0];
-}
-
-function calculateBracket(dob: Date): 'A' | 'B' | 'C' | null {
-  if (!isDobInRange(dob)) return null;
-  const a = ageYears(dob);
-  if (a < 3) return 'A';
-  if (a < 9) return 'B';
-  return 'C';
-}
-
-function bracketLabel(b: 'A' | 'B' | 'C'): string {
-  return b === 'A' ? 'Infant care (0–2)' : b === 'B' ? 'Early years (3–8)' : 'Pre-teen (9–15)';
-}
-
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function calculateAgeLabel(dob: Date): string {
-  const now = new Date();
-  let years = now.getFullYear() - dob.getFullYear();
-  let months = now.getMonth() - dob.getMonth();
-  if (now.getDate() < dob.getDate()) months -= 1;
-  if (months < 0) {
-    years -= 1;
-    months += 12;
-  }
-  if (years === 0) return `${months} ${months === 1 ? 'month' : 'months'} old`;
-  if (months === 0) return `${years} ${years === 1 ? 'year' : 'years'} old`;
-  return `${years}y ${months}m old`;
+/** "a first name, date of birth and sex" from the missing parts. */
+function joinMissing(parts: string[]): string {
+  if (parts.length <= 1) return parts.join('');
+  return `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`;
 }
 
 export default function ChildBasicsScreen() {
-  const { setChildName, setBracket, setChildSex, setDob: saveDob } = useOnboarding();
-  const [firstName, setFirstName] = useState('');
-  const [dob, setDob] = useState<Date | null>(null);
+  // Every answer is read from and written to the onboarding context, so going
+  // Back and forward never shows an empty screen.
+  const {
+    childName, setChildName,
+    dob, setDob: saveDob,
+    childSex, setChildSex,
+    relationship, setRelationship,
+    setBracket,
+  } = useOnboarding();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draftDob, setDraftDob] = useState<Date>(new Date());
-  const [sex, setSex] = useState<string[]>([]);
-  const [relationship, setRelationship] = useState<string[]>([]);
+
+  // The path is always worked out from the DOB with calendar arithmetic
+  // (lib/age), so it is right on a birthday at any time of day.
+  const setDob = (next: Date | null) => {
+    saveDob(next);
+    setBracket(next ? getOnboardingPath(next) : null);
+  };
 
   const openPicker = () => {
     setDraftDob(dob ?? new Date());
@@ -83,31 +63,45 @@ export default function ChildBasicsScreen() {
     setPickerOpen(false);
   };
 
-  const bracket = dob ? calculateBracket(dob) : null;
+  const bracket = dob ? getOnboardingPath(dob) : null;
   const dobOutOfRange = dob !== null && !isDobInRange(dob);
-  const canContinue = !!firstName.trim() && !!dob && !dobOutOfRange && !!sex[0];
+  const dobInFuture = dob !== null && isDobInFuture(dob);
+
+  const missing: string[] = [];
+  if (!childName.trim()) missing.push('a first name');
+  if (!dob) missing.push('date of birth');
+  else if (dobOutOfRange) missing.push('a valid date of birth');
+  if (!childSex) missing.push('biological sex');
+  const canContinue = missing.length === 0;
 
   const handleContinue = () => {
-    if (!canContinue || !dob) return;
-    setChildName(firstName);
-    if (sex[0]) setChildSex(sex[0].toLowerCase() as 'male' | 'female');
-    if (bracket) { setBracket(bracket); saveDob(dob); }
+    if (!canContinue || !dob || !bracket) return;
+    setChildName(childName.trim());
+    setBracket(bracket);
     router.push('/(onboarding)/physical');
   };
 
   return (
     <OnboardingShell
-      progress={0.18}
+      screen="child-basics"
       title="Your child"
       subtitle="The basics about your child"
       ctaLabel="Continue"
       onCta={handleContinue}
+      ctaDisabled={!canContinue}
+      footerExtra={
+        !canContinue ? (
+          <Text style={[typography.caption, styles.missingHint]}>
+            {`Add ${joinMissing(missing)} to continue`}
+          </Text>
+        ) : null
+      }
     >
       <TextInputField
         label="First name"
         placeholder="Child's first name"
-        value={firstName}
-        onChangeText={setFirstName}
+        value={childName}
+        onChangeText={setChildName}
         autoCapitalize="words"
       />
 
@@ -116,15 +110,17 @@ export default function ChildBasicsScreen() {
         <Text style={styles.dobLabel}>Date of birth</Text>
         {Platform.OS === 'web' ? (
           <View style={[styles.dateField, dob && styles.dateFieldFilled]}>
-            {/* Native browser date picker — react-native-web passes <input> to DOM */}
+            {/* Native browser date picker — react-native-web passes <input> to DOM.
+                Values are local 'YYYY-MM-DD' dates, never UTC timestamps. */}
             <input
               type="date"
-              max={new Date().toISOString().split('T')[0]}
-              min={minAllowedDobIso()}
-              value={dob ? dob.toISOString().split('T')[0] : ''}
+              max={todayDateOnly()}
+              min={toDateOnlyString(minAllowedDob())}
+              value={dob ? toDateOnlyString(dob) : ''}
               onChange={(e: { target: { value: string } }) => {
                 const val = e.target.value;
-                setDob(val ? new Date(val) : null);
+                const parsed = val ? parseDateOnly(val) : null;
+                setDob(parsed && !Number.isNaN(parsed.getTime()) ? parsed : null);
               }}
               style={{
                 flex: 1,
@@ -141,6 +137,8 @@ export default function ChildBasicsScreen() {
         ) : (
           <Pressable
             onPress={openPicker}
+            accessibilityRole="button"
+            accessibilityLabel={dob ? `Date of birth, ${formatDate(dob, { year: 'always' })}` : 'Select date of birth'}
             style={({ pressed }) => [
               styles.dateField,
               dob && styles.dateFieldFilled,
@@ -153,7 +151,7 @@ export default function ChildBasicsScreen() {
               color={dob ? AppColors.primary : AppColors.outlineVariant}
             />
             <Text style={dob ? styles.dateText : styles.datePlaceholder}>
-              {dob ? formatDate(dob) : 'Tap to select your child’s birthdate'}
+              {dob ? formatDate(dob, { year: 'always' }) : 'Tap to select your child’s birthdate'}
             </Text>
             <Ionicons
               name="chevron-down"
@@ -168,16 +166,18 @@ export default function ChildBasicsScreen() {
         {dob && !dobOutOfRange && bracket && (
           <View style={styles.ageRow}>
             <View style={styles.ageDot} />
-            <Text style={styles.ageText}>{calculateAgeLabel(dob)}</Text>
+            <Text style={styles.ageText}>{formatAgeLabel(dob, { old: true })}</Text>
             <Text style={styles.ageDivider}>•</Text>
-            <Text style={styles.bracketText}>{bracketLabel(bracket)}</Text>
+            <Text style={styles.bracketText}>{ONBOARDING_PATH_LABELS[bracket]}</Text>
           </View>
         )}
         {dob && dobOutOfRange && (
           <View style={styles.ageRow}>
             <View style={[styles.ageDot, { backgroundColor: AppColors.tertiary }]} />
-            <Text style={[styles.ageText, { color: AppColors.tertiary }]}>
-              Pedia Pulse cares for children 0–15. Please double-check the date.
+            <Text style={[styles.ageText, styles.ageTextError]}>
+              {dobInFuture
+                ? 'That date is in the future. Please double-check the date.'
+                : 'LilSteps cares for children from birth to 15 years. Please double-check the date.'}
             </Text>
           </View>
         )}
@@ -185,12 +185,23 @@ export default function ChildBasicsScreen() {
 
       <View>
         <Text style={styles.fieldLabel}>Biological sex</Text>
-        <ChipGroup options={SEX_OPTIONS} selected={sex} onChange={setSex} />
+        <ChipGroup
+          options={SEX_OPTIONS}
+          selected={childSex ? [sexLabel(childSex)] : []}
+          onChange={(vals) => {
+            const v = vals[0];
+            setChildSex(v === 'Male' ? 'male' : v === 'Female' ? 'female' : null);
+          }}
+        />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Your relationship to the child</Text>
-        <ChipGroup options={RELATIONSHIP} selected={relationship} onChange={setRelationship} />
+        <ChipGroup
+          options={RELATIONSHIP}
+          selected={relationship ? [relationship] : []}
+          onChange={(vals) => setRelationship(vals[0] ?? '')}
+        />
       </View>
 
       {/* iOS bottom-sheet picker */}
@@ -213,6 +224,7 @@ export default function ChildBasicsScreen() {
               mode="date"
               display="spinner"
               maximumDate={new Date()}
+              minimumDate={minAllowedDob()}
               onChange={(_, date) => {
                 if (date) setDraftDob(date);
               }}
@@ -229,6 +241,7 @@ export default function ChildBasicsScreen() {
           mode="date"
           display="default"
           maximumDate={new Date()}
+          minimumDate={minAllowedDob()}
           onChange={(_, date) => {
             setPickerOpen(false);
             if (date) setDob(date);
@@ -295,6 +308,13 @@ const styles = StyleSheet.create({
     gap: 6,
     marginTop: 6,
     marginLeft: 2,
+  },
+  ageTextError: {
+    flex: 1,
+    color: AppColors.tertiary,
+  },
+  missingHint: {
+    textAlign: 'center',
   },
   ageDot: {
     width: 6,

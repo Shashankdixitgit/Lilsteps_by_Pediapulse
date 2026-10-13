@@ -1,23 +1,23 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
+import { fromChips, toChips } from '@/components/onboarding/chips';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors } from '@/constants/theme';
+import { useOnboarding } from '@/context/onboarding';
 import { typography } from '@/styles/global';
 
 const YES_NO = ['Yes', 'No'];
 
 export default function MentalHealthScreen() {
-  const [moodChanges, setMoodChanges] = useState<string[]>([]);
-  const [moodDetails, setMoodDetails] = useState('');
-  const [anxietyHistory, setAnxietyHistory] = useState<string[]>([]);
+  const { cMentalHealth: answers, updateSection } = useOnboarding();
+  const set = (patch: Partial<typeof answers>) => updateSection('cMentalHealth', patch);
 
   return (
     <OnboardingShell
-      progress={0.83}
+      screen="c-mental-health"
       title="Mental wellbeing"
       subtitle="Optional, and helps the doctor give better care"
       ctaLabel="Continue"
@@ -31,21 +31,30 @@ export default function MentalHealthScreen() {
         <Text style={styles.fieldLabel}>
           Any recent changes in mood, social withdrawal, or behaviour?
         </Text>
-        <ChipGroup options={YES_NO} selected={moodChanges} onChange={setMoodChanges} />
+        <ChipGroup
+          options={YES_NO}
+          selected={toChips(answers.moodChanges)}
+          onChange={(v) => set({ moodChanges: fromChips(v) })}
+        />
       </View>
 
-      {moodChanges.includes('Yes') && (
+      {answers.moodChanges === 'Yes' && (
         <TextInputField
           placeholder="Briefly describe what you've noticed"
-          value={moodDetails}
-          onChangeText={setMoodDetails}
+          accessibilityLabel="Briefly describe what you've noticed"
+          value={answers.moodDetails}
+          onChangeText={(moodDetails) => set({ moodDetails })}
           multiline
         />
       )}
 
       <View>
         <Text style={styles.fieldLabel}>Any history of anxiety or depression?</Text>
-        <ChipGroup options={YES_NO} selected={anxietyHistory} onChange={setAnxietyHistory} />
+        <ChipGroup
+          options={YES_NO}
+          selected={toChips(answers.anxietyHistory)}
+          onChange={(v) => set({ anxietyHistory: fromChips(v) })}
+        />
       </View>
     </OnboardingShell>
   );

@@ -52,8 +52,8 @@ export function ChipGroup({
           <Pressable
             key={option}
             onPress={() => handlePress(option)}
-            hitSlop={5}
             accessibilityRole={multiSelect ? 'checkbox' : 'radio'}
+            accessibilityLabel={option}
             accessibilityState={{ checked: isSelected, selected: isSelected }}
             style={({ pressed }) => [styles.chip, isSelected && styles.chipSelected, pressed && !isSelected && styles.chipPressed]}
           >
@@ -82,9 +82,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    minHeight: 34,
+    // 44 = minimum touch target (DESIGN.md / WCAG 2.5.5).
+    minHeight: 44,
     paddingHorizontal: 14,
-    paddingVertical: 7,
+    paddingVertical: 10,
     borderRadius: Radius.full,
     backgroundColor: AppColors.card,
     borderWidth: 1,

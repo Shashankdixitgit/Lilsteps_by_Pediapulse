@@ -1,55 +1,75 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { StatusPill } from '@/components/ui/StatusPill';
 import { haptic } from '@/components/ui/useMotion';
+import { VACCINE_ANSWERS, type VaccineAnswer } from '@/constants/vaccineQuestions';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { typography } from '@/styles/global';
 
-const VAX_STATUS = ['Given', 'Missed', 'Not sure'] as const;
+export interface VaccineStatusItem {
+  /** VaccineQuestion.id, the key in the onboarding context. */
+  id: string;
+  name: string;
+  note: string;
+  /** No dose is due yet for this child: show "Not due yet" instead of the control. */
+  notDueYet?: boolean;
+  /** Some doses are due and later ones are not: show a short hint. */
+  laterDosesNotDue?: boolean;
+}
 
 interface VaccineStatusListProps {
-  vaccines: { name: string; note: string }[];
-  /** vaccine name -> selected status ('' or missing = none) */
-  statuses: Record<string, string>;
-  /** Same shape as ChipGroup single-select: called with [option]. */
-  onChange: (vaccine: string, value: string[]) => void;
+  items: VaccineStatusItem[];
+  /** question id -> answer (missing = not answered). */
+  answers: Record<string, VaccineAnswer | undefined>;
+  onChange: (id: string, answer: VaccineAnswer) => void;
 }
 
 /**
- * Onboarding vaccine checklist: one white card, hairline-separated rows,
- * each with a compact 32-high Given / Missed / Not sure segmented control
- * to the right of the name.
- * Replaces the per-vaccine filled cards with three 34-high chips each.
+ * Onboarding vaccine checklist: one white card, hairline-separated rows.
+ * Name and timing note use the full row width; the Given / Missed / Not sure
+ * segmented control sits under them (segments 44 high), so long names and
+ * notes never wrap one word per line.
  */
-export function VaccineStatusList({ vaccines, statuses, onChange }: VaccineStatusListProps) {
+export function VaccineStatusList({ items, answers, onChange }: VaccineStatusListProps) {
   return (
     <View style={styles.card}>
-      {vaccines.map((vaccine, idx) => {
-        const current = statuses[vaccine.name] ?? '';
+      {items.map((item, idx) => {
+        const current = answers[item.id];
         return (
-          <View key={vaccine.name} style={[styles.row, idx > 0 && styles.rowDivider]}>
+          <View key={item.id} style={[styles.row, idx > 0 && styles.rowDivider]}>
             <View style={styles.info}>
-              <Text style={typography.title}>{vaccine.name}</Text>
-              <Text style={typography.caption}>{vaccine.note}</Text>
+              <View style={styles.titleRow}>
+                <Text style={[typography.title, styles.name]}>{item.name}</Text>
+                {item.notDueYet ? <StatusPill tone="neutral" icon="time-outline" label="Not due yet" /> : null}
+              </View>
+              <Text style={typography.caption}>{item.note}</Text>
+              {item.laterDosesNotDue ? (
+                <Text style={typography.caption}>Answer for the doses so far. Later doses are not due yet.</Text>
+              ) : null}
             </View>
-            <View style={styles.track} accessibilityRole="radiogroup" accessibilityLabel={`${vaccine.name} status`}>
-              {VAX_STATUS.map((option) => {
-                const selected = current === option;
-                return (
-                  <Pressable
-                    key={option}
-                    onPress={() => {
-                      haptic('selection');
-                      onChange(vaccine.name, [option]);
-                    }}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: selected, selected }}
-                    style={[styles.segment, selected && styles.segmentSelected]}
-                  >
-                    <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{option}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+
+            {item.notDueYet ? null : (
+              <View style={styles.track} accessibilityRole="radiogroup" accessibilityLabel={`${item.name} status`}>
+                {VACCINE_ANSWERS.map((option) => {
+                  const selected = current === option;
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => {
+                        haptic('selection');
+                        onChange(item.id, option);
+                      }}
+                      accessibilityRole="radio"
+                      accessibilityLabel={option}
+                      accessibilityState={{ checked: selected, selected }}
+                      style={[styles.segment, selected && styles.segmentSelected]}
+                    >
+                      <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{option}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </View>
         );
       })}
@@ -67,29 +87,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    gap: 12,
+    paddingVertical: 14,
+    gap: 10,
   },
   rowDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: AppColors.border,
   },
   info: {
-    flex: 1,
     gap: 2,
   },
-  track: {
-    width: 196,
+  titleRow: {
     flexDirection: 'row',
-    height: 32,
+    alignItems: 'center',
+    gap: 8,
+  },
+  name: {
+    flexShrink: 1,
+  },
+  track: {
+    flexDirection: 'row',
+    // 2px padding + 44px segments = 44px touch targets (DESIGN.md / WCAG 2.5.5).
     padding: 2,
     borderRadius: Radius.full,
     backgroundColor: AppColors.surfaceContainer,
   },
   segment: {
     flex: 1,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.full,

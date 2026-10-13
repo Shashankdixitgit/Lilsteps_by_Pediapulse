@@ -2,6 +2,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { AppColors, FontFamily } from '@/constants/theme';
 import type { GrowthRow } from '@/hooks/useGrowth';
+import { formatDate } from '@/lib/date';
 import { typography } from '@/styles/global';
 
 /**
@@ -10,7 +11,8 @@ import { typography } from '@/styles/global';
  * trend arrows were decorative and are no longer drawn.
  */
 export function MeasurementRow({ entry }: { entry: GrowthRow; prev?: GrowthRow }) {
-  const dateStr = new Date(entry.measured_at).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+  // A record: always "13 Oct 2026" (en-IN, local date).
+  const dateStr = formatDate(entry.measured_at, { year: 'always' });
 
   return (
     <View style={styles.row}>

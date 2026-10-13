@@ -104,6 +104,9 @@ export default function ProfileScreen() {
   const { child, children, age, parentName, selectChild } = useChild();
 
   const childName = child?.name ?? 'Child';
+  // First user-visible character, emoji-safe ("🍼 Baby" -> "🍼", not half a
+  // surrogate pair that renders as "?").
+  const firstChar = (name: string) => Array.from(name.trim())[0] ?? '';
   const allergies = child?.allergies.map(a => a.name) ?? [];
   const conditions = child?.conditions.map(c => c.name) ?? [];
 
@@ -131,7 +134,7 @@ export default function ProfileScreen() {
       >
         <HeroCard style={styles.hero}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{childName.charAt(0)}</Text>
+            <Text style={styles.avatarText}>{firstChar(childName)}</Text>
           </View>
           <View style={styles.heroText}>
             <Text style={typography.heading} numberOfLines={1}>
@@ -170,7 +173,7 @@ export default function ProfileScreen() {
                   >
                     <View style={[styles.childChipAvatar, active && styles.childChipAvatarActive]}>
                       <Text style={[styles.childChipInitial, active && styles.childChipInitialActive]}>
-                        {c.name.charAt(0)}
+                        {firstChar(c.name)}
                       </Text>
                     </View>
                     <Text style={[styles.childChipName, active && styles.childChipNameActive]}>{c.name}</Text>

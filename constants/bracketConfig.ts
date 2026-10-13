@@ -1,3 +1,5 @@
+import { formatAgeLabel, getAgeParts } from '@/lib/age';
+
 import { AppColors } from './theme';
 
 export type AgeBracket =
@@ -147,31 +149,44 @@ export const BRACKET_CONFIG: Record<AgeBracket, BracketConfig> = {
   },
 };
 
-/** Derives the age bracket from a Date of birth. Recomputed fresh — never persisted. */
-export function getBracket(dob: Date): AgeBracket {
-  const now = new Date();
-  const months =
-    (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
+/**
+ * Parent-facing name of each bracket. Ranges are in completed age and never
+ * overlap; they nest inside the onboarding paths (lib/age.ts):
+ *   path A (0–2 years)  = NEWBORN … TODDLER
+ *   path B (3–8 years)  = PRESCHOOL, SCHOOL_EARLY
+ *   path C (9–15 years) = SCHOOL_MID, ADOLESCENT
+ */
+export const BRACKET_LABELS: Record<AgeBracket, string> = {
+  NEWBORN: 'Newborn (0–2 months)',
+  EARLY_INFANT: 'Early infant (3–5 months)',
+  INFANT: 'Infant (6–11 months)',
+  TODDLER_EARLY: 'Young toddler (12–17 months)',
+  TODDLER: 'Toddler (18 months–2 years)',
+  PRESCHOOL: 'Preschool (3–4 years)',
+  SCHOOL_EARLY: 'Early school years (5–8 years)',
+  SCHOOL_MID: 'Pre-teen (9–11 years)',
+  ADOLESCENT: 'Teen (12–15 years)',
+};
+
+/**
+ * Derives the age bracket from a date of birth (Date or 'YYYY-MM-DD').
+ * Recomputed fresh, never persisted. Uses calendar age (lib/age.ts), so the
+ * cut-offs agree with the onboarding path on every birthday.
+ */
+export function getBracket(dob: Date | string, now: Date = new Date()): AgeBracket {
+  const months = getAgeParts(dob, now)?.totalMonths ?? 0;
   if (months < 3) return 'NEWBORN';
   if (months < 6) return 'EARLY_INFANT';
   if (months < 12) return 'INFANT';
   if (months < 18) return 'TODDLER_EARLY';
   if (months < 36) return 'TODDLER';
   if (months < 60) return 'PRESCHOOL';
-  if (months < 96) return 'SCHOOL_EARLY';
+  if (months < 108) return 'SCHOOL_EARLY';
   if (months < 144) return 'SCHOOL_MID';
   return 'ADOLESCENT';
 }
 
-/** Smart age label: <12 months → "4 months", >12 → "2y 3m", whole years → "9 years" */
-export function formatAge(dob: Date): string {
-  const now = new Date();
-  const months =
-    (now.getFullYear() - dob.getFullYear()) * 12 + (now.getMonth() - dob.getMonth());
-  if (months < 1) return 'Newborn';
-  if (months < 12) return `${months} month${months !== 1 ? 's' : ''}`;
-  const years = Math.floor(months / 12);
-  const rem = months % 12;
-  if (rem === 0) return `${years} year${years !== 1 ? 's' : ''}`;
-  return `${years}y ${rem}m`;
+/** Age label, e.g. "4 months", "2y 3m", "9 years". Same as formatAgeLabel(). */
+export function formatAge(dob: Date | string): string {
+  return formatAgeLabel(dob);
 }

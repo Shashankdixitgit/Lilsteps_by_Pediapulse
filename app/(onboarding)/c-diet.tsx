@@ -1,23 +1,23 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
+import { fromChips, toChips } from '@/components/onboarding/chips';
 import { AppColors } from '@/constants/theme';
+import { useOnboarding } from '@/context/onboarding';
 
 const DIET = ['Vegetarian', 'Non-vegetarian', 'Vegan', 'Jain'];
 const YES_NO = ['Yes', 'No'];
 
 export default function DietOlderScreen() {
-  const [diet, setDiet] = useState<string[]>([]);
-  const [caffeine, setCaffeine] = useState<string[]>([]);
-  const [bodyImage, setBodyImage] = useState<string[]>([]);
+  const { cDiet: answers, updateSection } = useOnboarding();
+  const set = (patch: Partial<typeof answers>) => updateSection('cDiet', patch);
 
   return (
     <OnboardingShell
+      screen="c-diet"
       sprout="happy"
-      progress={0.65}
       title="Diet"
       subtitle="Diet at this age matters for growth"
       ctaLabel="Continue"
@@ -25,17 +25,21 @@ export default function DietOlderScreen() {
     >
       <View>
         <Text style={styles.fieldLabel}>Diet type</Text>
-        <ChipGroup options={DIET} selected={diet} onChange={setDiet} />
+        <ChipGroup options={DIET} selected={toChips(answers.diet)} onChange={(v) => set({ diet: fromChips(v) })} />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Regular caffeine — tea or coffee?</Text>
-        <ChipGroup options={YES_NO} selected={caffeine} onChange={setCaffeine} />
+        <ChipGroup options={YES_NO} selected={toChips(answers.caffeine)} onChange={(v) => set({ caffeine: fromChips(v) })} />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Any dieting, food restriction, or body image concerns noticed?</Text>
-        <ChipGroup options={YES_NO} selected={bodyImage} onChange={setBodyImage} />
+        <ChipGroup
+          options={YES_NO}
+          selected={toChips(answers.bodyImage)}
+          onChange={(v) => set({ bodyImage: fromChips(v) })}
+        />
       </View>
     </OnboardingShell>
   );

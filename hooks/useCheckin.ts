@@ -44,7 +44,7 @@ export function useCheckin(child: ChildWithDetails | null) {
     if (!child) throw new Error('No child selected');
     return {
       name: child.name,
-      age: formatAge(new Date(child.dob)),
+      age: formatAge(child.dob),
       weight: child.weight ?? undefined,
       height: child.height ?? undefined,
       allergies: child.allergies.map(a => a.name),
