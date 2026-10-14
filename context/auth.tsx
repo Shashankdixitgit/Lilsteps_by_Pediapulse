@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
-import { Session, User } from '@supabase/supabase-js';
+import { AuthError, Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { dbg } from '@/lib/debug';
 import { analytics, crash } from '@/lib/observability';
@@ -28,13 +28,86 @@ const AuthContext = createContext<AuthState | null>(null);
  */
 export const DEMO_LOGIN = __DEV__ && process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
 
+/**
+ * What a parent types in the phone field, reduced to the 10-digit Indian
+ * mobile number (the field shows a fixed "+91" in front). A pasted or typed
+ * "+91…", "91…" (12 digits) or trunk "0…" prefix is dropped, and anything
+ * past 10 digits is cut, so "+91 98765 43210" and "098765 43210" both
+ * become "9876543210".
+ */
+export function toMobileDigits(raw: string): string {
+  let digits = raw.replace(/\D/g, '').replace(/^0+/, '');
+  if (digits.length > 10 && digits.startsWith('91')) digits = digits.slice(2).replace(/^0+/, '');
+  return digits.slice(0, 10);
+}
+
+const AUTH_COPY = {
+  offline: "We couldn't reach LilSteps. Check your internet connection and try again.",
+  rateLimit: 'Too many tries. Please wait a minute, then try again.',
+  smsFailed: "We couldn't send the code right now. Please try again in a few minutes.",
+  badPhone: "That number doesn't look right. Enter your 10-digit mobile number.",
+  badCode: "That code didn't work. Check it, or tap Resend code for a new one.",
+  generic: 'Something went wrong. Please try again.',
+  // Only reachable from the dev-only demo login (password accounts); real
+  // SMS sign-in has no password.
+  passwordPolicy: "This test account couldn't be created because its password doesn't meet the sign-in rules. Please tell the LilSteps team.",
+} as const;
+
+/**
+ * Plain-English text for a sign-in error. Provider text (Twilio messages,
+ * error URLs, codes) is never shown: it is logged by the caller instead.
+ */
+export function authErrorText(error: unknown, step: 'send' | 'verify'): string {
+  const e = error as Partial<AuthError> & { name?: string; message?: string };
+  const code = (e?.code ?? '').toString();
+  const status = typeof e?.status === 'number' ? e.status : undefined;
+  const msg = (e?.message ?? '').toLowerCase();
+
+  if (e?.name === 'AuthRetryableFetchError' || status === 0 || /failed to fetch|network/.test(msg)) {
+    return AUTH_COPY.offline;
+  }
+  if (status === 429 || code.startsWith('over_') || /rate limit|too many/.test(msg)) {
+    return AUTH_COPY.rateLimit;
+  }
+  if (status !== undefined && status >= 500) {
+    return step === 'send' ? AUTH_COPY.smsFailed : AUTH_COPY.generic;
+  }
+  if (code === 'weak_password' || /password should|password must|weak password|password.*(characters|contain)/.test(msg)) {
+    return AUTH_COPY.passwordPolicy;
+  }
+  if (step === 'verify' && (code === 'otp_expired' || code === 'otp_disabled' || /token|otp|expired|invalid/.test(msg))) {
+    return AUTH_COPY.badCode;
+  }
+  if (code === 'validation_failed' || /invalid phone|phone number/.test(msg)) {
+    return AUTH_COPY.badPhone;
+  }
+  if (step === 'send') return AUTH_COPY.smsFailed;
+  return AUTH_COPY.generic;
+}
+
+/**
+ * DEV ONLY (reachable only when DEMO_LOGIN, which is gated on __DEV__): each
+ * phone maps to its own email/password test account. The password meets the
+ * Auth password policy (lower + upper case + digit); accounts created before
+ * that policy still use the old password, so sign-in falls back to it.
+ */
 async function demoSignIn(phone: string) {
+  if (!DEMO_LOGIN) throw new Error('Demo login is only available in development builds');
   const digits = phone.replace(/\D/g, '');
   const email = `phone-${digits}@demo.lilsteps.dev`;
-  const password = `demo-${digits}-lilsteps`;
+  const password = `Demo-${digits}-Lilsteps1`;
+  const legacyPassword = `demo-${digits}-lilsteps`;
   const signIn = await supabase.auth.signInWithPassword({ email, password });
   if (!signIn.error) return signIn;
-  return supabase.auth.signUp({ email, password, options: { data: { phone } } });
+  const legacy = await supabase.auth.signInWithPassword({ email, password: legacyPassword });
+  if (!legacy.error) return legacy;
+  const signUp = await supabase.auth.signUp({ email, password, options: { data: { phone } } });
+  // An existing account whose password matched neither: signUp answers with
+  // no session (and no error), so say so instead of a blank sign-in.
+  if (!signUp.error && !signUp.data.session) {
+    return { data: signUp.data, error: legacy.error };
+  }
+  return signUp;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -120,7 +193,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       dbg.authError('signInWithOtp', error);
-      return { error: error.message };
+      crash.captureMessage(`auth send failed: ${error.code ?? error.status ?? 'unknown'}`, 'warning');
+      return { error: authErrorText(error, 'send') };
     }
 
     dbg.auth('signInWithOtp success — OTP sent');
@@ -133,7 +207,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (!DEMO_LOGIN && (token.length !== 6 || !/^\d{6}$/.test(token))) {
       dbg.authError('verifyOtp', 'Invalid OTP format');
-      return { error: 'OTP must be exactly 6 digits', isNewUser: false };
+      return { error: 'Enter the 6-digit code from the SMS.', isNewUser: false };
     }
 
     const { data, error } = DEMO_LOGIN
@@ -146,7 +220,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (error) {
       dbg.authError('verifyOtp', error);
-      return { error: error.message, isNewUser: false };
+      return { error: authErrorText(error, 'verify'), isNewUser: false };
     }
 
     dbg.auth('verifyOtp success', { userId: data.user?.id });

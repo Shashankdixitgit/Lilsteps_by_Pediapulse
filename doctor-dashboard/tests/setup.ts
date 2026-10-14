@@ -20,18 +20,20 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 export const DOCTOR_ID = process.env.TEST_DOCTOR_ID!;
 
-if (!SUPABASE_URL || !SERVICE_ROLE_KEY || !DOCTOR_ID) {
-  throw new Error(
-    'Missing test env. Copy tests/.env.example -> tests/.env and fill in ' +
-      'NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, TEST_DOCTOR_ID.',
-  );
-}
+// Specs that seed data import this file. Without the service role key they
+// cannot seed, so they skip (via ADMIN_SKIP_REASON) instead of crashing the
+// whole run at import time — auth/navigation specs still run.
+export const ADMIN_SKIP_REASON =
+  !SUPABASE_URL || !SERVICE_ROLE_KEY || !DOCTOR_ID
+    ? 'Missing test env: fill NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, TEST_DOCTOR_ID in tests/.env'
+    : null;
 
 export const TEST_TAG = 'pp-e2e-test';
 export const TEST_PHONE = '+910000000000';
 export const TEST_EMAIL = 'pp-e2e@example.invalid';
 
 export function admin(): SupabaseClient {
+  if (ADMIN_SKIP_REASON) throw new Error(ADMIN_SKIP_REASON);
   return createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
   });

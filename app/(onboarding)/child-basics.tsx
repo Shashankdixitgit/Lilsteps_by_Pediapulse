@@ -8,6 +8,9 @@ import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors, Radius } from '@/constants/theme';
+import { RELATIONSHIP_OPTIONS } from '@/components/onboarding/chips';
+import { WebDobInput } from '@/components/onboarding/WebDobInput';
+import { BRACKET_LABELS, getBracket } from '@/constants/bracketConfig';
 import { useOnboarding, type ChildSex } from '@/context/onboarding';
 import {
   formatAgeLabel,
@@ -15,13 +18,11 @@ import {
   isDobInFuture,
   isDobInRange,
   minAllowedDob,
-  ONBOARDING_PATH_LABELS,
 } from '@/lib/age';
-import { formatDate, parseDateOnly, toDateOnlyString, todayDateOnly } from '@/lib/date';
+import { formatDate, toDateOnlyString, todayDateOnly } from '@/lib/date';
 import { typography } from '@/styles/global';
 
 const SEX_OPTIONS = ['Male', 'Female'];
-const RELATIONSHIP = ['Mother', 'Father', 'Grandparent', 'Guardian'];
 
 function sexLabel(sex: ChildSex): string {
   return sex === 'male' ? 'Male' : sex === 'female' ? 'Female' : '';
@@ -99,7 +100,7 @@ export default function ChildBasicsScreen() {
     >
       <TextInputField
         label="First name"
-        placeholder="Child's first name"
+        placeholder="e.g. Aarav"
         value={childName}
         onChangeText={setChildName}
         autoCapitalize="words"
@@ -109,31 +110,14 @@ export default function ChildBasicsScreen() {
       <View>
         <Text style={styles.dobLabel}>Date of birth</Text>
         {Platform.OS === 'web' ? (
-          <View style={[styles.dateField, dob && styles.dateFieldFilled]}>
-            {/* Native browser date picker — react-native-web passes <input> to DOM.
-                Values are local 'YYYY-MM-DD' dates, never UTC timestamps. */}
-            <input
-              type="date"
-              max={todayDateOnly()}
-              min={toDateOnlyString(minAllowedDob())}
-              value={dob ? toDateOnlyString(dob) : ''}
-              onChange={(e: { target: { value: string } }) => {
-                const val = e.target.value;
-                const parsed = val ? parseDateOnly(val) : null;
-                setDob(parsed && !Number.isNaN(parsed.getTime()) ? parsed : null);
-              }}
-              style={{
-                flex: 1,
-                border: 'none',
-                outline: 'none',
-                background: 'transparent',
-                fontFamily: 'Inter_400Regular',
-                fontSize: 16,
-                color: dob ? AppColors.onSurface : AppColors.muted,
-                cursor: 'pointer',
-              }}
-            />
-          </View>
+          // Keeps the raw text while typing; parses only a complete date (R2-10).
+          <WebDobInput
+            label="Date of birth"
+            value={dob}
+            onChange={setDob}
+            max={todayDateOnly()}
+            min={toDateOnlyString(minAllowedDob())}
+          />
         ) : (
           <Pressable
             onPress={openPicker}
@@ -168,7 +152,8 @@ export default function ChildBasicsScreen() {
             <View style={styles.ageDot} />
             <Text style={styles.ageText}>{formatAgeLabel(dob, { old: true })}</Text>
             <Text style={styles.ageDivider}>•</Text>
-            <Text style={styles.bracketText}>{ONBOARDING_PATH_LABELS[bracket]}</Text>
+            {/* Same age-band label as the Vaccines tab (R2-25). */}
+            <Text style={styles.bracketText}>{BRACKET_LABELS[getBracket(dob)]}</Text>
           </View>
         )}
         {dob && dobOutOfRange && (
@@ -186,6 +171,7 @@ export default function ChildBasicsScreen() {
       <View>
         <Text style={styles.fieldLabel}>Biological sex</Text>
         <ChipGroup
+          label="Biological sex"
           options={SEX_OPTIONS}
           selected={childSex ? [sexLabel(childSex)] : []}
           onChange={(vals) => {
@@ -198,7 +184,8 @@ export default function ChildBasicsScreen() {
       <View>
         <Text style={styles.fieldLabel}>Your relationship to the child</Text>
         <ChipGroup
-          options={RELATIONSHIP}
+          label="Your relationship to the child"
+          options={RELATIONSHIP_OPTIONS}
           selected={relationship ? [relationship] : []}
           onChange={(vals) => setRelationship(vals[0] ?? '')}
         />

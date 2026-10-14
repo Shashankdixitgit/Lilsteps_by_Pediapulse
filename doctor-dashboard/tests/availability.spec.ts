@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { signInAsDoctor } from './_helpers';
-import { admin, cleanupTestData, DOCTOR_ID } from './setup';
+import { ADMIN_SKIP_REASON, admin, cleanupTestData, DOCTOR_ID } from './setup';
 
 test.describe('Availability flow', () => {
+  test.skip(!!ADMIN_SKIP_REASON, ADMIN_SKIP_REASON ?? '');
+
   test.beforeEach(async () => {
     await cleanupTestData();
   });

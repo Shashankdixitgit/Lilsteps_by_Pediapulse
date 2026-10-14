@@ -1,6 +1,5 @@
 import { StyleSheet, Text, View } from 'react-native';
 
-import { GradientButton } from '@/components/gradient-button';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import type { DoctorRow } from '@/hooks/useDoctors';
@@ -26,6 +25,19 @@ export interface DoctorCardCompactProps {
  * muted, small outline "Book" pill (32). The whole row books too (same
  * `onBook`). Lay rows out vertically (not in a horizontal scroll).
  */
+/**
+ * The small outline "Book" pill (32), drawn as a label only. It sits inside a
+ * row that is already the button, so it must not be a second, nested button
+ * (invalid HTML on web and a double stop for screen readers).
+ */
+export function BookPill({ label = 'Book' }: { label?: string }) {
+  return (
+    <View style={styles.pill} accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden>
+      <Text style={styles.pillLabel}>{label}</Text>
+    </View>
+  );
+}
+
 export function DoctorCardCompact({ doctor, onBook, inList, divider }: DoctorCardCompactProps) {
   const available = doctor.is_available;
   const book = () => {
@@ -53,7 +65,7 @@ export function DoctorCardCompact({ doctor, onBook, inList, divider }: DoctorCar
         </Text>
       </View>
       {available ? (
-        <GradientButton label="Book" onPress={book} variant="outline" size="sm" />
+        <BookPill />
       ) : (
         <Text style={styles.unavailable}>Unavailable</Text>
       )}
@@ -92,5 +104,16 @@ const styles = StyleSheet.create({
   text: { flex: 1, gap: 2 },
   name: { fontFamily: FontFamily.semibold, fontSize: 15, lineHeight: 20, color: AppColors.onSurface },
   spec: { fontFamily: FontFamily.regular, fontSize: 13, lineHeight: 18, color: AppColors.muted },
+  pill: {
+    height: Size.buttonSmall,
+    borderRadius: Size.buttonSmall / 2,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: AppColors.borderStrong,
+    backgroundColor: AppColors.card,
+  },
+  pillLabel: { fontFamily: FontFamily.semibold, fontSize: 13, letterSpacing: -0.1, color: AppColors.primary },
   unavailable: { fontFamily: FontFamily.medium, fontSize: 12, color: AppColors.muted },
 });

@@ -52,7 +52,7 @@ function withExclusiveNotKnown(prev: string[], next: string[]): string[] {
 
 export default function AllergiesScreen() {
   // Answers live in the onboarding context, so Back and forward keep them.
-  const { childName, allergyAnswers, setAllergyGroup, allergies } = useOnboarding();
+  const { childName, allergyAnswers, setAllergyGroup, allergies, allergyStatus } = useOnboarding();
   const displayName = childName || 'your child';
 
   return (
@@ -69,6 +69,7 @@ export default function AllergiesScreen() {
           <View key={group.key}>
             <Text style={styles.sectionTitle}>{group.title}</Text>
             <ChipGroup
+              label={group.title}
               options={group.options}
               selected={answer.selected}
               onChange={(next) =>
@@ -90,6 +91,13 @@ export default function AllergiesScreen() {
           </View>
         );
       })}
+
+      {/* Nothing picked: Continue still works, but say what the doctor will see (R2-01). */}
+      {allergyStatus === 'unanswered' && (
+        <Text style={styles.skipHint}>
+          Skip for now: doctors will be told {displayName}&apos;s allergies are not known.
+        </Text>
+      )}
 
       {/* Allergy preview badge */}
       {allergies.length > 0 && (
@@ -116,6 +124,13 @@ const styles = StyleSheet.create({
   // Same gap as the "Other" field on the conditions screen.
   otherField: {
     marginTop: 8,
+  },
+  skipHint: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+    color: AppColors.onSurfaceVariant,
+    marginLeft: 2,
   },
   badge: {
     backgroundColor: AppColors.dangerSurface,

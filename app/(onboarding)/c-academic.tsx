@@ -28,12 +28,12 @@ export default function AcademicScreen() {
     >
       <View>
         <Text style={styles.fieldLabel}>Current school grade</Text>
-        <ChipGroup options={GRADES} selected={toChips(answers.grade)} onChange={(v) => set({ grade: fromChips(v) })} />
+        <ChipGroup label="Current school grade" options={GRADES} selected={toChips(answers.grade)} onChange={(v) => set({ grade: fromChips(v) })} />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Academic stress level (as observed by you)</Text>
-        <ChipGroup options={STRESS} selected={toChips(answers.stress)} onChange={(v) => set({ stress: fromChips(v) })} />
+        <ChipGroup label="Academic stress level (as observed by you)" options={STRESS} selected={toChips(answers.stress)} onChange={(v) => set({ stress: fromChips(v) })} />
       </View>
 
       <TextInputField
@@ -46,6 +46,7 @@ export default function AcademicScreen() {
       <View>
         <Text style={styles.fieldLabel}>Activity frequency</Text>
         <ChipGroup
+          label="Activity frequency"
           options={ACTIVITY_FREQ}
           selected={toChips(answers.frequency)}
           onChange={(v) => set({ frequency: fromChips(v) })}
@@ -55,6 +56,7 @@ export default function AcademicScreen() {
       <View>
         <Text style={styles.fieldLabel}>Daily screen time</Text>
         <ChipGroup
+          label="Daily screen time"
           options={SCREEN_TIME}
           selected={toChips(answers.screenTime)}
           onChange={(v) => set({ screenTime: fromChips(v) })}

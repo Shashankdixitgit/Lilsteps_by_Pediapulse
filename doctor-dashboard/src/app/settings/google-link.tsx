@@ -64,7 +64,7 @@ export function GoogleLink({ initialEmail }: Props) {
   }
 
   function disconnect() {
-    if (!confirm('Disconnect Google Calendar? New bookings will fall back to the manual Meet link.')) return;
+    if (!confirm('Disconnect Google Calendar? New bookings will use your video room link instead.')) return;
     startTransition(async () => {
       const res = await disconnectGoogleAction();
       if (res.error) setFeedback({ kind: 'err', msg: res.error });

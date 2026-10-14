@@ -9,6 +9,7 @@
 import { expect, test } from '@playwright/test';
 import { signInAsDoctor } from './_helpers';
 import {
+  ADMIN_SKIP_REASON,
   admin,
   bookTestAppointment,
   cleanupTestData,
@@ -19,6 +20,8 @@ import {
 } from './setup';
 
 test.describe('Tracking — vaccines auto-generate + growth measurements', () => {
+  test.skip(!!ADMIN_SKIP_REASON, ADMIN_SKIP_REASON ?? '');
+
   test.beforeEach(async () => {
     await cleanupTestData();
   });

@@ -2,6 +2,9 @@
  * Book Consultation — Doctor Listing Screen
  *
  * Real doctors via useDoctors() (filtered to dashboard-registered only).
+ * "Earliest available" books whichever doctor is free soonest; each doctor
+ * row shows that doctor's next free time (useNextFreeSlots, 0030), and says
+ * so when the doctor hasn't added a video link yet (has_meet_link, 0035).
  * Flow: booking → describe → slots → confirm
  */
 import { Ionicons } from '@expo/vector-icons';
@@ -19,17 +22,22 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { GradientButton } from '@/components/gradient-button';
+import { doctorInitial, whenLabel } from '@/components/consult/appointmentFormat';
+import { BookPill } from '@/components/consult/DoctorCardCompact';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
-import { useDoctors, type DoctorRow } from '@/hooks/useDoctors';
+import { useChild } from '@/context/child';
+import { doctorHasVideoLink, useDoctors, type DoctorRow } from '@/hooks/useDoctors';
+import { ANY_DOCTOR, useNextFreeSlots, type FreeSlot } from '@/hooks/useEarliestSlots';
 import { typography } from '@/styles/global';
 
 export default function BookingScreen() {
   const insets = useSafeAreaInsets();
   const [search, setSearch] = useState('');
   const { doctors, loading } = useDoctors();
+  const { child } = useChild();
+  const { earliest, byDoctor, loading: loadingNext } = useNextFreeSlots();
 
   const filtered = doctors.filter((d) => {
     const q = search.toLowerCase();
@@ -47,7 +55,7 @@ export default function BookingScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      <ScreenHeader title="Book a consultation" />
+      <ScreenHeader title="Book a consultation" subtitle={child?.name ? `For ${child.name}` : undefined} />
 
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: 32 + insets.bottom }]}
@@ -94,8 +102,22 @@ export default function BookingScreen() {
             </View>
           ) : (
             <View style={styles.listCard}>
+              {!search && (
+                <EarliestRow
+                  earliest={earliest}
+                  loading={loadingNext}
+                  onBook={() => bookDoctor(ANY_DOCTOR)}
+                />
+              )}
               {filtered.map((doc, i) => (
-                <DoctorRowItem key={doc.id} doc={doc} divider={i > 0} onBook={() => bookDoctor(doc.id)} />
+                <DoctorRowItem
+                  key={doc.id}
+                  doc={doc}
+                  next={byDoctor.get(doc.id) ?? null}
+                  nextLoading={loadingNext}
+                  divider={i > 0 || !search}
+                  onBook={() => bookDoctor(doc.id)}
+                />
               ))}
             </View>
           )}
@@ -105,16 +127,79 @@ export default function BookingScreen() {
   );
 }
 
-function DoctorRowItem({ doc, divider, onBook }: { doc: DoctorRow; divider: boolean; onBook: () => void }) {
-  const initial = doc.name.split(' ').slice(-1)[0]?.charAt(0) ?? doc.name.charAt(0);
+const NO_LINK_HINT = 'Video link not set yet. You can message the doctor.';
+
+/** "Next free: Today, 14 Oct · 5:00 PM", or why there is none. */
+function nextFreeText(next: FreeSlot | null, loading: boolean): string | null {
+  if (next) return `Next free: ${whenLabel(next.date, next.time)}`;
+  return loading ? null : 'No free times in the next 2 weeks';
+}
+
+/** First row: book whichever doctor is free soonest. */
+function EarliestRow({
+  earliest,
+  loading,
+  onBook,
+}: {
+  earliest: FreeSlot | null;
+  loading: boolean;
+  onBook: () => void;
+}) {
+  const sub = earliest
+    ? `${whenLabel(earliest.date, earliest.time)} with ${earliest.doctor_name}`
+    : loading
+      ? 'Finding the soonest time…'
+      : 'No free times in the next 2 weeks';
+  return (
+    <PressableScale
+      onPress={onBook}
+      disabled={!loading && !earliest}
+      scaleTo={0.99}
+      bg={AppColors.card}
+      bgPressed={AppColors.surfaceContainerLow}
+      accessibilityLabel={`Earliest available doctor. ${sub}. Book`}
+      style={styles.row}
+    >
+      <View style={styles.avatar}>
+        <Ionicons name="flash-outline" size={Size.iconRow} color={AppColors.primary} />
+      </View>
+      <View style={styles.info}>
+        <Text style={styles.name} numberOfLines={1}>
+          Earliest available doctor
+        </Text>
+        <Text style={typography.meta} numberOfLines={2}>
+          {sub}
+        </Text>
+      </View>
+      {earliest ? <BookPill /> : null}
+    </PressableScale>
+  );
+}
+
+function DoctorRowItem({
+  doc,
+  next,
+  nextLoading,
+  divider,
+  onBook,
+}: {
+  doc: DoctorRow;
+  next: FreeSlot | null;
+  nextLoading: boolean;
+  divider: boolean;
+  onBook: () => void;
+}) {
+  const initial = doctorInitial(doc.name);
   const meta = [doc.specialisation, doc.hospital].filter(Boolean).join(' · ');
+  const nextText = nextFreeText(next, nextLoading);
+  const noVideoLink = !doctorHasVideoLink(doc);
   return (
     <PressableScale
       onPress={onBook}
       scaleTo={0.99}
       bg={AppColors.card}
       bgPressed={AppColors.surfaceContainerLow}
-      accessibilityLabel={`${doc.name}, ${meta}. Book`}
+      accessibilityLabel={`${doc.name}, ${meta}${nextText ? `. ${nextText}` : ''}${noVideoLink ? `. ${NO_LINK_HINT}` : ''}. Book`}
       style={[styles.row, divider && styles.divider]}
     >
       <View style={styles.avatar}>
@@ -124,18 +209,24 @@ function DoctorRowItem({ doc, divider, onBook }: { doc: DoctorRow; divider: bool
         <Text style={styles.name} numberOfLines={1}>
           {doc.name}
         </Text>
-        {doc.specialisation ? (
+        {meta ? (
           <Text style={typography.meta} numberOfLines={1}>
-            {doc.specialisation}
+            {meta}
           </Text>
         ) : null}
-        {doc.hospital ? (
-          <Text style={typography.caption} numberOfLines={1}>
-            {doc.hospital}
+        {nextText ? (
+          <Text style={[typography.caption, next && styles.nextFree]} numberOfLines={1}>
+            {nextText}
           </Text>
+        ) : null}
+        {noVideoLink ? (
+          <View style={styles.noLinkRow}>
+            <Ionicons name="videocam-off-outline" size={Size.iconMeta} color={AppColors.muted} />
+            <Text style={typography.caption}>{NO_LINK_HINT}</Text>
+          </View>
         ) : null}
       </View>
-      <GradientButton label="Book" onPress={onBook} variant="outline" size="sm" />
+      <BookPill />
     </PressableScale>
   );
 }
@@ -198,4 +289,6 @@ const styles = StyleSheet.create({
   avatarText: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.primary },
   info: { flex: 1, gap: 2 },
   name: { ...typography.title, lineHeight: 20 },
+  nextFree: { color: AppColors.primary },
+  noLinkRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 });

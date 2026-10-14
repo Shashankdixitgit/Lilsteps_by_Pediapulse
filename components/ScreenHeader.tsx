@@ -8,7 +8,7 @@ import { AppColors, FontFamily, Size } from '@/constants/theme';
 interface ScreenHeaderProps {
   /** 17 SemiBold, left-aligned next to the back button. */
   title?: string;
-  /** Optional one-line 13 muted subtitle under the title (e.g. doctor name). */
+  /** Optional 13 muted subtitle (up to 2 lines) under the title (e.g. doctor name). */
   subtitle?: string;
   /** Defaults to `router.back()`. */
   onBack?: () => void;
@@ -43,14 +43,14 @@ export function ScreenHeader({ title, subtitle, onBack, hideBack, backDisabled, 
       <View style={[styles.titleWrap, hideBack && styles.titleWrapNoBack]}>
         {title ? (
           <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={1} accessibilityRole="header">
+            <Text style={styles.title} numberOfLines={2} accessibilityRole="header">
               {title}
             </Text>
             {titleAccessory}
           </View>
         ) : null}
         {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={styles.subtitle} numberOfLines={2}>
             {subtitle}
           </Text>
         ) : null}
@@ -86,8 +86,11 @@ export function HeaderIconButton({ icon, onPress, accessibilityLabel, color = Ap
 }
 
 const styles = StyleSheet.create({
+  // minHeight, not height: at 200% text the title and subtitle wrap to a
+  // second line instead of being cut to "Dr. …" (R3-05).
   header: {
-    height: Size.header,
+    minHeight: Size.header,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,

@@ -1,10 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import {
-  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,21 +16,36 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipGroup } from '@/components/chip-group';
 import { GradientButton } from '@/components/gradient-button';
+import { notify } from '@/components/growth/confirm';
+import { DateField } from '@/components/growth/DateField';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { useChild } from '@/context/child';
-import { useDocuments, type DocumentRow } from '@/hooks/useDocuments';
+import {
+  DocumentUploadError,
+  MAX_DOCUMENT_BYTES,
+  useDocuments,
+  type DocumentRow,
+} from '@/hooks/useDocuments';
+import { istTodayDateOnly } from '@/hooks/useGrowth';
 import { typography } from '@/styles/global';
 
 type DocCategory = DocumentRow['category'];
 
-const CATEGORIES: { id: DocCategory; label: string }[] = [
-  { id: 'prescription', label: 'Prescription' },
-  { id: 'report', label: 'Report' },
-  { id: 'lab_test', label: 'Lab test' },
-  { id: 'visit_history', label: 'Visit history' },
-  { id: 'other', label: 'Other' },
+/**
+ * What the parent picks. `id` is the stored documents.category; a discharge
+ * summary is a hospital visit record, so it is filed under Visits and
+ * suggests its own title.
+ */
+const CATEGORIES: { key: string; id: DocCategory; label: string; defaultTitle?: string }[] = [
+  { key: 'prescription', id: 'prescription', label: 'Prescription' },
+  { key: 'report', id: 'report', label: 'Report' },
+  { key: 'lab_test', id: 'lab_test', label: 'Lab test' },
+  { key: 'visit_history', id: 'visit_history', label: 'Visit history' },
+  { key: 'discharge_summary', id: 'visit_history', label: 'Discharge summary', defaultTitle: 'Discharge summary' },
+  { key: 'vaccination', id: 'vaccination', label: 'Vaccination certificate' },
+  { key: 'other', id: 'other', label: 'Other' },
 ];
 const CATEGORY_LABELS = CATEGORIES.map((c) => c.label);
 
@@ -45,9 +59,22 @@ export default function UploadDocumentScreen() {
   const insets = useSafeAreaInsets();
   const { child } = useChild();
   const { uploadDocument } = useDocuments(child?.id ?? null);
+  // Callers preset these: the Records "+" menu sends a category, the Vaccines
+  // tab sends category=vaccination + title=Vaccination certificate.
+  const params = useLocalSearchParams<{ category?: string; title?: string }>();
+  const presetCategory = CATEGORIES.find((c) => c.key === params.category)?.key;
 
-  const [category, setCategory] = useState<DocCategory>('prescription');
-  const [title, setTitle] = useState('');
+  // No default: a lab report silently saved as a Prescription is worse than
+  // asking. The Records "+" menu and empty states preset it.
+  const [categoryKey, setCategoryKey] = useState<string | null>(presetCategory ?? null);
+  const chosenCategory = CATEGORIES.find((c) => c.key === categoryKey) ?? null;
+  const [title, setTitle] = useState(typeof params.title === 'string' ? params.title : '');
+  // Suggested title from the picked file's name. Shown as the placeholder
+  // and used if the parent leaves Title empty, so typing never appends to it.
+  const [fileTitle, setFileTitle] = useState('');
+  const today = istTodayDateOnly();
+  // The date on the report (documents.document_date); today unless changed.
+  const [documentDate, setDocumentDate] = useState(today);
   const [doctorName, setDoctorName] = useState('');
   const [notes, setNotes] = useState('');
   const [fileName, setFileName] = useState('');
@@ -57,7 +84,15 @@ export default function UploadDocumentScreen() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const canSave = title.trim().length >= 2 && fileUri.length > 0;
+  const finalTitle = title.trim() || fileTitle || chosenCategory?.defaultTitle || '';
+  const canSave = finalTitle.length >= 2 && fileUri.length > 0 && chosenCategory !== null;
+
+  /** Refuse files over the bucket limit before the parent fills the form. */
+  function tooLarge(size: number | null | undefined) {
+    if ((size ?? 0) <= MAX_DOCUMENT_BYTES) return false;
+    notify('File too large', 'Please choose a file under 20 MB.');
+    return true;
+  }
 
   async function pickDocument() {
     const result = await DocumentPicker.getDocumentAsync({
@@ -67,20 +102,19 @@ export default function UploadDocumentScreen() {
 
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
+      if (tooLarge(asset.size)) return;
       setFileName(asset.name);
       setFileUri(asset.uri);
       setFileType(asset.mimeType ?? 'application/octet-stream');
       setFileSize(asset.size ?? 0);
-      if (!title.trim()) {
-        setTitle(asset.name.replace(/\.[^.]+$/, ''));
-      }
+      setFileTitle(asset.name.replace(/\.[^.]+$/, ''));
     }
   }
 
   async function pickImage() {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow photo library access to upload images.');
+      notify('Permission needed', 'Please allow photo library access to upload images.');
       return;
     }
 
@@ -91,21 +125,20 @@ export default function UploadDocumentScreen() {
 
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
-      const name = asset.uri.split('/').pop() ?? 'photo.jpg';
+      if (tooLarge(asset.fileSize)) return;
+      const name = asset.fileName ?? (asset.uri.startsWith('data:') ? 'photo.jpg' : asset.uri.split('/').pop() ?? 'photo.jpg');
       setFileName(name);
       setFileUri(asset.uri);
       setFileType(asset.mimeType ?? 'image/jpeg');
       setFileSize(asset.fileSize ?? 0);
-      if (!title.trim()) {
-        setTitle(name.replace(/\.[^.]+$/, ''));
-      }
+      setFileTitle(name.replace(/\.[^.]+$/, ''));
     }
   }
 
   async function takePhoto() {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow camera access to take photos.');
+      notify('Permission needed', 'Please allow camera access to take photos.');
       return;
     }
 
@@ -115,7 +148,8 @@ export default function UploadDocumentScreen() {
 
     if (!result.canceled && result.assets?.[0]) {
       const asset = result.assets[0];
-      const name = asset.uri.split('/').pop() ?? 'photo.jpg';
+      if (tooLarge(asset.fileSize)) return;
+      const name = asset.fileName ?? (asset.uri.startsWith('data:') ? 'photo.jpg' : asset.uri.split('/').pop() ?? 'photo.jpg');
       setFileName(name);
       setFileUri(asset.uri);
       setFileType(asset.mimeType ?? 'image/jpeg');
@@ -124,22 +158,28 @@ export default function UploadDocumentScreen() {
   }
 
   async function handleSave() {
-    if (!canSave || saving) return;
+    if (!canSave || saving || !chosenCategory) return;
     setSaving(true);
     try {
       await uploadDocument({
-        title: title.trim(),
-        category,
-        file_url: fileUri,
-        file_type: fileType.includes('pdf') ? 'pdf' : 'image',
+        title: finalTitle,
+        category: chosenCategory.id,
+        fileUri,
+        mimeType: fileType,
         file_size: fileSize,
         doctor_name: doctorName.trim() || undefined,
         notes: notes.trim() || undefined,
+        document_date: documentDate,
       });
       setSaved(true);
-      setTimeout(() => router.back(), 1500);
-    } catch {
-      Alert.alert('Error', 'Failed to save document. Please try again.');
+      // Opened from a deep link there's no screen to go back to. Long enough
+      // to read the confirmation.
+      setTimeout(() => (router.canGoBack() ? router.back() : router.replace('/records')), 2500);
+    } catch (e) {
+      notify(
+        'Upload failed',
+        e instanceof DocumentUploadError ? e.message : 'Failed to save document. Please try again.',
+      );
       setSaving(false);
     }
   }
@@ -151,22 +191,32 @@ export default function UploadDocumentScreen() {
           <View style={styles.successIcon}>
             <Ionicons name="checkmark" size={32} color={AppColors.success} />
           </View>
-          <Text style={typography.heading}>Document saved</Text>
-          <Text style={typography.meta}>Added to health records.</Text>
+          <Text style={typography.heading} accessibilityRole="header" accessibilityLiveRegion="polite">
+            Saved
+          </Text>
+          <Text style={typography.meta}>
+            {child?.name ? `Added to ${child.name}'s health records.` : 'Added to health records.'}
+          </Text>
+          {/* Upload confirmation that also says who can see it (R2-22). */}
+          <View style={styles.privacyNote} accessibilityRole="alert">
+            <Ionicons name="lock-closed-outline" size={14} color={AppColors.secondary} />
+            <Text style={[typography.bodySM, styles.privacyNoteText]}>
+              Saved. Only you and doctors you book can see it.
+            </Text>
+          </View>
         </View>
       </View>
     );
   }
 
   const pickers = { file: pickDocument, gallery: pickImage, camera: takePhoto } as const;
-  const activeLabel = CATEGORIES.find((c) => c.id === category)?.label ?? CATEGORY_LABELS[0];
 
   return (
     <KeyboardAvoidingView
       style={[styles.screen, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScreenHeader title="Upload document" />
+      <ScreenHeader title="Upload document" subtitle={child?.name ? `For ${child.name}` : undefined} />
 
       <ScrollView
         contentContainerStyle={[styles.scroll, { paddingBottom: 32 }]}
@@ -188,11 +238,11 @@ export default function UploadDocumentScreen() {
               <View style={styles.fileInfo}>
                 <Text style={typography.title} numberOfLines={1}>{fileName}</Text>
                 <Text style={typography.meta}>
-                  {fileSize > 0 ? `${(fileSize / 1024).toFixed(0)} KB` : fileType}
+                  {fileSize > 0 ? `${Math.max(1, Math.round(fileSize / 1024))} KB` : fileType}
                 </Text>
               </View>
               <Pressable
-                onPress={() => { setFileUri(''); setFileName(''); }}
+                onPress={() => { setFileUri(''); setFileName(''); setFileTitle(''); }}
                 accessibilityRole="button"
                 accessibilityLabel="Remove file"
                 style={styles.removeBtn}
@@ -222,19 +272,37 @@ export default function UploadDocumentScreen() {
           <Text style={typography.sectionLabel}>Category</Text>
           <ChipGroup
             options={CATEGORY_LABELS}
-            selected={[activeLabel]}
+            selected={chosenCategory ? [chosenCategory.label] : []}
             onChange={(sel) => {
               const next = CATEGORIES.find((c) => c.label === sel[0]);
-              if (next) setCategory(next.id);
+              if (next) setCategoryKey(next.key);
             }}
           />
+          {!chosenCategory && fileUri ? (
+            <Text style={typography.meta}>Choose a category to upload.</Text>
+          ) : null}
         </View>
 
         <TextInputField
           label="Title"
-          placeholder="e.g. Blood test results"
+          placeholder={fileTitle || chosenCategory?.defaultTitle || 'e.g. Blood test results'}
+          hint={
+            !title && fileTitle
+              ? '(file name used if left empty)'
+              : !title && chosenCategory?.defaultTitle
+                ? '(used if left empty)'
+                : undefined
+          }
+          hintInline
           value={title}
           onChangeText={setTitle}
+        />
+
+        <DateField
+          label="Date on the report"
+          value={documentDate}
+          onChange={setDocumentDate}
+          max={today}
         />
 
         <TextInputField
@@ -274,6 +342,17 @@ export default function UploadDocumentScreen() {
 }
 
 const styles = StyleSheet.create({
+  privacyNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: Radius.full,
+    backgroundColor: AppColors.mintSurface,
+  },
+  privacyNoteText: { color: AppColors.onSurface, flexShrink: 1 },
   screen: { flex: 1, backgroundColor: AppColors.surface },
   scroll: { paddingHorizontal: 20, paddingTop: 8, gap: 24 },
 

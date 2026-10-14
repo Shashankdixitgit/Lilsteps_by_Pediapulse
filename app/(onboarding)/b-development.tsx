@@ -27,6 +27,7 @@ export default function DevelopmentYoungScreen() {
       <View>
         <Text style={styles.fieldLabel}>Any diagnosed developmental conditions?</Text>
         <ChipGroup
+          label="Any diagnosed developmental conditions?"
           options={DEV_CONDITIONS}
           selected={answers.devConditions}
           onChange={(devConditions) => set({ devConditions })}
@@ -46,12 +47,13 @@ export default function DevelopmentYoungScreen() {
 
       <View>
         <Text style={styles.fieldLabel}>Attending school or daycare?</Text>
-        <ChipGroup options={SCHOOL} selected={toChips(answers.school)} onChange={(v) => set({ school: fromChips(v) })} />
+        <ChipGroup label="Attending school or daycare?" options={SCHOOL} selected={toChips(answers.school)} onChange={(v) => set({ school: fromChips(v) })} />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Any school concerns flagged?</Text>
         <ChipGroup
+          label="Any school concerns flagged?"
           options={SCHOOL_CONCERNS}
           selected={answers.schoolConcerns}
           onChange={(schoolConcerns) => set({ schoolConcerns })}

@@ -7,13 +7,15 @@ import { parseDateOnly } from '@/lib/date';
 
 import {
   ChartTab,
+  GrowthSex,
   REFERENCE_AGES,
   TimeFilter,
-  WHO_BANDS,
+  bandsFor,
   getXAxisRange,
   interpolate,
   monthsBetween,
 } from './whoData';
+import { formatWeightValue } from './format';
 
 // Two colours only: the child's line is forest green, everything WHO is blue.
 const CHILD = AppColors.primary;
@@ -118,9 +120,13 @@ export interface GrowthChartProps {
   timeFilter: TimeFilter;
   width: number;
   childName: string;
+  /** What the tab is called for this child ("length" under 2, "height" after). */
+  label?: string;
+  /** Picks the boys or girls table; unknown sex uses the averaged one (G1). */
+  sex?: GrowthSex;
 }
 
-export function GrowthChart({ tab, measurements, dob, timeFilter, width, childName }: GrowthChartProps) {
+export function GrowthChart({ tab, measurements, dob, timeFilter, width, childName, label, sex }: GrowthChartProps) {
   const plotW = width - PAD.left - PAD.right;
   const plotH = CHART_H - PAD.top - PAD.bottom;
   const currentAgeMonths = monthsBetween(dob, new Date());
@@ -131,7 +137,7 @@ export function GrowthChart({ tab, measurements, dob, timeFilter, width, childNa
   const tickStep = ageTickStep(rawXMax - xMin);
   // A few days past a tick (e.g. on the 12th birthday) stays on that tick.
   const xMax = Math.max(tickStep, Math.ceil((rawXMax - 0.25) / tickStep) * tickStep);
-  const bands = WHO_BANDS[tab];
+  const bands = bandsFor(tab, sex);
   const unit = UNIT[tab];
 
   const ages = useMemo(
@@ -144,7 +150,11 @@ export function GrowthChart({ tab, measurements, dob, timeFilter, width, childNa
     p97: ages.map((a) => interpolate(REFERENCE_AGES, bands.p97, a)),
   }), [ages, bands]);
 
-  const points: [number, number][] = useMemo(() => measurements
+  // `measurements` is newest first; walk it oldest first so that, after the
+  // stable sort by age, the newest of several same-day entries is the last
+  // point (the one the "latest" pill labels).
+  const points: [number, number][] = useMemo(() => [...measurements]
+    .reverse()
     .map((m) => {
       const age = monthsBetween(dob, parseDateOnly(m.measured_at));
       const val = valueForTab(m, tab);
@@ -196,7 +206,9 @@ export function GrowthChart({ tab, measurements, dob, timeFilter, width, childNa
   }
 
   const latest = points[points.length - 1];
-  const callout = latest ? `${latest[1].toFixed(1)}${unit ? ` ${unit}` : ''}` : '';
+  const callout = latest
+    ? `${tab === 'weight' ? formatWeightValue(latest[1]) : latest[1].toFixed(1)}${unit ? ` ${unit}` : ''}`
+    : '';
   const calloutW = callout.length * 7 + 16;
   const dotX = latest ? x(latest[0]) : 0;
   const dotY = latest ? y(latest[1]) : 0;
@@ -207,9 +219,10 @@ export function GrowthChart({ tab, measurements, dob, timeFilter, width, childNa
       }, plotW)
     : { x: 0, y: 0 };
 
+  const name = label ?? (tab === 'bmi' ? 'BMI' : tab);
   const a11y = latest
-    ? `${tab} chart. ${childName}'s latest ${tab} is ${callout}. Blue shading shows the WHO range from the 3rd to the 97th percentile.`
-    : `${tab} chart showing the WHO range. No measurements logged yet.`;
+    ? `${name} chart. ${childName}'s latest ${name} is ${callout}. Blue shading shows the approximate typical range, 3rd to 97th percentile.`
+    : `${name} chart showing the approximate typical range. No measurements logged yet.`;
 
   return (
     <Svg width={width} height={CHART_H} accessible accessibilityLabel={a11y}>

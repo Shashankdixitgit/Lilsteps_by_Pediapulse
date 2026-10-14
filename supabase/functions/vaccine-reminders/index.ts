@@ -3,11 +3,14 @@
 // Cron-triggered daily. For each vaccination scheduled within the next 7 days
 // (and not yet administered), sends a one-time reminder SMS + push.
 //
-// Deploy: `supabase functions deploy vaccine-reminders --no-verify-jwt --project-ref opdosbudlzwywdmrxlqr`
+// NOT DEPLOYED yet: no SMS provider (Twilio/DLT) and no pg_cron schedule.
+// Rejects any caller without a server key, so deploying it is safe.
+//
+// Deploy: `supabase functions deploy vaccine-reminders --no-verify-jwt --project-ref ahikfefphptmtivwukpv`
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { dispatch } from '../_shared/notify.ts';
 import { jsonResponse } from '../_shared/cors.ts';
+import { createAdminClient, isServerCaller } from '../_shared/supabase.ts';
 
 interface VaccinationRow {
   id: string;
@@ -21,12 +24,12 @@ interface VaccinationRow {
   } | null;
 }
 
-Deno.serve(async () => {
-  const admin = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    { auth: { persistSession: false } },
-  );
+Deno.serve(async (req) => {
+  // Cron-only: deployed with --no-verify-jwt, so gate on a server key here.
+  // pg_net should send the secret key on the `apikey` header (from Vault).
+  if (!isServerCaller(req)) return jsonResponse({ error: 'Unauthorized' }, 401);
+
+  const admin = createAdminClient();
 
   const today = new Date().toISOString().slice(0, 10);
   const horizon = new Date(Date.now() + 7 * 86400_000).toISOString().slice(0, 10);
@@ -41,7 +44,10 @@ Deno.serve(async () => {
     .lte('scheduled_date', horizon)
     .returns<VaccinationRow[]>();
 
-  if (error) return jsonResponse({ error: error.message }, 500);
+  if (error) {
+    console.error(`[vaccine-reminders] query failed: ${error.message}`);
+    return jsonResponse({ error: 'Query failed' }, 500);
+  }
 
   const template = 'vaccine_due_soon';
   const results: Array<{ id: string; ok: boolean; error?: string }> = [];

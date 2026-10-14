@@ -42,7 +42,14 @@ export function TextInputField({ label, hint, hintInline, error, leading, style,
       >
         {leading ? <View style={styles.leading}>{leading}</View> : null}
         <TextInput
-          placeholderTextColor={AppColors.placeholder}
+          {...props}
+          // Lighter than typed text (fields are pure white, where `outline`
+          // is allowed as text), so a hint like "e.g. 12.5" never reads as
+          // an answer already filled in.
+          placeholderTextColor={props.placeholderTextColor ?? AppColors.outline}
+          // Screen readers announce the visible label, not the placeholder.
+          accessibilityLabel={props.accessibilityLabel ?? (label ? (hint && hintInline ? `${label} ${hint}` : label) : undefined)}
+          accessibilityHint={props.accessibilityHint ?? (hint && !hintInline ? hint : undefined)}
           style={[styles.input, style]}
           onFocus={(e) => {
             setFocused(true);
@@ -52,7 +59,6 @@ export function TextInputField({ label, hint, hintInline, error, leading, style,
             setFocused(false);
             props.onBlur?.(e);
           }}
-          {...props}
         />
       </View>
       {hint && !hintInline && !hasError ? <Text style={styles.hint}>{hint}</Text> : null}
@@ -98,6 +104,9 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: AppColors.fieldBorder,
     minHeight: 48,
+    // Lets the field shrink below the input's intrinsic width at narrow
+    // widths / 200% zoom instead of pushing the page sideways (R2-12).
+    minWidth: 0,
   },
   fieldFocused: {
     borderColor: AppColors.secondary,
@@ -111,6 +120,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    minWidth: 0,
     minHeight: 45,
     paddingHorizontal: 14,
     fontFamily: FontFamily.regular,

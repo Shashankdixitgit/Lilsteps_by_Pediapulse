@@ -25,12 +25,13 @@ export default function SleepOlderScreen() {
     >
       <View>
         <Text style={styles.fieldLabel}>Sleep hours on school nights</Text>
-        <ChipGroup options={SLEEP_HOURS} selected={toChips(answers.hours)} onChange={(v) => set({ hours: fromChips(v) })} />
+        <ChipGroup label="Sleep hours on school nights" options={SLEEP_HOURS} selected={toChips(answers.hours)} onChange={(v) => set({ hours: fromChips(v) })} />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Any sleep concerns?</Text>
         <ChipGroup
+          label="Any sleep concerns?"
           options={CONCERNS}
           selected={answers.concerns}
           onChange={(concerns) => set({ concerns })}

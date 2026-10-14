@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Pressable, StyleProp, StyleSheet, Text, useWindowDimensions, View, ViewStyle } from 'react-native';
 
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Size } from '@/constants/theme';
@@ -51,6 +51,11 @@ export function GradientButton({
   chevron,
   accessibilityLabel,
 }: GradientButtonProps) {
+  // Narrow pill (small phone, 200% zoom) or large text: drop the arrow badge
+  // so the label keeps the room, and let it wrap to 2 lines (R3-16).
+  // Window width, not the pill's: a short inline button keeps its arrow.
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const roomy = fontScale < 1.3 && windowWidth >= 340;
   const isText = variant === 'ghost' || variant === 'danger';
   if (isText) {
     return (
@@ -71,7 +76,7 @@ export function GradientButton({
   const isSmall = size === 'sm';
   const hasLabel = label.length > 0;
   const inactive = !!disabled || !!loading;
-  const withArrow = showArrow && hasLabel && !isOutline && !disabled && !isSmall;
+  const withArrow = showArrow && roomy && hasLabel && !isOutline && !disabled && !isSmall;
   const height = size === 'lg' ? Size.buttonLarge : isSmall ? Size.buttonSmall : Size.buttonPrimary;
   // Arrow circle: 44 inside the 56 pill, 32 inside the 48 pill.
   const circle = size === 'lg' ? height - 12 : height - 16;
@@ -108,14 +113,25 @@ export function GradientButton({
       bgPressed={bgPressed}
       style={[
         styles.pill,
-        { height, borderRadius: height / 2 },
+        // minHeight, not height: a 2-line label grows the pill instead of
+        // spilling out of it.
+        { minHeight: height, borderRadius: height / 2 },
+        !isSmall && styles.pillPadded,
         isOutline && styles.outline,
         isSmall && styles.small,
         withArrow || (loading && !isSmall) ? (size === 'lg' ? styles.withArrowLg : styles.withArrow) : null,
         style,
       ]}
     >
-      <Text style={[styles.label, isSmall && styles.labelSmall, { color: labelColor }]}>{label}</Text>
+      {/* Up to 2 lines at narrow widths / large text; the pill grows. */}
+      <Text
+        style={[styles.label, isSmall && styles.labelSmall, { color: labelColor }]}
+        numberOfLines={isSmall ? 1 : 2}
+        adjustsFontSizeToFit={isSmall}
+        minimumFontScale={0.8}
+      >
+        {label}
+      </Text>
       {loading && !isSmall ? (
         <View style={[styles.arrowCircle, { right: arrowInset, width: circle, height: circle, borderRadius: circle / 2 }]}>
           <ActivityIndicator size="small" color={isLight || isOutline ? AppColors.primary : AppColors.onPrimary} />
@@ -181,6 +197,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 28,
     borderCurve: 'continuous',
   },
+  pillPadded: {
+    paddingVertical: 6,
+  },
   withArrow: {
     paddingHorizontal: 48,
   },
@@ -198,6 +217,7 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semibold,
     fontSize: 15,
     letterSpacing: -0.1,
+    textAlign: 'center',
   },
   labelSmall: {
     fontSize: 13,

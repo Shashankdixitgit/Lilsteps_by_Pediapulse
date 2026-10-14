@@ -16,8 +16,8 @@ const robotoMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'Pedia Pulse — Clinical Dashboard',
-  description: 'Paediatric consultation dashboard for Pedia Pulse, Pune.',
+  title: 'LilSteps — Clinical Dashboard',
+  description: 'Paediatric consultation dashboard for LilSteps doctors.',
 };
 
 export default function RootLayout({
@@ -27,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="en-IN"
       className={`${roboto.variable} ${robotoMono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col">

@@ -6,7 +6,8 @@ import { TextButton } from '@/components/gradient-button';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors, Radius } from '@/constants/theme';
-import { EMPTY_MEDICATION, useOnboarding, type MedicationEntry } from '@/context/onboarding';
+import { EMPTY_MEDICATION, medicationsMissingName, useOnboarding, type MedicationEntry } from '@/context/onboarding';
+import { typography } from '@/styles/global';
 
 const CONDITIONS = [
   'Asthma', 'Type 1 Diabetes', 'Epilepsy',
@@ -30,7 +31,12 @@ export default function ConditionsScreen() {
 
   const removeMed = (index: number) => setMeds(medications.filter((_, i) => i !== index));
 
+  // A card with a dose or frequency but no name would be dropped on save (O3):
+  // ask for the name (or Remove) before moving on.
+  const missingName = new Set(medicationsMissingName(conditionsAnswers));
+
   const handleContinue = () => {
+    if (missingName.size > 0) return;
     // The path comes from the date of birth. Without it (e.g. a reload part-way
     // through), go back to "Your child" instead of guessing a path.
     if (bracket === 'A') router.push('/(onboarding)/a-birth-history');
@@ -46,10 +52,19 @@ export default function ConditionsScreen() {
       subtitle="Helps doctors prepare before a consultation"
       ctaLabel="Continue"
       onCta={handleContinue}
+      ctaDisabled={missingName.size > 0}
+      footerExtra={
+        missingName.size > 0 ? (
+          <Text style={[typography.caption, styles.missingHint]}>
+            Add the medicine name, or clear its dose and frequency, to continue
+          </Text>
+        ) : null
+      }
     >
       <View>
         <Text style={styles.fieldLabel}>Any diagnosed chronic conditions?</Text>
         <ChipGroup
+          label="Any diagnosed chronic conditions?"
           options={CONDITIONS}
           selected={selected}
           onChange={(next) => updateSection('conditionsAnswers', { selected: next })}
@@ -71,6 +86,7 @@ export default function ConditionsScreen() {
       <View>
         <Text style={styles.fieldLabel}>Currently taking any regular medications?</Text>
         <ChipGroup
+          label="Currently taking any regular medications?"
           options={MED_OPTIONS}
           selected={takingMeds ? [takingMeds] : []}
           onChange={(vals) => updateSection('conditionsAnswers', { takingMeds: vals[0] ?? '' })}
@@ -101,6 +117,7 @@ export default function ConditionsScreen() {
                 value={med.name}
                 onChangeText={(v) => updateMed(index, 'name', v)}
                 autoCapitalize="words"
+                error={missingName.has(index) ? 'Add the medicine name so the doctor can see it' : undefined}
               />
 
               <TextInputField
@@ -114,6 +131,7 @@ export default function ConditionsScreen() {
               <View>
                 <Text style={styles.freqLabel}>How often?</Text>
                 <ChipGroup
+                  label="How often?"
                   options={FREQUENCY_OPTIONS}
                   selected={med.frequency ? [med.frequency] : []}
                   onChange={(val) => updateMed(index, 'frequency', val[0] ?? '')}
@@ -194,5 +212,8 @@ const styles = StyleSheet.create({
   },
   addButton: {
     alignSelf: 'center',
+  },
+  missingHint: {
+    textAlign: 'center',
   },
 });

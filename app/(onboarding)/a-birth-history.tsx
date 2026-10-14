@@ -6,7 +6,7 @@ import { OnboardingShell } from '@/components/onboarding-shell';
 import { fromChips, toChips } from '@/components/onboarding/chips';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors } from '@/constants/theme';
-import { useOnboarding } from '@/context/onboarding';
+import { BIRTH_WEIGHT_MAX_KG, BIRTH_WEIGHT_MIN_KG, parseBirthWeight, useOnboarding } from '@/context/onboarding';
 
 const TERM = ['Full term', 'Premature'];
 const DELIVERY = ['Normal vaginal', 'C-section', 'Assisted'];
@@ -15,6 +15,11 @@ const COMPLICATIONS = ['NICU stay', 'Neonatal jaundice', 'Breathing support', 'N
 export default function BirthHistoryScreen() {
   const { aBirthHistory: answers, updateSection } = useOnboarding();
   const set = (patch: Partial<typeof answers>) => updateSection('aBirthHistory', patch);
+  // Saved as the first growth reading (G1), so an impossible number is flagged.
+  const birthWeightError =
+    answers.birthWeight.trim() && parseBirthWeight(answers.birthWeight) === null
+      ? `Enter the weight in kg, between ${BIRTH_WEIGHT_MIN_KG} and ${BIRTH_WEIGHT_MAX_KG}`
+      : undefined;
 
   return (
     <OnboardingShell
@@ -22,11 +27,14 @@ export default function BirthHistoryScreen() {
       title="Birth history"
       subtitle="Helps doctors understand early development"
       ctaLabel="Continue"
-      onCta={() => router.push('/(onboarding)/a-feeding')}
+      onCta={() => {
+        if (!birthWeightError) router.push('/(onboarding)/a-feeding');
+      }}
+      ctaDisabled={!!birthWeightError}
     >
       <View>
         <Text style={styles.fieldLabel}>Full term or premature?</Text>
-        <ChipGroup options={TERM} selected={toChips(answers.term)} onChange={(v) => set({ term: fromChips(v) })} />
+        <ChipGroup label="Full term or premature?" options={TERM} selected={toChips(answers.term)} onChange={(v) => set({ term: fromChips(v) })} />
       </View>
 
       {answers.term === 'Premature' && (
@@ -42,6 +50,7 @@ export default function BirthHistoryScreen() {
       <View>
         <Text style={styles.fieldLabel}>Mode of delivery</Text>
         <ChipGroup
+          label="Mode of delivery"
           options={DELIVERY}
           selected={toChips(answers.delivery)}
           onChange={(v) => set({ delivery: fromChips(v) })}
@@ -54,13 +63,15 @@ export default function BirthHistoryScreen() {
         hintInline
         placeholder="e.g. 2.8"
         value={answers.birthWeight}
-        onChangeText={(birthWeight) => set({ birthWeight })}
+        onChangeText={(birthWeight) => set({ birthWeight: birthWeight.replace(',', '.') })}
         keyboardType="decimal-pad"
+        error={birthWeightError}
       />
 
       <View>
         <Text style={styles.fieldLabel}>Any birth complications?</Text>
         <ChipGroup
+          label="Any birth complications?"
           options={COMPLICATIONS}
           selected={answers.complications}
           onChange={(complications) => set({ complications })}

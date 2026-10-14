@@ -21,7 +21,13 @@ export function parseDateOnly(value: string | Date): Date {
   if (value instanceof Date) return value;
   if (value.length === 10) {
     const m = DATE_ONLY_RE.exec(value);
-    if (m) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    if (m) {
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+      // new Date(y, …) reads years 0-99 as 1900-1999: "0002-05-01" (a year
+      // half-typed in a date input) must not become 1902.
+      d.setFullYear(Number(m[1]));
+      return d;
+    }
   }
   return new Date(value);
 }

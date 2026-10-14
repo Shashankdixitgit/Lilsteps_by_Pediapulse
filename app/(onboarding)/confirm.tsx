@@ -1,26 +1,42 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, type Href } from 'expo-router';
 import { useRef, useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChildAvatar } from '@/components/ChildAvatar';
 import { GradientButton } from '@/components/gradient-button';
+import { RETURN_TO_CONFIRM } from '@/components/onboarding-shell';
+import { doseCountLines, vaccineDoseCounts } from '@/components/onboarding/VaccinationStep';
 import { HeaderIconButton } from '@/components/ScreenHeader';
 import { AnimatedProgress } from '@/components/ui/AnimatedProgress';
 import { getOnboardingStep } from '@/constants/onboardingSteps';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import {
+  ANNUAL_VACCINE_NAMES,
+  babyVaccinesQuestionFor,
   VACCINE_QUESTIONS_BY_PATH,
   questionsDueBy,
   type VaccineAnswer,
+  type VaccineDoseRow,
 } from '@/constants/vaccineQuestions';
 import { useAuth } from '@/context/auth';
 import { useChild } from '@/context/child';
-import { useOnboarding } from '@/context/onboarding';
+import {
+  ALLERGY_NONE,
+  ALLERGY_NOT_KNOWN,
+  ALLERGY_OTHER,
+  buildOnboardingAnswers,
+  parentCity,
+  parseBirthWeight,
+  useOnboarding,
+  type AllergyAnswers,
+  type AllergyEntry,
+  type AllergyGroup,
+} from '@/context/onboarding';
 import { formatAgeLabel } from '@/lib/age';
-import { formatDate, toDateOnlyString } from '@/lib/date';
+import { formatDate, toDateOnlyString, todayDateOnly } from '@/lib/date';
 import { dbg } from '@/lib/debug';
 import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
@@ -41,13 +57,57 @@ function parseMeasure(value: string): number | null {
 }
 
 /**
- * Go back to an earlier onboarding screen to edit it. dismissTo pops the
- * stack back to that screen (answers live in the onboarding context, so the
- * parent walks forward again with everything filled in). If the screen is
- * not in the stack, it replaces this one instead.
+ * Open an earlier onboarding screen on top of this one to edit it. The
+ * returnTo param makes that screen's CTA ("Back to review") come straight
+ * back here instead of walking through every later screen again. Answers
+ * live in the onboarding context, so nothing is lost either way.
  */
 function editScreen(href: Href) {
-  router.dismissTo(href);
+  router.push(`${String(href)}?returnTo=${RETURN_TO_CONFIRM}` as Href);
+}
+
+/**
+ * The path screens in order, by the section title buildOnboardingAnswers
+ * gives them, so the review shows every path answer with its own Edit (O4).
+ */
+const PATH_SCREENS: Record<'A' | 'B' | 'C', { title: string; href: Href }[]> = {
+  A: [
+    { title: 'Birth history', href: '/(onboarding)/a-birth-history' },
+    { title: 'Feeding', href: '/(onboarding)/a-feeding' },
+    { title: 'Milestones', href: '/(onboarding)/a-milestones' },
+    { title: 'Sleep', href: '/(onboarding)/a-sleep' },
+  ],
+  B: [
+    { title: 'Development', href: '/(onboarding)/b-development' },
+    { title: 'Diet and activity', href: '/(onboarding)/b-diet-activity' },
+    { title: 'Sleep and dental', href: '/(onboarding)/b-sleep-dental' },
+  ],
+  C: [
+    { title: 'School and lifestyle', href: '/(onboarding)/c-academic' },
+    { title: 'Diet', href: '/(onboarding)/c-diet' },
+    { title: 'Puberty and development', href: '/(onboarding)/c-puberty' },
+    { title: 'Mental wellbeing', href: '/(onboarding)/c-mental-health' },
+    { title: 'Sleep', href: '/(onboarding)/c-sleep' },
+  ],
+};
+
+const ALLERGY_GROUP_LABEL: Record<AllergyGroup, string> = {
+  medication: 'Medication allergies',
+  food: 'Food allergies',
+  environmental: 'Other allergies',
+};
+const ALLERGY_GROUP_ORDER: AllergyGroup[] = ['medication', 'food', 'environmental'];
+
+/** One allergy group as shown on confirm: its named allergies, or what the
+ *  parent said instead ("Not known yet" must never read as "None"). */
+function allergyGroupText(group: AllergyGroup, answers: AllergyAnswers, named: AllergyEntry[]): string {
+  const names = named.filter((a) => a.type === group).map((a) => a.name);
+  if (names.length > 0) return names.join(', ');
+  const { selected } = answers[group];
+  if (selected.includes(ALLERGY_NOT_KNOWN)) return 'Not known yet';
+  if (selected.includes(ALLERGY_NONE)) return 'None';
+  if (selected.includes(ALLERGY_OTHER)) return 'Other, not named';
+  return 'Not answered';
 }
 
 /** Which save steps already succeeded, so a retry never inserts twice. */
@@ -58,6 +118,8 @@ interface SaveProgress {
   conditions: boolean;
   medications: boolean;
   vaccines: boolean;
+  growth: boolean;
+  birthGrowth: boolean;
 }
 
 const EMPTY_PROGRESS: SaveProgress = {
@@ -67,20 +129,29 @@ const EMPTY_PROGRESS: SaveProgress = {
   conditions: false,
   medications: false,
   vaccines: false,
+  growth: false,
+  birthGrowth: false,
 };
+
+/** Saved when the parent says the child takes regular medicines but names none. */
+const UNNAMED_MEDICINE = 'Regular medicine (name not given)';
 
 export default function ConfirmScreen() {
   const insets = useSafeAreaInsets();
+  // Short window (200% zoom, landscape) or large text: the consent footer
+  // would cover most of the screen, so it scrolls with the content (R3-16).
+  const { height: windowHeight, fontScale } = useWindowDimensions();
+  const footerScrolls = fontScale >= 1.3 || windowHeight < 600;
   const {
     childName, childSex, dob, relationship, bracket,
     weight, height, bloodGroup,
-    allergies, allergyStatus,
+    allergies, allergyStatus, allergyAnswers,
     conditionList, medicationList, conditionsAnswers,
-    vaccineAnswers, vaccineDosesGiven,
-    parent,
+    vaccineAnswers, vaccineDosesGiven, vaccinePlan, babyVaccines,
+    parent, clearDraft, sections: answerSections,
   } = useOnboarding();
   const { user, refreshHasChildren } = useAuth();
-  const { refetch, refetchParentName, selectChild } = useChild();
+  const { children: existingChildren, refetch, refetchParentName, selectChild } = useChild();
   const [agreed, setAgreed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +165,10 @@ export default function ConfirmScreen() {
   const savedBloodGroup = BLOOD_GROUP_RE.test(bloodGroup.trim()) ? bloodGroup.trim() : null;
   const parsedWeight = parseMeasure(weight);
   const parsedHeight = parseMeasure(height);
+  // Path A birth weight: the first growth reading, dated the DOB (G1).
+  const birthWeight = bracket === 'A' ? parseBirthWeight(answerSections.aBirthHistory.birthWeight) : null;
   const parentName = parent.name.trim();
+  const savedCity = parentCity(parent);
 
   // Missing basics (e.g. the app restarted mid-flow): say so instead of
   // silently doing nothing on Save.
@@ -104,7 +178,8 @@ export default function ConfirmScreen() {
   if (!childSex) missing.push('sex');
   const isMissingBasics = missing.length > 0;
 
-  const stepInfo = getOnboardingStep('confirm', bracket);
+  // A second child skips "About you", so it is not counted.
+  const stepInfo = getOnboardingStep('confirm', bracket, { skipParentDetails: existingChildren.length > 0 });
   const stepText = stepInfo?.total ? `Step ${stepInfo.step} of ${stepInfo.total}` : null;
 
   // Vaccines summary: answered questions on this path, grouped by answer.
@@ -115,6 +190,32 @@ export default function ConfirmScreen() {
     if (answer) vaccineGroups[answer].push(q.name);
   }
   const vaccinesAnswered = vaccineGroups.Given.length + vaccineGroups.Missed.length + vaccineGroups['Not sure'].length;
+  // The one "baby vaccines" question (C3), when it was shown for this DOB.
+  const babyQuestion = babyVaccinesQuestionFor(bracket, dob);
+  const vaccineDoseLines = doseCountLines(vaccineDoseCounts(bracket, dob, vaccinePlan));
+
+  // C1: every path-specific answer, in plain labels, for the doctor. The same
+  // record is shown below (O4) and saved, so the review matches what is saved.
+  const answersRecord =
+    bracket && childSex
+      ? buildOnboardingAnswers({
+          path: bracket,
+          childSex,
+          sections: answerSections,
+          vaccineAnswers,
+          babyVaccines,
+          shownVaccineIds: vaccineQuestions.map((q) => q.id),
+          dob,
+          allergyAnswers,
+        })
+      : null;
+  const pathSections = bracket
+    ? PATH_SCREENS[bracket].map(({ title, href }) => ({
+        title,
+        href,
+        items: answersRecord?.sections.find((s) => s.title === title)?.items ?? [],
+      }))
+    : [];
 
   const allergyText =
     allergyStatus === 'has'
@@ -124,6 +225,12 @@ export default function ConfirmScreen() {
         : allergyStatus === 'unknown'
           ? 'Not known yet'
           : 'Not answered';
+
+  // No allergy named, and not every group was answered "None": a "Not known"
+  // group, a skipped group or an unnamed "Other" all reach the doctor as
+  // "allergies not known", never as "no allergies" (R2-01).
+  const allergiesNotKnown =
+    allergies.length === 0 && allergyStatus !== 'none';
 
   const conditionsNone = conditionsAnswers.selected.includes('None');
   const conditionsText =
@@ -138,7 +245,7 @@ export default function ConfirmScreen() {
       : conditionsAnswers.takingMeds === 'No'
         ? 'None'
         : conditionsAnswers.takingMeds === 'Yes'
-          ? 'Yes, no names entered'
+          ? `Yes. Saved as "${UNNAMED_MEDICINE}" so your doctor can ask`
           : 'Not answered';
 
   async function handleConfirm() {
@@ -163,11 +270,23 @@ export default function ConfirmScreen() {
     try {
       // 1. Parent row (and their name, when we have it in this session).
       if (!p.parent) {
-        const parentRow: { id: string; email: string | null; name?: string } = {
+        const parentRow: {
+          id: string;
+          email: string | null;
+          name?: string;
+          city?: string;
+          preferred_language?: string;
+          relationship?: string;
+        } = {
           id: user.id,
           email: user.email ?? null,
         };
+        // Only what was answered in this session: a second child skips
+        // "About you", and blanks must not wipe the saved values (R2-13).
         if (parentName) parentRow.name = parentName;
+        if (savedCity) parentRow.city = savedCity;
+        if (parent.language) parentRow.preferred_language = parent.language;
+        if (relationship) parentRow.relationship = relationship;
         dbg.db('Confirm: upserting parent row', { userId: user.id, hasName: !!parentName });
         const { error: parentErr } = await supabase.from('parents').upsert(parentRow, { onConflict: 'id' });
         if (parentErr) {
@@ -190,6 +309,11 @@ export default function ConfirmScreen() {
           height: parsedHeight,
           weight_updated_at: parsedWeight != null ? now : null,
           height_updated_at: parsedHeight != null ? now : null,
+          // "Not known yet" must not later read as "None" (R3-05, 0028).
+          allergies_not_known: allergiesNotKnown,
+          // C1: every path-specific answer, in plain labels, for the doctor
+          // (including a "Not known" allergy group next to named allergies, O3).
+          onboarding_answers: answersRecord,
         };
         dbg.db('Confirm: inserting child', childPayload);
         const { data: child, error: childErr } = await supabase
@@ -237,18 +361,24 @@ export default function ConfirmScreen() {
         }
       }
 
+      // "Yes, takes regular medicines" with no names still reaches Profile and
+      // the doctor: one placeholder row the parent can edit later (R3-18).
+      const medicationRows =
+        medicationList.length > 0
+          ? medicationList.map((m) => ({
+              child_id: childId,
+              name: m.name,
+              dosage: m.dose || null,
+              frequency: m.frequency || null,
+            }))
+          : conditionsAnswers.takingMeds === 'Yes'
+            ? [{ child_id: childId, name: UNNAMED_MEDICINE, dosage: null, frequency: null }]
+            : [];
       if (!p.medications) {
-        if (medicationList.length === 0) p.medications = true;
+        if (medicationRows.length === 0) p.medications = true;
         else {
           tasks.push((async () => {
-            const { error: e } = await supabase.from('medications').insert(
-              medicationList.map((m) => ({
-                child_id: childId,
-                name: m.name,
-                dosage: m.dose || null,
-                frequency: m.frequency || null,
-              })),
-            );
+            const { error: e } = await supabase.from('medications').insert(medicationRows);
             if (e) { dbg.dbError('Confirm: medications insert failed', e); failures.push('medicines'); }
             else p.medications = true;
           })());
@@ -257,25 +387,74 @@ export default function ConfirmScreen() {
 
       // 4. Vaccines: the trigger on children has created the schedule rows.
       //    Mark only the exact doses the parent said were given (and already
-      //    due). The date given is not known, so administered_date stays NULL.
+      //    due), incl. the baby doses on a "Yes" (C3). The date given is not
+      //    known, so administered_date stays NULL. Doses the parent is not
+      //    sure about (or said the baby vaccines were not completed) are saved
+      //    as 'unknown' (0024): listed to check with the doctor, not overdue.
       if (!p.vaccines) {
-        if (vaccineDosesGiven.length === 0) p.vaccines = true;
+        const notSure = vaccinePlan.unknown;
+        tasks.push((async () => {
+          dbg.db('Confirm: marking doses', { done: vaccineDosesGiven, notSure });
+          const mark = (r: VaccineDoseRow, patch: Record<string, unknown>) =>
+            supabase
+              .from('vaccinations')
+              .update(patch)
+              .eq('child_id', childId)
+              .eq('vaccine_name', r.vaccine_name)
+              .eq('dose_number', r.dose_number);
+          const results = await Promise.all([
+            ...vaccineDosesGiven.map((r) => mark(r, { status: 'done', administered_date: null })),
+            ...notSure.map((r) => mark(r, { status: 'unknown' })),
+            // The yearly flu shot is never "overdue" (its one schedule row
+            // is at 6 months): an older child's row becomes a yearly dose
+            // to ask about, for the doctor's dashboard too (R2-10/R2-20).
+            supabase
+              .from('vaccinations')
+              .update({ status: 'upcoming' })
+              .eq('child_id', childId)
+              .in('vaccine_name', Array.from(ANNUAL_VACCINE_NAMES))
+              .eq('status', 'overdue'),
+          ]);
+          const vaxErr = results.find((res) => res.error)?.error;
+          if (vaxErr) { dbg.dbError('Confirm: vaccine update failed', vaxErr); failures.push('vaccines'); }
+          else p.vaccines = true;
+        })());
+      }
+
+      // 5. The onboarding weight / height is the first growth reading, so it
+      //    shows in growth history and charts (children.weight alone does not).
+      if (!p.growth) {
+        if (parsedWeight == null && parsedHeight == null) p.growth = true;
         else {
           tasks.push((async () => {
-            dbg.db('Confirm: marking doses done', { rows: vaccineDosesGiven });
-            const results = await Promise.all(
-              vaccineDosesGiven.map((r) =>
-                supabase
-                  .from('vaccinations')
-                  .update({ status: 'done', administered_date: null })
-                  .eq('child_id', childId)
-                  .eq('vaccine_name', r.vaccine_name)
-                  .eq('dose_number', r.dose_number),
-              ),
-            );
-            const vaxErr = results.find((res) => res.error)?.error;
-            if (vaxErr) { dbg.dbError('Confirm: vaccine update failed', vaxErr); failures.push('vaccines'); }
-            else p.vaccines = true;
+            const { error: e } = await supabase.from('growth_measurements').insert({
+              child_id: childId,
+              weight: parsedWeight,
+              height: parsedHeight,
+              measured_at: todayDateOnly(),
+            });
+            if (e) { dbg.dbError('Confirm: growth insert failed', e); failures.push('weight and height'); }
+            else p.growth = true;
+          })());
+        }
+      }
+
+      // 6. Birth weight as a growth row on the DOB (skipped when the child was
+      //    born today and a weight was already saved for today).
+      if (!p.birthGrowth) {
+        const dobStr = toDateOnlyString(dob);
+        if (birthWeight == null || (dobStr === todayDateOnly() && parsedWeight != null)) p.birthGrowth = true;
+        else {
+          tasks.push((async () => {
+            const { error: e } = await supabase.from('growth_measurements').insert({
+              child_id: childId,
+              weight: birthWeight,
+              height: null,
+              note: 'Birth weight',
+              measured_at: dobStr,
+            });
+            if (e) { dbg.dbError('Confirm: birth weight insert failed', e); failures.push('birth weight'); }
+            else p.birthGrowth = true;
           })());
         }
       }
@@ -285,8 +464,10 @@ export default function ConfirmScreen() {
         throw new Error(`${displayName}'s profile is saved, but ${failures.join(', ')} did not save. Tap Save to try again.`);
       }
       dbg.db('Confirm: all related data saved');
+      // Everything is in the DB now: the draft on the device is not needed.
+      await clearDraft();
 
-      // 5. Refresh app state before leaving, so home shows the new child.
+      // 7. Refresh app state before leaving, so home shows the new child.
       await Promise.all([
         refreshHasChildren(),
         refetch(),
@@ -303,6 +484,66 @@ export default function ConfirmScreen() {
       setSaving(false);
     }
   }
+
+  // Footer: consent + the one primary, pinned to the bottom (or inline).
+  const footer = (
+    <Animated.View
+      entering={FadeInUp.delay(400).duration(500)}
+      style={[styles.footer, footerScrolls && styles.footerInline, { paddingBottom: insets.bottom + 12 }]}
+    >
+      {error ? <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text> : null}
+      <Pressable
+        style={styles.checkboxRow}
+        onPress={() => setAgreed((v) => !v)}
+        {...(Platform.OS === 'web'
+          ? {
+              // Web: a checkbox toggles on Space (react-native-web only does
+              // that for role=button), as in ChipGroup.
+              onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+                if ((e.key === ' ' || e.key === 'Spacebar') && !isMissingBasics) {
+                  e.preventDefault();
+                  setAgreed((v) => !v);
+                }
+              },
+            }
+          : null)}
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: agreed, disabled: isMissingBasics }}
+        aria-checked={agreed}
+        disabled={isMissingBasics}
+        hitSlop={8}
+      >
+        <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
+          {agreed ? <Ionicons name="checkmark" size={15} color={AppColors.onPrimary} /> : null}
+        </View>
+        <Text style={styles.checkboxLabel}>
+          All details are accurate to the best of my knowledge
+        </Text>
+      </Pressable>
+
+      <GradientButton
+        label={saving ? 'Saving profile…' : 'Save profile'}
+        onPress={handleConfirm}
+        disabled={!agreed || isMissingBasics}
+        loading={saving}
+        accessibilityLabel={`Save ${displayName}'s profile`}
+      />
+      {!agreed && !isMissingBasics ? (
+        <Text style={styles.hintText}>Tick the box above to save</Text>
+      ) : null}
+
+      <Text style={styles.termsText}>
+        By continuing you agree to our{' '}
+        <Text style={styles.termsLink} accessibilityRole="link" onPress={() => router.push('/profile/terms')}>
+          Terms of Service
+        </Text>
+        {' '}and{' '}
+        <Text style={styles.termsLink} accessibilityRole="link" onPress={() => router.push('/profile/privacy')}>
+          Privacy Policy
+        </Text>
+      </Text>
+    </Animated.View>
+  );
 
   return (
     <View style={styles.screen}>
@@ -369,7 +610,7 @@ export default function ConfirmScreen() {
                   <Text style={typography.meta}>{[age, sexLabel].filter(Boolean).join(' · ')}</Text>
                 )}
                 {bornLabel ? <Text style={typography.meta}>{bornLabel}</Text> : null}
-                {relationship ? <Text style={typography.meta}>You: {relationship}</Text> : null}
+                {relationship ? <Text style={typography.meta}>Your relationship: {relationship}</Text> : null}
               </View>
               <EditLink section="child details" onPress={() => editScreen('/(onboarding)/child-basics')} />
             </View>
@@ -379,6 +620,8 @@ export default function ConfirmScreen() {
           {parentName ? (
             <SectionCard title="Your details" onEdit={() => editScreen('/(onboarding)/parent-details')}>
               <Row label="Your name" value={parentName} />
+              <Row label="City" value={savedCity || 'Not answered'} />
+              <Row label="Preferred language" value={parent.language || 'Not answered'} />
             </SectionCard>
           ) : null}
 
@@ -403,6 +646,15 @@ export default function ConfirmScreen() {
                 </View>
                 <Text style={styles.allergyText}>{allergies.map((a) => a.name).join(', ')}</Text>
               </View>
+            ) : null}
+            {allergyStatus === 'has' || allergyStatus === 'unknown' ? (
+              // Per group, so a "Not known" or unanswered group still shows
+              // next to the groups that do have allergies.
+              ALLERGY_GROUP_ORDER
+                .filter((g) => allergyStatus !== 'has' || !allergies.some((a) => a.type === g))
+                .map((g) => (
+                  <Row key={g} label={ALLERGY_GROUP_LABEL[g]} value={allergyGroupText(g, allergyAnswers, allergies)} />
+                ))
             ) : (
               <Text style={styles.valueText}>{allergyText}</Text>
             )}
@@ -428,11 +680,25 @@ export default function ConfirmScreen() {
             </View>
           </SectionCard>
 
+          {/* Path answers (O4): what the doctor will see from these screens */}
+          {pathSections.map((sec) => (
+            <SectionCard key={sec.title} title={sec.title} onEdit={() => editScreen(sec.href)}>
+              {sec.items.length > 0 ? (
+                sec.items.map((item) => <Row key={item.label} label={item.label} value={item.value} />)
+              ) : (
+                <Text style={styles.valueText}>Not answered</Text>
+              )}
+            </SectionCard>
+          ))}
+
           {/* Vaccines */}
           {bracket ? (
             <SectionCard title="Vaccines" onEdit={() => editScreen(VACCINE_SCREEN[bracket])}>
+              {babyQuestion ? (
+                <Row label={babyQuestion.title} value={babyVaccines || 'Not answered'} />
+              ) : null}
               {vaccinesAnswered === 0 ? (
-                <Text style={styles.valueText}>Not answered</Text>
+                babyQuestion ? null : <Text style={styles.valueText}>Not answered</Text>
               ) : (
                 <>
                   {vaccineGroups.Given.length > 0 ? <Row label="Given" value={vaccineGroups.Given.join(', ')} /> : null}
@@ -442,57 +708,20 @@ export default function ConfirmScreen() {
                   ) : null}
                 </>
               )}
-              {vaccineDosesGiven.length > 0 ? (
-                <Text style={typography.caption}>
-                  {vaccineDosesGiven.length} past dose{vaccineDosesGiven.length !== 1 ? 's' : ''} will be marked as given
-                  (date not recorded).
+              {/* Same counts and wording as the vaccine step; later doses
+                  (Tdap, HPV) are counted on their own, never as "earlier". */}
+              {vaccineDoseLines.map((line) => (
+                <Text key={line} style={typography.caption}>
+                  {line}
                 </Text>
-              ) : null}
+              ))}
             </SectionCard>
           ) : null}
         </Animated.View>
+        {footerScrolls ? footer : null}
       </ScrollView>
 
-      {/* Footer: consent + the one primary, pinned to the bottom */}
-      <Animated.View
-        entering={FadeInUp.delay(400).duration(500)}
-        style={[styles.footer, { paddingBottom: insets.bottom + 12 }]}
-      >
-        {error ? <Text style={styles.errorText} accessibilityLiveRegion="polite">{error}</Text> : null}
-        <Pressable
-          style={styles.checkboxRow}
-          onPress={() => setAgreed((v) => !v)}
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: agreed, disabled: isMissingBasics }}
-          disabled={isMissingBasics}
-          hitSlop={8}
-        >
-          <View style={[styles.checkbox, agreed && styles.checkboxChecked]}>
-            {agreed ? <Ionicons name="checkmark" size={15} color={AppColors.onPrimary} /> : null}
-          </View>
-          <Text style={styles.checkboxLabel}>
-            All details are accurate to the best of my knowledge
-          </Text>
-        </Pressable>
-
-        <GradientButton
-          label={saving ? 'Saving profile…' : 'Save profile'}
-          onPress={handleConfirm}
-          disabled={!agreed || isMissingBasics}
-          loading={saving}
-          accessibilityLabel={`Save ${displayName}'s profile`}
-        />
-        {!agreed && !isMissingBasics ? (
-          <Text style={styles.hintText}>Tick the box above to save</Text>
-        ) : null}
-
-        <Text style={styles.termsText}>
-          By continuing you agree to our{' '}
-          <Text style={styles.termsLink}>Terms of Service</Text>
-          {' '}and{' '}
-          <Text style={styles.termsLink}>Privacy Policy</Text>
-        </Text>
-      </Animated.View>
+      {footerScrolls ? null : footer}
     </View>
   );
 }
@@ -602,12 +831,16 @@ const styles = StyleSheet.create({
   },
   identity: {
     flexDirection: 'row',
+    // Narrow window / large text: the name drops under the avatar instead
+    // of being squeezed to one letter per line.
+    flexWrap: 'wrap',
     alignItems: 'flex-start',
     gap: 12,
   },
   identityText: {
     flex: 1,
     flexShrink: 1,
+    minWidth: 140,
     gap: 2,
   },
   editLink: {
@@ -691,6 +924,10 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: AppColors.border,
+  },
+  footerInline: {
+    marginHorizontal: -20,
+    marginBottom: -16,
   },
   checkboxRow: {
     flexDirection: 'row',

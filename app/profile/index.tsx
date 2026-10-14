@@ -1,16 +1,24 @@
-import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { ReactNode } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Switch, Text, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ChildAvatar, childColorIndex } from '@/components/ChildAvatar';
 import { TextButton } from '@/components/gradient-button';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { SettingsCard, SettingsRow as Row } from '@/components/settings-row';
 import { HeroCard } from '@/components/ui/HeroCard';
-import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useChild } from '@/context/child';
+import { clearOnboardingDraft } from '@/context/onboarding';
+import { useNotificationPermission } from '@/hooks/useNotificationPermission';
+import { confirmAsync } from '@/lib/confirm';
+import { EMPTY_PARENT_EXTRAS, fetchParentExtras, relationshipLabel } from '@/lib/parentProfile';
+import { formatPhone } from '@/lib/phone';
 import { layout, typography } from '@/styles/global';
+
+const DEMO_EMAIL_DOMAIN = '@demo.lilsteps.dev';
 
 const QUICK_LINKS = [
   { key: 'records', label: 'Health records', icon: 'folder-outline', route: '/(tabs)/records' },
@@ -19,109 +27,71 @@ const QUICK_LINKS = [
   { key: 'consult', label: 'Book a consultation', icon: 'calendar-outline', route: '/consult/booking' },
 ] as const;
 
-const SETTINGS_ITEMS = [
-  { key: 'notifications', label: 'Notifications', icon: 'notifications-outline' },
-  { key: 'privacy', label: 'Privacy & security', icon: 'shield-checkmark-outline' },
-  { key: 'help', label: 'Help & support', icon: 'help-circle-outline' },
-] as const;
-
-type IconName = keyof typeof Ionicons.glyphMap;
-
-/** One list row: 36 icon well, 15 SemiBold title, optional value / detail, chevron. */
-function Row({
-  icon,
-  title,
-  value,
-  detail,
-  onPress,
-  chevron,
-  tone = 'default',
-  divider,
-}: {
-  icon: IconName;
-  title: string;
-  /** Short value on the right (13 muted, 1 line). */
-  value?: string;
-  /** Data line under the title (e.g. allergy names). */
-  detail?: string;
-  onPress?: () => void;
-  chevron?: boolean;
-  tone?: 'default' | 'warning' | 'danger' | 'neutral';
-  divider?: boolean;
-}) {
-  const well =
-    tone === 'warning'
-      ? { bg: AppColors.warningSurface, fg: AppColors.warning }
-      : tone === 'danger'
-        ? { bg: AppColors.dangerSurface, fg: AppColors.danger }
-        : tone === 'neutral'
-          ? { bg: AppColors.surfaceContainer, fg: AppColors.onSurfaceVariant }
-          : { bg: AppColors.mintSurface, fg: AppColors.secondary };
-  const content: ReactNode = (
-    <>
-      <View style={[styles.well, { backgroundColor: well.bg }]}>
-        <Ionicons name={icon} size={Size.iconRow} color={well.fg} />
-      </View>
-      <View style={value ? styles.rowTextFixed : styles.rowTextFlex}>
-        <Text style={typography.title} numberOfLines={1}>
-          {title}
-        </Text>
-        {detail ? (
-          <Text style={typography.meta} numberOfLines={2}>
-            {detail}
-          </Text>
-        ) : null}
-      </View>
-      {value ? (
-        <Text style={[typography.meta, styles.rowValue]} numberOfLines={1} ellipsizeMode="middle">
-          {value}
-        </Text>
-      ) : null}
-      {chevron ? <Ionicons name="chevron-forward" size={16} color={AppColors.outlineVariant} /> : null}
-    </>
-  );
-  return (
-    <View>
-      {onPress || chevron ? (
-        <Pressable
-          onPress={onPress}
-          accessibilityRole="button"
-          style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
-        >
-          {content}
-        </Pressable>
-      ) : (
-        <View style={styles.row}>{content}</View>
-      )}
-      {divider ? <View style={styles.divider} /> : null}
-    </View>
-  );
-}
-
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const { user, signOut } = useAuth();
   const { child, children, age, parentName, selectChild } = useChild();
+  const notifications = useNotificationPermission();
+  // City, language and relationship (R2-13). Reloaded on focus so edits
+  // made on Profile > Your details show straight away.
+  const [extras, setExtras] = useState(EMPTY_PARENT_EXTRAS);
+  const userId = user?.id;
+  useFocusEffect(
+    useCallback(() => {
+      if (!userId) return;
+      let active = true;
+      void fetchParentExtras(userId).then((x) => {
+        if (active) setExtras(x);
+      });
+      return () => {
+        active = false;
+      };
+    }, [userId]),
+  );
+  const parentTitle = relationshipLabel(extras.relationship);
+  const notificationsOn = notifications.status === 'granted';
+  const notificationsDetail =
+    notifications.status === 'unsupported'
+      ? 'Available in the LilSteps phone app'
+      : notificationsOn
+        ? 'Consult reminders, doctor replies, vaccines due'
+        : 'Off. Turn on to get consult and vaccine reminders';
 
   const childName = child?.name ?? 'Child';
+  // 200% zoom / narrow phone: avatar above the name, so the name and the
+  // age line get the full card width instead of "Kav ya" / "kg · …" (R3-05).
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const stackHero = fontScale >= 1.3 || windowWidth / Math.max(fontScale, 1) < 340;
   // First user-visible character, emoji-safe ("🍼 Baby" -> "🍼", not half a
   // surrogate pair that renders as "?").
-  const firstChar = (name: string) => Array.from(name.trim())[0] ?? '';
   const allergies = child?.allergies.map(a => a.name) ?? [];
+  // Onboarding "Not known yet" (children.allergies_not_known, 0028). Read
+  // defensively: the column may not be on the cached row yet.
+  const allergiesNotKnown = (child as { allergies_not_known?: boolean } | null)?.allergies_not_known === true;
   const conditions = child?.conditions.map(c => c.name) ?? [];
+  const medications =
+    child?.medications.map((m) => [m.name, m.dosage, m.frequency].filter(Boolean).join(' · ')) ?? [];
+
+  // Phone is how parents sign in. The test-login email
+  // (phone-…@demo.lilsteps.dev) is internal and never shown.
+  const phone = formatPhone(user?.phone || (user?.user_metadata?.phone as string | undefined) || '');
+  const email = user?.email && !user.email.endsWith(DEMO_EMAIL_DOMAIN) ? user.email : null;
+
+  async function doSignOut() {
+    // A half-finished onboarding draft (e.g. a second child) must not carry
+    // over to the next sign-in on this device.
+    if (user) await clearOnboardingDraft(user.id);
+    await signOut();
+    router.replace('/');
+  }
 
   async function handleSignOut() {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign Out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/');
-        },
-      },
-    ]);
+    // Native Alert on iOS/Android, an in-app dialog on web.
+    const ok = await confirmAsync('Sign out?', 'Are you sure you want to sign out of LilSteps?', {
+      confirmLabel: 'Sign out',
+      destructive: true,
+    });
+    if (ok) await doSignOut();
   }
 
   return (
@@ -132,15 +102,18 @@ export default function ProfileScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: 32 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        <HeroCard style={styles.hero}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{firstChar(childName)}</Text>
-          </View>
+        <HeroCard style={[styles.hero, stackHero && styles.heroStacked]}>
+          <ChildAvatar
+            name={childName}
+            id={child?.id}
+            colorIndex={childColorIndex(children, child?.id)}
+            size={56}
+          />
           <View style={styles.heroText}>
-            <Text style={typography.heading} numberOfLines={1}>
+            <Text style={typography.heading} numberOfLines={2}>
               {childName}
             </Text>
-            <Text style={[typography.bodySM, styles.heroMeta]} numberOfLines={1}>
+            <Text style={[typography.bodySM, styles.heroMeta]}>
               {age}
               {child?.weight || child?.height
                 ? ` · ${child?.weight ?? '—'} kg · ${child?.height ?? '—'} cm`
@@ -151,10 +124,39 @@ export default function ProfileScreen() {
 
         <View style={layout.section}>
           <Text style={styles.sectionLabel}>Account</Text>
-          <View style={styles.card}>
-            <Row icon="person-outline" title="Parent" value={parentName || 'Not set'} divider />
-            <Row icon="mail-outline" title="Email" value={user?.email ?? '—'} />
-          </View>
+          <SettingsCard>
+            <Row
+              icon="person-outline"
+              title={parentTitle}
+              value={parentName || 'Add your name'}
+              chevron
+              onPress={() => router.push('/profile/edit-parent')}
+              accessibilityLabel={`${parentTitle}, ${parentName || 'name not set'}. Edit your details`}
+              divider
+            />
+            <Row
+              icon="location-outline"
+              tone="neutral"
+              title="City"
+              value={extras.city || 'Not set'}
+              chevron
+              onPress={() => router.push('/profile/edit-parent')}
+              accessibilityLabel={`City, ${extras.city || 'not set'}. Edit your details`}
+              divider
+            />
+            <Row
+              icon="language-outline"
+              tone="neutral"
+              title="Preferred language"
+              value={extras.preferredLanguage || 'Not set'}
+              chevron
+              onPress={() => router.push('/profile/edit-parent')}
+              accessibilityLabel={`Preferred language, ${extras.preferredLanguage || 'not set'}. Edit your details`}
+              divider={!!phone || !!email}
+            />
+            {phone ? <Row icon="call-outline" title="Phone" value={phone} divider={!!email} /> : null}
+            {email ? <Row icon="mail-outline" title="Email" value={email} /> : null}
+          </SettingsCard>
         </View>
 
         {children.length > 1 && (
@@ -169,13 +171,10 @@ export default function ProfileScreen() {
                     style={[styles.childChip, active && styles.childChipActive]}
                     onPress={() => selectChild(c.id)}
                     accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
+                    accessibilityState={{ checked: active }}
+                    aria-checked={active}
                   >
-                    <View style={[styles.childChipAvatar, active && styles.childChipAvatarActive]}>
-                      <Text style={[styles.childChipInitial, active && styles.childChipInitialActive]}>
-                        {firstChar(c.name)}
-                      </Text>
-                    </View>
+                    <ChildAvatar name={c.name} id={c.id} colorIndex={childColorIndex(children, c.id)} size={28} />
                     <Text style={[styles.childChipName, active && styles.childChipNameActive]}>{c.name}</Text>
                   </Pressable>
                 );
@@ -184,29 +183,44 @@ export default function ProfileScreen() {
           </View>
         )}
 
-        {(allergies.length > 0 || conditions.length > 0) && (
+        {child ? (
           <View style={layout.section}>
-            <Text style={styles.sectionLabel}>Health info</Text>
-            <View style={styles.card}>
-              {allergies.length > 0 && (
-                <Row
-                  icon="warning-outline"
-                  tone="warning"
-                  title="Allergies"
-                  detail={allergies.join(', ')}
-                  divider={conditions.length > 0}
-                />
-              )}
-              {conditions.length > 0 && (
-                <Row icon="medical-outline" tone="danger" title="Chronic conditions" detail={conditions.join(', ')} />
-              )}
-            </View>
+            <Text style={styles.sectionLabel}>{`${childName}'s health info`}</Text>
+            <SettingsCard>
+              <Row
+                icon="warning-outline"
+                tone={allergies.length > 0 ? 'warning' : 'neutral'}
+                title="Allergies"
+                detail={allergies.length > 0 ? allergies.join(', ') : allergiesNotKnown ? 'Not known yet' : 'None recorded'}
+                divider
+              />
+              <Row
+                icon="medical-outline"
+                tone={conditions.length > 0 ? 'danger' : 'neutral'}
+                title="Chronic conditions"
+                detail={conditions.length > 0 ? conditions.join(', ') : 'None recorded'}
+                divider
+              />
+              <Row
+                icon="medkit-outline"
+                tone="neutral"
+                title="Regular medicines"
+                detail={medications.length > 0 ? medications.join(', ') : 'None recorded'}
+                divider
+              />
+              <Row
+                icon="create-outline"
+                title={`Edit ${childName}'s details`}
+                chevron
+                onPress={() => router.push({ pathname: '/profile/edit-child', params: { id: child.id } })}
+              />
+            </SettingsCard>
           </View>
-        )}
+        ) : null}
 
         <View style={layout.section}>
           <Text style={styles.sectionLabel}>Quick links</Text>
-          <View style={styles.card}>
+          <SettingsCard>
             {QUICK_LINKS.map((item, index) => (
               <Row
                 key={item.key}
@@ -217,23 +231,68 @@ export default function ProfileScreen() {
                 divider={index < QUICK_LINKS.length - 1}
               />
             ))}
-          </View>
+          </SettingsCard>
         </View>
 
         <View style={layout.section}>
           <Text style={styles.sectionLabel}>Settings</Text>
-          <View style={styles.card}>
-            {SETTINGS_ITEMS.map((item, index) => (
-              <Row
-                key={item.key}
-                icon={item.icon}
-                tone="neutral"
-                title={item.label}
-                chevron
-                divider={index < SETTINGS_ITEMS.length - 1}
-              />
-            ))}
-          </View>
+          <SettingsCard>
+            <Row
+              icon="notifications-outline"
+              tone="neutral"
+              title="Notifications"
+              detail={notificationsDetail}
+              divider
+              right={
+                notifications.status === 'unsupported' ? null : (
+                  <Switch
+                    value={notificationsOn}
+                    disabled={notifications.status === 'loading'}
+                    onValueChange={(next) => void notifications.setEnabled(next)}
+                    trackColor={{ false: AppColors.surfaceContainer, true: AppColors.primary }}
+                    thumbColor={Platform.OS === 'android' ? AppColors.card : undefined}
+                    ios_backgroundColor={AppColors.surfaceContainer}
+                    accessibilityLabel="Notifications"
+                  />
+                )
+              }
+            />
+            <Row
+              icon="shield-checkmark-outline"
+              tone="neutral"
+              title="Privacy & security"
+              chevron
+              onPress={() => router.push('/profile/privacy')}
+              divider
+            />
+            <Row
+              icon="document-text-outline"
+              tone="neutral"
+              title="Terms of Service"
+              chevron
+              onPress={() => router.push('/profile/terms')}
+              divider
+            />
+            <Row
+              icon="help-circle-outline"
+              tone="neutral"
+              title="Help & support"
+              chevron
+              onPress={() => router.push('/profile/help')}
+              divider
+            />
+            {/* App Store 5.1.1(v): account deletion is easy to find (R2-22).
+                The form itself is at the end of Privacy & security. */}
+            <Row
+              icon="trash-outline"
+              tone="danger"
+              title="Delete account"
+              detail="Deletes your account and your children’s data"
+              chevron
+              onPress={() => router.push({ pathname: '/profile/privacy', params: { section: 'delete' } })}
+              accessibilityHint="Opens Privacy & security, where you can delete your account"
+            />
+          </SettingsCard>
         </View>
 
         <View style={styles.footer}>
@@ -256,61 +315,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
-  // Avatar keeps the deep-green fill (small solid element, not a card).
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: AppColors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontFamily: FontFamily.bold,
-    fontSize: 22,
-    color: AppColors.onPrimary,
-  },
-  heroText: { flex: 1, gap: 2 },
+  heroStacked: { flexDirection: 'column', alignItems: 'flex-start', gap: 12 },
+  heroText: { flex: 1, minWidth: 0, gap: 2, alignSelf: 'stretch' },
   heroMeta: { color: AppColors.secondary, fontFamily: FontFamily.medium },
 
   sectionLabel: {
     ...typography.sectionLabel,
     color: AppColors.muted,
     marginLeft: 4,
-  },
-
-  card: {
-    backgroundColor: AppColors.card,
-    borderRadius: Radius.lg,
-    borderCurve: 'continuous',
-    borderWidth: 1,
-    borderColor: AppColors.border,
-    overflow: 'hidden',
-  },
-  row: {
-    minHeight: 52,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  rowPressed: { backgroundColor: AppColors.surfaceContainerLow },
-  well: {
-    width: Size.iconWell,
-    height: Size.iconWell,
-    borderRadius: Radius.md,
-    borderCurve: 'continuous',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  rowTextFixed: { flexShrink: 0, gap: 2 },
-  rowTextFlex: { flex: 1, gap: 2 },
-  rowValue: { flex: 1, minWidth: 0, textAlign: 'right' },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: AppColors.border,
-    marginLeft: 16 + Size.iconWell + 12,
   },
 
   childList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
@@ -330,17 +342,6 @@ const styles = StyleSheet.create({
     borderColor: AppColors.mintBorder,
     backgroundColor: AppColors.mintSurface,
   },
-  childChipAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: AppColors.surfaceContainer,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  childChipAvatarActive: { backgroundColor: AppColors.primary },
-  childChipInitial: { fontFamily: FontFamily.bold, fontSize: 13, color: AppColors.secondary },
-  childChipInitialActive: { color: AppColors.onPrimary },
   childChipName: { fontFamily: FontFamily.medium, fontSize: 13, color: AppColors.onSurface },
   childChipNameActive: { fontFamily: FontFamily.semibold, color: AppColors.primary },
 

@@ -27,12 +27,13 @@ export default function SleepDentalScreen() {
     >
       <View>
         <Text style={styles.fieldLabel}>Sleep hours per night</Text>
-        <ChipGroup options={SLEEP_HOURS} selected={toChips(answers.hours)} onChange={(v) => set({ hours: fromChips(v) })} />
+        <ChipGroup label="Sleep hours per night" options={SLEEP_HOURS} selected={toChips(answers.hours)} onChange={(v) => set({ hours: fromChips(v) })} />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Any sleep concerns?</Text>
         <ChipGroup
+          label="Any sleep concerns?"
           options={SLEEP_CONCERNS}
           selected={answers.sleepConcerns}
           onChange={(sleepConcerns) => set({ sleepConcerns })}
@@ -44,6 +45,7 @@ export default function SleepDentalScreen() {
       <View>
         <Text style={styles.fieldLabel}>Last dental visit</Text>
         <ChipGroup
+          label="Last dental visit"
           options={DENTAL_VISIT}
           selected={toChips(answers.dentalVisit)}
           onChange={(v) => set({ dentalVisit: fromChips(v) })}
@@ -53,6 +55,7 @@ export default function SleepDentalScreen() {
       <View>
         <Text style={styles.fieldLabel}>Dental concerns</Text>
         <ChipGroup
+          label="Dental concerns"
           options={DENTAL_CONCERNS}
           selected={answers.dentalConcerns}
           onChange={(dentalConcerns) => set({ dentalConcerns })}

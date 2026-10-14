@@ -19,17 +19,24 @@ import { layout, typography } from '@/styles/global';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth';
 import { useMessages } from '@/hooks/useMessages';
+import { formatDate } from '@/lib/date';
+import { clinicToday, formatSlotTime } from '@/components/consult/appointmentFormat';
 
 interface ConversationInfo {
   id: string;
   doctor_name: string;
   doctor_specialisation: string;
   child_name: string;
+  /** Start time ('HH:MM:SS') of a consult with this doctor today, if any. */
+  consult_today: string | null;
 }
 
+/** Message time, 12h en-IN ("2:05 pm"); adds the date for older days. */
 function formatTime(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+  if (d.toDateString() === new Date().toDateString()) return time;
+  return `${formatDate(d)}, ${time}`;
 }
 
 export default function ChatScreen() {
@@ -40,6 +47,7 @@ export default function ChatScreen() {
   const [info, setInfo] = useState<ConversationInfo | null>(null);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const listRef = useRef<FlatList<(typeof messages)[number]>>(null);
 
   useEffect(() => {
@@ -47,20 +55,35 @@ export default function ChatScreen() {
     (async () => {
       const { data } = await supabase
         .from('conversations')
-        .select('id, doctors(name, specialisation), children(name)')
+        .select('id, child_id, doctor_id, doctors(name, specialisation), children(name)')
         .eq('id', id)
         .single<{
           id: string;
+          child_id: string;
+          doctor_id: string;
           doctors: { name: string; specialisation: string } | null;
           children: { name: string } | null;
         }>();
 
       if (data) {
+        // A consult with this doctor today changes the footer: "replies
+        // within a day" is wrong when you'll see them in a few hours.
+        const { data: today } = await supabase
+          .from('appointments')
+          .select('time')
+          .eq('child_id', data.child_id)
+          .eq('doctor_id', data.doctor_id)
+          .eq('date', clinicToday())
+          .eq('status', 'upcoming')
+          .order('time')
+          .limit(1)
+          .maybeSingle<{ time: string }>();
         setInfo({
           id: data.id,
           doctor_name: data.doctors?.name ?? 'Doctor',
           doctor_specialisation: data.doctors?.specialisation ?? '',
           child_name: data.children?.name ?? '',
+          consult_today: today?.time ?? null,
         });
       }
     })();
@@ -91,12 +114,13 @@ export default function ChatScreen() {
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
+    setSendError(null);
     setDraft('');
     try {
       await send(text);
-    } catch (e) {
+    } catch {
       setDraft(text);
-      console.warn('send failed', e);
+      setSendError("Message not sent. Check your connection and tap send again.");
     } finally {
       setSending(false);
     }
@@ -126,6 +150,8 @@ export default function ChatScreen() {
             keyExtractor={(m) => m.id}
             contentContainerStyle={styles.list}
             keyboardShouldPersistTaps="handled"
+            // Screen readers announce new messages as they arrive.
+            accessibilityLiveRegion="polite"
             onContentSizeChange={() =>
               listRef.current?.scrollToEnd({ animated: false })
             }
@@ -140,6 +166,16 @@ export default function ChatScreen() {
         )}
 
         <View style={[styles.composer, { paddingBottom: insets.bottom + 8 }]}>
+          {sendError ? (
+            <Text style={[typography.caption, styles.sendError]} accessibilityRole="alert">
+              {sendError}
+            </Text>
+          ) : null}
+          <Text style={[typography.caption, styles.replyNote]}>
+            {info?.consult_today
+              ? `Your consult with ${info.doctor_name} is today at ${formatSlotTime(info.consult_today)}. Messages may be read before or after it. Not for emergencies: call 112.`
+              : `${info?.doctor_name ?? 'Your doctor'} usually replies within a day. Not for emergencies: call 112.`}
+          </Text>
           <ChatComposer
             value={draft}
             onChangeText={setDraft}
@@ -147,6 +183,9 @@ export default function ChatScreen() {
             sendDisabled={sending || draft.trim().length === 0}
             placeholder="Type a message…"
             maxLength={4000}
+            // Web: Enter sends, Shift+Enter adds a line. Phones keep return
+            // for new lines (longer messages to the doctor).
+            submitOnEnter={Platform.OS === 'web'}
           />
         </View>
       </KeyboardAvoidingView>
@@ -165,6 +204,9 @@ const styles = StyleSheet.create({
   composer: {
     paddingHorizontal: 16,
     paddingTop: 8,
+    gap: 6,
     backgroundColor: AppColors.surface,
   },
+  replyNote: { textAlign: 'center' },
+  sendError: { color: AppColors.danger, textAlign: 'center' },
 });

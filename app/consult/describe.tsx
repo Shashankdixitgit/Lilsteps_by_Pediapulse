@@ -37,7 +37,7 @@ const DEFAULT_CHIPS = ['Fever', 'Cold / Cough', 'Tummy ache', 'Rash', 'Other'];
 export default function DescribeScreen() {
   const insets = useSafeAreaInsets();
   const { doctorId } = useLocalSearchParams<{ doctorId: string }>();
-  const { bracket } = useChild();
+  const { bracket, child } = useChild();
   const chips = COMPLAINT_CHIPS[bracket ?? ''] ?? DEFAULT_CHIPS;
 
   const [selectedChips, setSelectedChips] = useState<string[]>([]);
@@ -52,8 +52,9 @@ export default function DescribeScreen() {
     .join(', ');
 
   function goToSlots(issue?: string) {
-    const encoded = issue ? encodeURIComponent(issue) : '';
-    router.push(`/consult/slots?doctorId=${doctorId}&issue=${encoded}`);
+    // Params object: expo-router encodes it once and hands it back decoded,
+    // so a concern like "100% sure it's fever" survives intact.
+    router.push({ pathname: '/consult/slots', params: { doctorId: doctorId ?? '', issue: issue ?? '' } });
   }
 
   return (
@@ -63,12 +64,13 @@ export default function DescribeScreen() {
     >
       <ScreenHeader
         title="Describe issue"
+        subtitle={child?.name ? `For ${child.name}` : undefined}
         right={<TextButton label="Skip" onPress={() => goToSlots()} chevron />}
       />
 
       {/* Step indicator */}
       <View style={styles.steps}>
-        {[1, 2, 3, 4].map((s) => (
+        {[1, 2, 3].map((s) => (
           <View key={s} style={[styles.stepDot, s === 1 && styles.stepDotActive]} />
         ))}
       </View>

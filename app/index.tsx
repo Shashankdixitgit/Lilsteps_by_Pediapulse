@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   FadeIn,
   FadeInDown,
@@ -36,7 +36,14 @@ export default function SplashScreen() {
   }, [session, loading, hasChildren]);
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}>
+    // Scrolls when the screen is short (small phones, 200% zoom) so the
+    // stepping stones never overlap the logo or the buttons (R2-12).
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={[styles.container, { paddingTop: insets.top + 12, paddingBottom: insets.bottom + 16 }]}
+      showsVerticalScrollIndicator={false}
+      bounces={false}
+    >
       {/* Top bar — plain wordmark, like the site's nav */}
       <Animated.View entering={FadeIn.duration(500)} style={styles.topBar}>
         <View style={styles.markTile}>
@@ -100,14 +107,17 @@ export default function SplashScreen() {
           onPress={() => router.push('/(auth)/login')}
         />
       </Animated.View>
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  screen: {
     flex: 1,
     backgroundColor: AppColors.surface,
+  },
+  container: {
+    flexGrow: 1,
     paddingHorizontal: 20,
     gap: 16,
   },
@@ -150,11 +160,14 @@ const styles = StyleSheet.create({
     color: AppColors.onSurface,
   },
   hero: {
-    flex: 1,
+    flexGrow: 1,
     paddingBottom: 24,
   },
+  // Grows into spare height but never shrinks below the stones themselves,
+  // so on a short screen the page scrolls instead of the stones overlapping.
   stepsWrap: {
-    flex: 1,
+    flexGrow: 1,
+    flexShrink: 0,
     justifyContent: 'flex-end',
     alignItems: 'flex-end',
     paddingVertical: 24,
@@ -163,12 +176,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 8,
+    maxWidth: '100%',
   },
+  // Stones narrow (down from 28) instead of spilling out of the card on a
+  // very narrow screen / 200% zoom.
   stoneCol: {
     alignItems: 'center',
+    width: 28,
+    flexShrink: 1,
+    minWidth: 0,
   },
   step: {
-    width: 28,
+    alignSelf: 'stretch',
     borderRadius: Radius.full,
     borderCurve: 'continuous',
   },
@@ -188,6 +207,7 @@ const styles = StyleSheet.create({
   },
   headline: {
     maxWidth: 300,
+    flexShrink: 1,
   },
   // Display-size highlight: success (4.3:1, large text) reads as green next to forestDeep, like the home greeting.
   headlineAccent: {

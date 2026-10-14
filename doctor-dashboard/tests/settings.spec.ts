@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test';
 import { signInAsDoctor } from './_helpers';
-import { admin, DOCTOR_ID } from './setup';
+import { ADMIN_SKIP_REASON, admin, DOCTOR_ID } from './setup';
 
-test.describe('Settings — fallback meet link', () => {
+test.describe('Settings — video room link', () => {
+  test.skip(!!ADMIN_SKIP_REASON, ADMIN_SKIP_REASON ?? '');
+
   const TEST_LINK = 'https://meet.google.com/zzz-test-zzz';
 
   test.afterAll(async () => {
@@ -11,11 +13,11 @@ test.describe('Settings — fallback meet link', () => {
     await sb.from('doctors').update({ default_meet_link: null }).eq('id', DOCTOR_ID);
   });
 
-  test('doctor can save a fallback meet link', async ({ page }) => {
+  test('doctor can save their video room link', async ({ page }) => {
     await signInAsDoctor(page);
     await page.getByRole('link', { name: /^settings$/i }).click();
     await expect(page).toHaveURL(/\/settings/);
-    await expect(page.getByRole('heading', { name: /fallback/i, level: 2 })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /video room/i, level: 2 })).toBeVisible();
 
     const input = page.locator('input[type=url]');
     await input.fill(TEST_LINK);

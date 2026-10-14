@@ -20,7 +20,7 @@ export default function PubertyScreen() {
     <OnboardingShell
       screen="c-puberty"
       title="Puberty and development"
-      subtitle="Normal to discuss, and helps the doctor"
+      subtitle="Normal to discuss. Note anything you want to raise at a visit."
       ctaLabel="Continue"
       onCta={() => router.push('/(onboarding)/c-mental-health')}
     >
@@ -29,6 +29,7 @@ export default function PubertyScreen() {
           <View>
             <Text style={styles.fieldLabel}>Has menstruation started?</Text>
             <ChipGroup
+              label="Has menstruation started?"
               options={ANSWERS}
               selected={toChips(answers.menstruation)}
               onChange={(v) => set({ menstruation: fromChips(v) })}
@@ -40,6 +41,7 @@ export default function PubertyScreen() {
               <View>
                 <Text style={styles.fieldLabel}>Are periods regular?</Text>
                 <ChipGroup
+                  label="Are periods regular?"
                   options={ANSWERS}
                   selected={toChips(answers.regular)}
                   onChange={(v) => set({ regular: fromChips(v) })}
@@ -48,7 +50,7 @@ export default function PubertyScreen() {
 
               <View>
                 <Text style={styles.fieldLabel}>Any pain or irregularity?</Text>
-                <ChipGroup options={ANSWERS} selected={toChips(answers.pain)} onChange={(v) => set({ pain: fromChips(v) })} />
+                <ChipGroup label="Any pain or irregularity?" options={ANSWERS} selected={toChips(answers.pain)} onChange={(v) => set({ pain: fromChips(v) })} />
               </View>
 
               {answers.pain === 'Yes' && (
@@ -69,6 +71,7 @@ export default function PubertyScreen() {
         <View>
           <Text style={styles.fieldLabel}>Any concerns about growth or physical development?</Text>
           <ChipGroup
+            label="Any concerns about growth or physical development?"
             options={ANSWERS}
             selected={toChips(answers.growthConcerns)}
             onChange={(v) => set({ growthConcerns: fromChips(v) })}
@@ -78,7 +81,7 @@ export default function PubertyScreen() {
 
       <View>
         <Text style={styles.fieldLabel}>Acne or significant skin concerns?</Text>
-        <ChipGroup options={ANSWERS} selected={toChips(answers.acne)} onChange={(v) => set({ acne: fromChips(v) })} />
+        <ChipGroup label="Acne or significant skin concerns?" options={ANSWERS} selected={toChips(answers.acne)} onChange={(v) => set({ acne: fromChips(v) })} />
       </View>
     </OnboardingShell>
   );

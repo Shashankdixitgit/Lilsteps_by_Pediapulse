@@ -1,13 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { GradientButton, TextButton } from '@/components/gradient-button';
+import { confirmAsync, notify } from '@/components/growth/confirm';
 import { HeaderIconButton, ScreenHeader } from '@/components/ScreenHeader';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { useChild } from '@/context/child';
-import { useDocuments } from '@/hooks/useDocuments';
+import {
+  DocumentUploadError,
+  getDocumentSignedUrl,
+  openDocumentFile,
+  useDocuments,
+} from '@/hooks/useDocuments';
+import { formatDate } from '@/lib/date';
 import { typography } from '@/styles/global';
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -15,6 +24,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   report: 'Medical report',
   lab_test: 'Lab test',
   visit_history: 'Visit history',
+  vaccination: 'Vaccination certificate',
   other: 'Document',
 };
 
@@ -22,31 +32,128 @@ export default function RecordDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { child } = useChild();
-  const { documents, loading } = useDocuments(child?.id ?? null);
+  const { documents, loading, deleteDocument } = useDocuments(child?.id ?? null);
 
   const doc = documents.find(d => d.id === id);
+  const [opening, setOpening] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  // Signed URL for the inline image preview (images only; PDFs open via Download).
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
 
-  const formattedDate = doc
-    ? new Date(doc.document_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-    : '—';
+  const isImage = doc?.file_type === 'image';
+  const fileUrl = doc?.file_url;
+  const docTitle = doc?.title;
+  useEffect(() => {
+    if (!isImage || !fileUrl) return;
+    let cancelled = false;
+    getDocumentSignedUrl({ title: docTitle ?? 'record', file_url: fileUrl })
+      .then((url) => {
+        if (!cancelled) setPreviewUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewFailed(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isImage, fileUrl, docTitle]);
+
+  // en-IN, like the rest of the app: "13 Oct 2026", "13 Oct 2026 · 4:05 pm".
+  const formattedDate = doc ? formatDate(doc.document_date, { year: 'always' }) : '—';
 
   const formattedUpdated = doc
-    ? new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
-      ' · ' +
-      new Date(doc.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    ? `${formatDate(doc.created_at, { year: 'always' })} · ${new Date(doc.created_at).toLocaleTimeString('en-IN', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })}`
     : '—';
 
   const fileSizeLabel = doc?.file_size
     ? doc.file_size > 1024 * 1024
       ? `${(doc.file_size / (1024 * 1024)).toFixed(1)} MB`
-      : `${Math.round(doc.file_size / 1024)} KB`
+      : `${Math.max(1, Math.round(doc.file_size / 1024))} KB`
     : null;
 
   const categoryLabel = doc ? (CATEGORY_LABEL[doc.category] ?? 'Document') : '';
 
+  function showFileError(e: unknown) {
+    notify(
+      'Could not open file',
+      e instanceof DocumentUploadError ? e.message : 'Please check your connection and try again.',
+    );
+  }
+
+  async function handleDownload() {
+    if (!doc || opening) return;
+    setOpening(true);
+    try {
+      await openDocumentFile(doc);
+    } catch (e) {
+      showFileError(e);
+    } finally {
+      setOpening(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!doc || deleting) return;
+    const ok = await confirmAsync(
+      'Delete this record?',
+      `"${doc.title}" and its file will be removed from ${child?.name ? `${child.name}'s` : 'your'} health records. This can't be undone.`,
+      { confirmLabel: 'Delete', destructive: true },
+    );
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      await deleteDocument(doc.id);
+      if (router.canGoBack()) router.back();
+      else router.replace('/records');
+    } catch {
+      setDeleting(false);
+      notify('Could not delete', 'Please check your connection and try again.');
+    }
+  }
+
+  // Shares a temporary link (1 hour), never a permanent one: the bucket is private.
   async function handleShare() {
     if (!doc) return;
-    await Share.share({ message: `${doc.title} - ${doc.file_url}` });
+    let url: string;
+    try {
+      url = await getDocumentSignedUrl(doc, { expiresIn: 60 * 60 });
+    } catch (e) {
+      showFileError(e);
+      return;
+    }
+    const message = `${doc.title} (link expires in 1 hour)\n${url}`;
+    // Web: most desktop browsers have no share sheet. Copy the link instead
+    // of failing with a misleading "could not open file".
+    if (Platform.OS === 'web') {
+      const nav = typeof navigator !== 'undefined' ? navigator : undefined;
+      if (nav?.share) {
+        try {
+          await nav.share({ title: doc.title, text: message });
+        } catch (e) {
+          if ((e as { name?: string })?.name !== 'AbortError') {
+            notify('Could not share', 'Please try again, or use Download instead.');
+          }
+        }
+        return;
+      }
+      try {
+        await nav?.clipboard?.writeText(message);
+        notify('Link copied', 'A link to this record is on your clipboard. It works for 1 hour.');
+      } catch {
+        notify('Could not share', 'This browser can\'t share or copy links. Use Download instead.');
+      }
+      return;
+    }
+    try {
+      await Share.share({ message });
+    } catch {
+      notify('Could not share', 'Please try again.');
+    }
   }
 
   if (loading) {
@@ -100,6 +207,28 @@ export default function RecordDetailScreen() {
           <Text style={typography.caption}>Last updated {formattedUpdated}</Text>
         </View>
 
+        {/* Image preview: tap to open it full size */}
+        {isImage && !previewFailed ? (
+          <Pressable
+            onPress={handleDownload}
+            accessibilityRole="imagebutton"
+            accessibilityLabel={`${doc.title}. Open full size`}
+            style={styles.preview}
+          >
+            {previewUrl ? (
+              <Image
+                source={{ uri: previewUrl }}
+                style={StyleSheet.absoluteFill}
+                contentFit="contain"
+                transition={150}
+                onError={() => setPreviewFailed(true)}
+              />
+            ) : (
+              <ActivityIndicator color={AppColors.secondary} />
+            )}
+          </Pressable>
+        ) : null}
+
         {/* File */}
         <View style={[styles.card, styles.fileRow]}>
           <View style={styles.well}>
@@ -115,13 +244,19 @@ export default function RecordDetailScreen() {
             </Text>
             {!!fileSizeLabel && <Text style={typography.meta}>{fileSizeLabel}</Text>}
           </View>
-          {/* No download handler is wired yet (unchanged); styled as a text action. */}
           <Pressable
+            onPress={handleDownload}
+            disabled={opening}
             accessibilityRole="button"
             accessibilityLabel="Download file"
-            style={({ pressed }) => [styles.downloadBtn, pressed && styles.pressed]}
+            accessibilityState={{ busy: opening, disabled: opening }}
+            style={({ pressed }) => [styles.downloadBtn, (pressed || opening) && styles.pressed]}
           >
-            <Ionicons name="download-outline" size={Size.iconRow} color={AppColors.secondary} />
+            {opening ? (
+              <ActivityIndicator size="small" color={AppColors.secondary} />
+            ) : (
+              <Ionicons name="download-outline" size={Size.iconRow} color={AppColors.secondary} />
+            )}
             <Text style={styles.downloadText}>Download</Text>
           </Pressable>
         </View>
@@ -130,6 +265,14 @@ export default function RecordDetailScreen() {
           label="Book follow-up"
           onPress={() => router.push('/consult/booking')}
           style={styles.cta}
+        />
+
+        <TextButton
+          label={deleting ? 'Deleting…' : 'Delete record'}
+          tone="danger"
+          onPress={handleDelete}
+          disabled={deleting}
+          style={styles.deleteBtn}
         />
       </ScrollView>
     </View>
@@ -183,6 +326,18 @@ const styles = StyleSheet.create({
   downloadText: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.secondary },
 
   cta: { marginTop: 8 },
+  deleteBtn: { alignSelf: 'center' },
+  preview: {
+    height: 260,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    backgroundColor: AppColors.card,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 
   notFoundText: { color: AppColors.onSurface },
 });

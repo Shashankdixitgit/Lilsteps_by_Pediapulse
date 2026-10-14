@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { StatusPill } from '@/components/ui/StatusPill';
 import { haptic } from '@/components/ui/useMotion';
@@ -28,9 +28,12 @@ interface VaccineStatusListProps {
  * Onboarding vaccine checklist: one white card, hairline-separated rows.
  * Name and timing note use the full row width; the Given / Missed / Not sure
  * segmented control sits under them (segments 44 high), so long names and
- * notes never wrap one word per line.
+ * notes never wrap one word per line. On a narrow window (small phone, 200%
+ * zoom) or with large text, the three segments stack so none is cut off.
  */
 export function VaccineStatusList({ items, answers, onChange }: VaccineStatusListProps) {
+  const { width, fontScale } = useWindowDimensions();
+  const stacked = width < 340 || fontScale >= 1.3;
   return (
     <View style={styles.card}>
       {items.map((item, idx) => {
@@ -49,20 +52,36 @@ export function VaccineStatusList({ items, answers, onChange }: VaccineStatusLis
             </View>
 
             {item.notDueYet ? null : (
-              <View style={styles.track} accessibilityRole="radiogroup" accessibilityLabel={`${item.name} status`}>
+              <View style={[styles.track, stacked && styles.trackStacked]} accessibilityRole="radiogroup" accessibilityLabel={`${item.name} status`}>
                 {VACCINE_ANSWERS.map((option) => {
                   const selected = current === option;
+                  const choose = () => {
+                    haptic('selection');
+                    onChange(item.id, option);
+                  };
+                  // Web: react-native-web only presses on Space for role=button,
+                  // but a radio must select on Space too (as in ChipGroup).
+                  const webKeys =
+                    Platform.OS === 'web'
+                      ? {
+                          onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+                            if (e.key === ' ' || e.key === 'Spacebar') {
+                              e.preventDefault();
+                              choose();
+                            }
+                          },
+                        }
+                      : null;
                   return (
                     <Pressable
                       key={option}
-                      onPress={() => {
-                        haptic('selection');
-                        onChange(item.id, option);
-                      }}
+                      onPress={choose}
+                      {...webKeys}
                       accessibilityRole="radio"
                       accessibilityLabel={option}
                       accessibilityState={{ checked: selected, selected }}
-                      style={[styles.segment, selected && styles.segmentSelected]}
+                      aria-checked={selected}
+                      style={[styles.segment, stacked && styles.segmentStacked, selected && styles.segmentSelected]}
                     >
                       <Text style={[styles.segmentText, selected && styles.segmentTextSelected]}>{option}</Text>
                     </Pressable>
@@ -112,12 +131,21 @@ const styles = StyleSheet.create({
     borderRadius: Radius.full,
     backgroundColor: AppColors.surfaceContainer,
   },
+  trackStacked: {
+    flexDirection: 'column',
+    borderRadius: Radius.lg,
+    gap: 2,
+  },
   segment: {
     flex: 1,
     minHeight: 44,
+    paddingHorizontal: 6,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: Radius.full,
+  },
+  segmentStacked: {
+    flex: 0,
   },
   segmentSelected: {
     backgroundColor: AppColors.card,
@@ -129,6 +157,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     color: AppColors.onSurfaceVariant,
+    textAlign: 'center',
   },
   segmentTextSelected: {
     fontFamily: FontFamily.semibold,

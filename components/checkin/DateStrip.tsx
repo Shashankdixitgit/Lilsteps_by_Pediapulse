@@ -1,25 +1,15 @@
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
+import { BOOKING_DAYS, getBookingDays, type BookingDay } from '@/components/consult/appointmentFormat';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 
-export interface DayOption {
-  label: string;
-  sub: string;
-  isoDate: string;
-}
+import { spaceSelects } from './spaceKey';
 
-export function getNextDays(n: number): DayOption[] {
-  const labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return Array.from({ length: n }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    return {
-      label: i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : labels[d.getDay()],
-      sub: `${d.getDate()} ${months[d.getMonth()]}`,
-      isoDate: d.toISOString().split('T')[0],
-    };
-  });
+export type DayOption = BookingDay;
+
+/** Next n clinic (IST) days; 'YYYY-MM-DD' never shifts to UTC. */
+export function getNextDays(n: number = BOOKING_DAYS): DayOption[] {
+  return getBookingDays(n);
 }
 
 export interface DateStripProps {
@@ -30,7 +20,15 @@ export interface DateStripProps {
 
 export function DateStrip({ days, selectedIndex, onSelect }: DateStripProps) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+    // One-of-n choice: a radio group, so the chosen day is announced on web
+    // too (react-native-web ignores accessibilityState.selected).
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      contentContainerStyle={styles.row}
+      accessibilityRole="radiogroup"
+      accessibilityLabel="Date"
+    >
       {days.map((d, i) => {
         const active = selectedIndex === i;
         return (
@@ -38,9 +36,11 @@ export function DateStrip({ days, selectedIndex, onSelect }: DateStripProps) {
             key={i}
             style={[styles.chip, active && styles.chipActive]}
             onPress={() => onSelect(i)}
-            accessibilityRole="button"
-            accessibilityState={{ selected: active }}
-            accessibilityLabel={`${d.label}, ${d.sub}`}
+            {...spaceSelects(() => onSelect(i))}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: active, selected: active }}
+            aria-checked={active}
+            accessibilityLabel={d.fullLabel}
           >
             <Text style={[styles.label, active && styles.labelActive]}>{d.label}</Text>
             <Text style={[styles.date, active && styles.dateActive]}>{d.sub}</Text>

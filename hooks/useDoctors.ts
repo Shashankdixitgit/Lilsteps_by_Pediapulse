@@ -8,6 +8,45 @@ export interface DoctorRow {
   hospital: string;
   avatar_url: string | null;
   is_available: boolean;
+  /** The doctor has saved a Meet room (0035). The link itself is never read here. */
+  has_meet_link: boolean;
+  /** Per-booking Meet links through Google Calendar (Option B, 0034). */
+  has_google_calendar: boolean;
+}
+
+/** Columns a parent may read. Never `*`: default_meet_link is private (0035). */
+export const DOCTOR_PUBLIC_COLUMNS =
+  'id, name, specialisation, hospital, avatar_url, is_available, has_meet_link, has_google_calendar';
+
+/** True when a consult with this doctor will have a video link. */
+export function doctorHasVideoLink(d: Pick<DoctorRow, 'has_meet_link' | 'has_google_calendar'> | null | undefined): boolean {
+  return !!d && (d.has_meet_link || d.has_google_calendar);
+}
+
+/**
+ * Link status for one doctor (booking screens). null while loading or when
+ * unknown, so callers show nothing rather than a wrong hint.
+ */
+export function useDoctorVideoLink(doctorId: string | null | undefined): boolean | null {
+  const [state, setState] = useState<{ id: string; has: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!doctorId) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('doctors')
+        .select('has_meet_link, has_google_calendar')
+        .eq('id', doctorId)
+        .maybeSingle<Pick<DoctorRow, 'has_meet_link' | 'has_google_calendar'>>();
+      if (!cancelled && data) setState({ id: doctorId, has: doctorHasVideoLink(data) });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [doctorId]);
+
+  return doctorId && state?.id === doctorId ? state.has : null;
 }
 
 export interface TimeSlotRow {
@@ -25,13 +64,15 @@ export function useDoctors() {
 
   useEffect(() => {
     (async () => {
-      // Inner-join through doctor_auth so only doctors who have signed up
-      // for the clinical dashboard surface in the parent app. Leftover seed
-      // rows without a doctor_auth link are filtered out.
+      // Only doctors who have signed up for the clinical dashboard surface in
+      // the parent app (has_dashboard_login is kept in step with doctor_auth,
+      // 0034). Leftover seed rows without a login are filtered out. Parents
+      // can't read doctor_auth itself (0035).
       const { data, error: err } = await supabase
         .from('doctors')
-        .select('*, doctor_auth!inner(id)')
+        .select(DOCTOR_PUBLIC_COLUMNS)
         .eq('is_available', true)
+        .eq('has_dashboard_login', true)
         .order('name');
 
       if (err) {

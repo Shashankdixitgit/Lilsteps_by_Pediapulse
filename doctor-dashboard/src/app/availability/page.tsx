@@ -1,3 +1,6 @@
+import { redirect } from 'next/navigation';
+import { getCurrentDoctor } from '@/lib/doctor';
+import { todayIst } from '@/lib/format';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { GenerateForm } from './generate-form';
 import { SlotsDay, type DaySlots } from './slots-day';
@@ -9,27 +12,56 @@ type SlotRow = {
   is_available: boolean;
 };
 
+type BookedRow = {
+  id: string;
+  date: string;
+  time: string;
+  children: { name: string } | null;
+};
+
 export default async function AvailabilityPage() {
   const supabase = await createSupabaseServerClient();
+  const doctor = await getCurrentDoctor(supabase);
+  if (!doctor) redirect('/login');
   // Clinic-local (IST). The server is UTC, so a 5am-IST visit on May 31
   // would otherwise compute 'today' as May 30 and show stale slots.
-  const todayIso = new Date()
-    .toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const todayIso = todayIst();
 
-  const { data, error } = await supabase
-    .from('time_slots')
-    .select('id, date, time, is_available')
-    .gte('date', todayIso)
-    .order('date', { ascending: true })
-    .order('time', { ascending: true })
-    .returns<SlotRow[]>();
+  // time_slots is readable by everyone (parents browse it), so filter to
+  // this doctor explicitly — RLS alone would show every doctor's slots.
+  const [{ data, error }, { data: booked }] = await Promise.all([
+    supabase
+      .from('time_slots')
+      .select('id, date, time, is_available')
+      .eq('doctor_id', doctor.doctorId)
+      .gte('date', todayIso)
+      .order('date', { ascending: true })
+      .order('time', { ascending: true })
+      .returns<SlotRow[]>(),
+    supabase
+      .from('appointments')
+      .select('id, date, time, children(name)')
+      .eq('doctor_id', doctor.doctorId)
+      .gte('date', todayIso)
+      .neq('status', 'cancelled')
+      .returns<BookedRow[]>(),
+  ]);
+
+  const bookedByKey = new Map<string, { appointmentId: string; childName: string }>();
+  (booked ?? []).forEach((b) =>
+    bookedByKey.set(`${b.date} ${b.time}`, {
+      appointmentId: b.id,
+      childName: b.children?.name ?? 'patient',
+    }),
+  );
 
   // Group by date
   const byDate = new Map<string, DaySlots>();
   (data ?? []).forEach((s) => {
+    const item = { ...s, booking: bookedByKey.get(`${s.date} ${s.time}`) ?? null };
     const existing = byDate.get(s.date);
-    if (existing) existing.items.push(s);
-    else byDate.set(s.date, { date: s.date, items: [s] });
+    if (existing) existing.items.push(item);
+    else byDate.set(s.date, { date: s.date, items: [item] });
   });
   const days = Array.from(byDate.values());
 
@@ -43,7 +75,7 @@ export default async function AvailabilityPage() {
           Availability
         </h1>
         <p className="mt-2 text-[15px] text-[var(--ink-3)]">
-          Open and close slots from here. Parents only see slots marked open.
+          Open and close your slots from here. Parents only see slots marked open. Booked slots are locked.
         </p>
       </header>
 

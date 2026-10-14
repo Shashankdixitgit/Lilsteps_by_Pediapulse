@@ -25,12 +25,13 @@ export default function SleepInfantScreen() {
     >
       <View>
         <Text style={styles.fieldLabel}>Average sleep hours per day</Text>
-        <ChipGroup options={SLEEP_HOURS} selected={toChips(answers.hours)} onChange={(v) => set({ hours: fromChips(v) })} />
+        <ChipGroup label="Average sleep hours per day" options={SLEEP_HOURS} selected={toChips(answers.hours)} onChange={(v) => set({ hours: fromChips(v) })} />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Any sleep concerns?</Text>
         <ChipGroup
+          label="Any sleep concerns?"
           options={CONCERNS}
           selected={answers.concerns}
           onChange={(concerns) => set({ concerns })}

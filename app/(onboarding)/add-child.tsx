@@ -76,7 +76,7 @@ export default function AddChildScreen() {
       <View style={styles.note}>
         <Ionicons name="lock-closed-outline" size={14} color={AppColors.muted} />
         <Text style={[typography.caption, styles.noteText]}>
-          Your child&apos;s data is encrypted and never shared without your consent.
+          Your child&apos;s details are stored securely and shared only with the doctors you consult.
         </Text>
       </View>
     </OnboardingShell>

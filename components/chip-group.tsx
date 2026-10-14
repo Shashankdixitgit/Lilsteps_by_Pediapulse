@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { haptic } from '@/components/ui/useMotion';
@@ -12,6 +12,9 @@ interface ChipGroupProps {
   multiSelect?: boolean;
   /** When this value is selected, all others deselect; when others selected, this deselects */
   noneValue?: string;
+  /** The question the chips answer (usually the visible label above them),
+   *  so a screen reader names the group, not just each chip (R3-21). */
+  label?: string;
 }
 
 export function ChipGroup({
@@ -20,6 +23,7 @@ export function ChipGroup({
   onChange,
   multiSelect = false,
   noneValue,
+  label,
 }: ChipGroupProps) {
   const handlePress = (option: string) => {
     if (!multiSelect) {
@@ -45,16 +49,37 @@ export function ChipGroup({
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      accessibilityRole={multiSelect ? undefined : 'radiogroup'}
+      accessibilityLabel={label}
+      // Web: name the group (a multi-select is a plain group of checkboxes).
+      {...(Platform.OS === 'web' && label ? { role: multiSelect ? ('group' as const) : ('radiogroup' as const), 'aria-label': label } : null)}
+    >
       {options.map((option) => {
         const isSelected = selected.includes(option);
+        // Web: react-native-web only presses on Space for role=button, but a
+        // checkbox / radio must toggle on Space too.
+        const webKeys =
+          Platform.OS === 'web'
+            ? {
+                onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+                  if (e.key === ' ' || e.key === 'Spacebar') {
+                    e.preventDefault();
+                    handlePress(option);
+                  }
+                },
+              }
+            : null;
         return (
           <Pressable
             key={option}
             onPress={() => handlePress(option)}
+            {...webKeys}
             accessibilityRole={multiSelect ? 'checkbox' : 'radio'}
             accessibilityLabel={option}
             accessibilityState={{ checked: isSelected, selected: isSelected }}
+            aria-checked={isSelected}
             style={({ pressed }) => [styles.chip, isSelected && styles.chipSelected, pressed && !isSelected && styles.chipPressed]}
           >
             {isSelected ? (

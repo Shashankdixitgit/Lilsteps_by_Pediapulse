@@ -28,12 +28,12 @@ export default function DietActivityScreen() {
     >
       <View>
         <Text style={styles.fieldLabel}>Diet type</Text>
-        <ChipGroup options={DIET} selected={toChips(answers.diet)} onChange={(v) => set({ diet: fromChips(v) })} />
+        <ChipGroup label="Diet type" options={DIET} selected={toChips(answers.diet)} onChange={(v) => set({ diet: fromChips(v) })} />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Extremely picky eater or major food aversions?</Text>
-        <ChipGroup options={PICKY} selected={toChips(answers.picky)} onChange={(v) => set({ picky: fromChips(v) })} />
+        <ChipGroup label="Extremely picky eater or major food aversions?" options={PICKY} selected={toChips(answers.picky)} onChange={(v) => set({ picky: fromChips(v) })} />
       </View>
 
       {answers.picky === 'Yes' && (
@@ -48,6 +48,7 @@ export default function DietActivityScreen() {
       <View>
         <Text style={styles.fieldLabel}>Physical activity level</Text>
         <ChipGroup
+          label="Physical activity level"
           options={ACTIVITY}
           selected={toChips(answers.activity)}
           onChange={(v) => set({ activity: fromChips(v) })}
@@ -57,6 +58,7 @@ export default function DietActivityScreen() {
       <View>
         <Text style={styles.fieldLabel}>Average daily screen time</Text>
         <ChipGroup
+          label="Average daily screen time"
           options={SCREEN_TIME}
           selected={toChips(answers.screenTime)}
           onChange={(v) => set({ screenTime: fromChips(v) })}

@@ -60,17 +60,34 @@ export interface OnboardingStep {
   total: number | null;
 }
 
+export interface OnboardingStepOptions {
+  /** The parent already has a child, so this run started at "add-child" and
+   *  skipped "About you" (parent-details). It is left out of the count. */
+  skipParentDetails?: boolean;
+}
+
+function stepsFor(list: OnboardingScreen[], screen: OnboardingScreen, opts?: OnboardingStepOptions): OnboardingScreen[] {
+  // parent-details itself always counts, so the screen never loses its step.
+  return opts?.skipParentDetails && screen !== 'parent-details'
+    ? list.filter((s) => s !== 'parent-details')
+    : list;
+}
+
 /**
  * Position of a screen. Before the path is known, the common screens report
  * `total: null` (show "Step X" only). Returns null for a screen that is not
  * on the given path.
  */
-export function getOnboardingStep(screen: OnboardingScreen, path: OnboardingPath | null): OnboardingStep | null {
+export function getOnboardingStep(
+  screen: OnboardingScreen,
+  path: OnboardingPath | null,
+  opts?: OnboardingStepOptions,
+): OnboardingStep | null {
   if (path) {
-    const steps = ONBOARDING_STEPS[path];
+    const steps = stepsFor(ONBOARDING_STEPS[path], screen, opts);
     const idx = steps.indexOf(screen);
     return idx === -1 ? null : { step: idx + 1, total: steps.length };
   }
-  const idx = COMMON_STEPS.indexOf(screen);
+  const idx = stepsFor(COMMON_STEPS, screen, opts).indexOf(screen);
   return idx === -1 ? null : { step: idx + 1, total: null };
 }

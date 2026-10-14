@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { PressableScale } from '@/components/ui/PressableScale';
@@ -12,24 +12,40 @@ export interface SymptomTileProps {
   active: boolean;
   /** Deprecated: tiles size themselves (even 2-column grid, height 88). Ignored. */
   size?: number;
+  /** One tile per row: narrow window or large text (R2-05), so labels never split mid-word. */
+  fullWidth?: boolean;
   onToggle: (key: string) => void;
 }
 
 /**
  * Symptom tile for a 2-column grid (parent: flexDirection row, flexWrap wrap,
- * gap 12). Fixed height 88: 32 icon well (icon 18) top-left, label 15
- * SemiBold, one-line 12 muted hint. Width comes from flexBasis, not Dimensions,
+ * gap 12). Min height 88: 32 icon well (icon 18) top-left, label 15
+ * SemiBold, 12 muted hint; text wraps rather than truncating. Width comes from flexBasis, not Dimensions,
  * so the grid stays even on web.
  */
-export function SymptomTile({ tile, active, onToggle }: SymptomTileProps) {
+export function SymptomTile({ tile, active, fullWidth = false, onToggle }: SymptomTileProps) {
+  // Web: react-native-web only presses on Enter; a checkbox must toggle on Space.
+  const webKeys =
+    Platform.OS === 'web'
+      ? {
+          onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+            if (e.key === ' ' || e.key === 'Spacebar') {
+              e.preventDefault();
+              onToggle(tile.key);
+            }
+          },
+        }
+      : null;
   return (
     <PressableScale
       onPress={() => onToggle(tile.key)}
+      {...webKeys}
       accessibilityRole="checkbox"
       accessibilityState={{ checked: active }}
+      aria-checked={active}
       accessibilityLabel={`${tile.label}. ${tile.sub}`}
       scaleTo={0.98}
-      style={styles.cell}
+      style={[styles.cell, fullWidth && styles.cellFull]}
     >
       <View style={[styles.card, active && styles.cardActive]}>
         {active ? (
@@ -41,12 +57,9 @@ export function SymptomTile({ tile, active, onToggle }: SymptomTileProps) {
           <Ionicons name={tile.icon as keyof typeof Ionicons.glyphMap} size={18} color={AppColors.primary} />
         </View>
         <View style={styles.text}>
-          <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
-            {tile.label}
-          </Text>
-          <Text style={styles.sub} numberOfLines={1}>
-            {tile.sub}
-          </Text>
+          {/* No numberOfLines: at 200% zoom the label wraps instead of being cut off (A3). */}
+          <Text style={[styles.label, active && styles.labelActive]}>{tile.label}</Text>
+          <Text style={styles.sub}>{tile.sub}</Text>
         </View>
       </View>
     </PressableScale>
@@ -59,8 +72,12 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     maxWidth: '50%',
   },
+  cellFull: { flexBasis: '100%', maxWidth: '100%' },
   card: {
-    height: 88,
+    // At least 88 tall; grows when the label wraps (large text, A3).
+    minHeight: 88,
+    flexGrow: 1,
+    gap: 8,
     padding: 12,
     justifyContent: 'space-between',
     backgroundColor: AppColors.card,

@@ -18,42 +18,13 @@ WHERE NOT EXISTS (
   SELECT 1 FROM public.doctors d WHERE d.name = v.name
 );
 
--- ─── Time slots — next 7 days, 12 slots/day per doctor ───────────────────────
--- Skips Sundays. ~75% of slots marked available (deterministic pseudo-random
--- via hashtext, so re-running gives the same shape).
-WITH days AS (
-  SELECT (CURRENT_DATE + i) AS slot_date
-  FROM generate_series(0, 6) AS i
-  WHERE EXTRACT(DOW FROM (CURRENT_DATE + i)) <> 0
-),
-slot_times AS (
-  SELECT t::time AS slot_time
-  FROM (VALUES
-    ('09:00'), ('09:30'), ('10:00'), ('10:30'), ('11:00'), ('11:30'),
-    ('14:00'), ('14:30'), ('15:00'), ('15:30'), ('16:00'), ('16:30')
-  ) AS s(t)
-)
-INSERT INTO public.time_slots (doctor_id, date, time, is_available)
-SELECT
-  d.id,
-  days.slot_date,
-  slot_times.slot_time,
-  -- ~75% available, deterministic per (doctor, date, time)
-  (
-    (
-      extract(epoch from (days.slot_date::timestamp + slot_times.slot_time))::bigint
-      + abs(hashtext(d.id::text))
-    ) % 4
-  ) <> 0
-FROM public.doctors d
-CROSS JOIN days
-CROSS JOIN slot_times
-WHERE NOT EXISTS (
-  SELECT 1 FROM public.time_slots ts
-  WHERE ts.doctor_id = d.id
-    AND ts.date = days.slot_date
-    AND ts.time = slot_times.slot_time
-);
+-- ─── Time slots ──────────────────────────────────────────────────────────────
+-- Slots come from the rolling generator (migration 0030): 14 days ahead,
+-- Mon–Sat 10:00–13:00 and 17:00–20:00 IST, topped up daily by pg_cron. It
+-- only fills doctors who have a dashboard login (doctor_auth), so this file no
+-- longer writes its own grid (the old one also marked ~25% of slots "booked"
+-- with no appointment behind them).
+select public.generate_rolling_slots(14);
 
 -- ─── Verification ─────────────────────────────────────────────────────────────
 -- After running the inserts, these should print non-zero counts.
