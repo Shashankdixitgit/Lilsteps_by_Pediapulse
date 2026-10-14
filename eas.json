@@ -21,7 +21,9 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_DEMO_LOGIN": "0"
+        "EXPO_PUBLIC_DEMO_LOGIN": "0",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ahikfefphptmtivwukpv.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_bgO37ySaqotR5PHK1-vZwA_mrXgClxH"
       },
       "android": {
         "buildType": "app-bundle"
@@ -40,7 +42,9 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_DEMO_LOGIN": "0"
+        "EXPO_PUBLIC_DEMO_LOGIN": "0",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://ahikfefphptmtivwukpv.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_bgO37ySaqotR5PHK1-vZwA_mrXgClxH"
       },
       "android": {
         "buildType": "app-bundle"
