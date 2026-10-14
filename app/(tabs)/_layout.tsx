@@ -4,7 +4,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, Tabs } from 'expo-router';
 import { memo, useEffect, useRef, useState } from 'react';
-import { LayoutChangeEvent, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { LayoutChangeEvent, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -14,6 +14,16 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import {
+  AI_BTN_SIZE,
+  AI_SPACER_W,
+  BAR_CHROME_W,
+  isCompactTabBar,
+  MIN_LABELLED_TAB_W,
+  TAB_BAR_HEIGHT,
+  TAB_LABEL_MAX_SCALE,
+  tabBarSpace,
+} from '@/components/home/tabBarSpace';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { haptic, useMotion } from '@/components/ui/useMotion';
 import { AppColors, CanvasFade, FontFamily, GlassBlur, Motion, Radius, Shadow } from '@/constants/theme';
@@ -40,14 +50,37 @@ const TAB_LABELS: Record<string, string> = {
   consult: 'Consult',
 };
 
-const AI_BTN_SIZE = 52;
 const PILL_W = 56;
 const PILL_H = 30;
+/** Longest label ("Records" / "Vaccine"), for fitting the label on web. */
+const LONGEST_LABEL_CHARS = 7;
+
+/**
+ * Tab sizing from the window width. Every tab keeps a text label (R2-17): on
+ * a narrow window (small phone at 200% zoom) the AI button moves above the
+ * bar so the four tabs get the whole width. Web has no adjustsFontSizeToFit,
+ * so the label size is fitted here (12 → 9); native also shrinks a long
+ * label to fit. Only a window too narrow for even that falls back to icons,
+ * with the label kept as the accessible name.
+ */
+function tabMetrics(windowWidth: number) {
+  const compact = isCompactTabBar(windowWidth);
+  const spacer = compact ? 0 : AI_SPACER_W;
+  const tabW = Math.max(0, (windowWidth - BAR_CHROME_W - spacer) / 4);
+  const fitted = tabW / (LONGEST_LABEL_CHARS * 0.62);
+  return {
+    compact,
+    spacer,
+    pillW: Math.min(PILL_W, Math.max(28, tabW - 4)),
+    showLabels: tabW >= MIN_LABELLED_TAB_W,
+    labelSize: Platform.OS === 'web' ? Math.max(9, Math.min(12, Math.floor(fitted))) : 12,
+  };
+}
 
 type TabLayout = { x: number; width: number };
 
 /** Mint pill that slides (translateX) behind the active tab icon. Own memoised child. */
-const ActivePill = memo(function ActivePill({ layout }: { layout: TabLayout | undefined }) {
+const ActivePill = memo(function ActivePill({ layout, width }: { layout: TabLayout | undefined; width: number }) {
   const { reduceMotion } = useMotion();
   const x = useSharedValue(-1);
   const opacity = useSharedValue(0);
@@ -57,21 +90,31 @@ const ActivePill = memo(function ActivePill({ layout }: { layout: TabLayout | un
       opacity.set(withTiming(0, { duration: Motion.exit }));
       return;
     }
-    const target = layout.x + layout.width / 2 - PILL_W / 2;
+    const target = layout.x + layout.width / 2 - width / 2;
     if (x.get() < 0 || reduceMotion) x.set(target);
     else x.set(withSpring(target, Motion.springPress));
     opacity.set(withTiming(1, { duration: Motion.exit }));
-  }, [layout, reduceMotion, x, opacity]);
+  }, [layout, width, reduceMotion, x, opacity]);
 
   const style = useAnimatedStyle(() => ({
     opacity: opacity.get(),
     transform: [{ translateX: Math.max(0, x.get()) }],
   }));
 
-  return <Animated.View pointerEvents="none" style={[styles.activePill, style]} />;
+  return <Animated.View style={[styles.activePill, { width }, style]} />;
 });
 
-function TabIcon({ focused, icon, iconActive }: { focused: boolean; icon: string; iconActive: string }) {
+function TabIcon({
+  focused,
+  icon,
+  iconActive,
+  width,
+}: {
+  focused: boolean;
+  icon: string;
+  iconActive: string;
+  width: number;
+}) {
   const { reduceMotion } = useMotion();
   const scale = useSharedValue(1);
 
@@ -84,7 +127,7 @@ function TabIcon({ focused, icon, iconActive }: { focused: boolean; icon: string
   const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.get() }] }));
 
   return (
-    <Animated.View style={[styles.iconSlot, style]}>
+    <Animated.View style={[styles.iconSlot, { width }, style]}>
       <Ionicons
         name={(focused ? iconActive : icon) as any}
         size={22}
@@ -96,6 +139,8 @@ function TabIcon({ focused, icon, iconActive }: { focused: boolean; icon: string
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
+  const metrics = tabMetrics(windowWidth);
   const [layouts, setLayouts] = useState<Record<string, TabLayout>>({});
   const prevIndex = useRef(state.index);
 
@@ -138,10 +183,26 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         accessibilityRole="tab"
         accessibilityLabel={label}
         accessibilityState={{ selected: focused }}
+        aria-selected={focused}
       >
         <View style={styles.tabInner}>
-          <TabIcon focused={focused} icon={tab.icon} iconActive={tab.iconActive} />
-          <Text style={[styles.tabLabel, focused && styles.tabLabelActive]}>{label}</Text>
+          <TabIcon focused={focused} icon={tab.icon} iconActive={tab.iconActive} width={metrics.pillW} />
+          {/* Labels scale with the system text size but are capped (like the
+              native iOS tab bar), so at 200% they can't overlap each other or
+              push the bar over the screen content. The full label is still
+              read by screen readers via accessibilityLabel. */}
+          {metrics.showLabels ? (
+            <Text
+              style={[styles.tabLabel, focused && styles.tabLabelActive, { fontSize: metrics.labelSize }]}
+              numberOfLines={1}
+              maxFontSizeMultiplier={TAB_LABEL_MAX_SCALE}
+              // Native: shrink a long label (large text) to fit instead of "Vacc…".
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
+            >
+              {label}
+            </Text>
+          ) : null}
         </View>
       </Pressable>
     );
@@ -150,7 +211,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const bottomPadding = Math.max(insets.bottom, 12);
 
   return (
-    <View style={[styles.wrapper, { paddingBottom: bottomPadding }]} pointerEvents="box-none">
+    <View style={[styles.wrapper, { paddingBottom: bottomPadding }]}>
       {/* Canvas fade: transparent at top → solid at bottom */}
       <LinearGradient
         colors={[
@@ -166,26 +227,25 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
         style={styles.fadeGradient}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
-        pointerEvents="none"
       />
 
       <View style={styles.tabBarContainer}>
         {/* Subtle glass: translucent white + hairline; light blur on iOS only. */}
-        <View style={styles.glassClip} pointerEvents="none">
+        <View style={styles.glassClip}>
           {Platform.OS === 'ios' ? (
             <BlurView intensity={GlassBlur} tint="light" style={StyleSheet.absoluteFill} />
           ) : null}
           <View style={styles.glassFill} />
         </View>
         <View style={styles.tabBarInner}>
-          <ActivePill layout={activeName ? layouts[activeName] : undefined} />
+          <ActivePill layout={activeName ? layouts[activeName] : undefined} width={metrics.pillW} />
           {LEFT_TABS.map((t) => renderTab(t))}
-          <View style={styles.aiButtonSpacer} />
+          {metrics.spacer > 0 ? <View style={{ width: metrics.spacer }} /> : null}
           {RIGHT_TABS.map((t) => renderTab(t))}
         </View>
       </View>
 
-      <View style={styles.aiButtonWrapper} pointerEvents="box-none">
+      <View style={[styles.aiButtonWrapper, metrics.compact && styles.aiButtonWrapperCompact]}>
         <PressableScale
           onPress={() => router.push('/checkin')}
           hapticOnPress
@@ -202,10 +262,49 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   );
 }
 
+/**
+ * Web: react-native-screens is off, so inactive tabs stay in the DOM behind
+ * the active one with only aria-hidden. Their buttons stayed in the Tab
+ * order (focus jumped to invisible Home buttons). display:none takes them
+ * out of the focus order and the accessibility tree; native detaches
+ * inactive screens itself.
+ */
+const HIDDEN_SCENE = { display: 'none' } as const;
+
+/**
+ * Web: when keyboard focus moves to an item low on the page, the browser
+ * scrolls it into view, but the floating bar covered it (R2-17). A
+ * scroll-margin on focused elements, equal to the space the bar and the AI
+ * button take, makes the browser stop above the bar. Native screens reserve
+ * the same space as bottom padding (useTabBarSpace).
+ */
+function useWebFocusScrollMargin() {
+  const { width, fontScale } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const space = tabBarSpace(width, insets.bottom, fontScale);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const el = document.createElement('style');
+    el.setAttribute('data-lilsteps', 'tab-focus-margin');
+    el.textContent = `:focus, :focus-visible { scroll-margin-bottom: ${Math.round(space)}px; scroll-margin-top: 96px; }`;
+    document.head.appendChild(el);
+    return () => {
+      el.remove();
+    };
+  }, [space]);
+}
+
 export default function TabsLayout() {
   usePushTokenRegistration();
+  useWebFocusScrollMargin();
   return (
-    <Tabs tabBar={(props) => <CustomTabBar {...props} />} screenOptions={{ headerShown: false }}>
+    <Tabs
+      tabBar={(props) => <CustomTabBar {...props} />}
+      screenOptions={({ navigation }) => ({
+        headerShown: false,
+        sceneStyle: Platform.OS === 'web' && !navigation.isFocused() ? HIDDEN_SCENE : undefined,
+      })}
+    >
       <Tabs.Screen name="index" />
       <Tabs.Screen name="growth" />
       <Tabs.Screen name="vaccine" />
@@ -216,7 +315,9 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  // pointerEvents in styles (the prop is deprecated on web).
   wrapper: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     bottom: 0,
     left: 0,
@@ -225,14 +326,18 @@ const styles = StyleSheet.create({
     borderWidth: 0,
   },
   fadeGradient: {
+    pointerEvents: 'none',
     position: 'absolute',
     top: -35,
-    left: -12,
-    right: -12,
+    // Absolute insets are measured from the wrapper's edge (padding ignored),
+    // so 0 already spans the full width; -12 made the page scroll sideways.
+    left: 0,
+    right: 0,
     bottom: 0,
     borderWidth: 0,
   },
   aiButtonWrapper: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     top: -AI_BTN_SIZE / 2 + 2,
     left: 0,
@@ -254,9 +359,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: AppColors.primary,
   },
-  aiButtonSpacer: {
-    width: AI_BTN_SIZE + 20,
-  },
   tabBarContainer: {
     borderRadius: Radius.xl,
     borderCurve: 'continuous',
@@ -266,6 +368,7 @@ const styles = StyleSheet.create({
   },
   glassClip: {
     ...StyleSheet.absoluteFill,
+    pointerEvents: 'none',
     borderRadius: Radius.xl,
     overflow: 'hidden',
   },
@@ -273,17 +376,23 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFill,
     backgroundColor: Platform.OS === 'ios' ? AppColors.glassLight : 'rgba(255, 255, 255, 0.92)',
   },
+  // Compact: the button sits fully above the bar, at the right.
+  aiButtonWrapperCompact: {
+    top: -(AI_BTN_SIZE + 8 + 8),
+    alignItems: 'flex-end',
+    paddingRight: 16,
+  },
   tabBarInner: {
     flexDirection: 'row',
-    alignItems: 'center',
-    height: 66,
+    alignItems: 'stretch',
+    minHeight: TAB_BAR_HEIGHT,
     paddingHorizontal: 4,
   },
   activePill: {
+    pointerEvents: 'none',
     position: 'absolute',
     left: 0,
     top: 9,
-    width: PILL_W,
     height: PILL_H,
     borderRadius: Radius.full,
     backgroundColor: AppColors.mintSurface,
@@ -293,15 +402,17 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'flex-start',
+    minWidth: 0,
     paddingTop: 9,
+    paddingBottom: 6,
   },
   tabInner: {
     alignItems: 'center',
+    alignSelf: 'stretch',
     gap: 2,
   },
   iconSlot: {
     height: PILL_H,
-    width: PILL_W,
     alignItems: 'center',
     justifyContent: 'center',
   },

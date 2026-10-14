@@ -2,16 +2,19 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ChildAvatar, childColorIndex } from '@/components/ChildAvatar';
-import { AppColors, CanvasFade, FontFamily, Radius, Shadow } from '@/constants/theme';
+import { formatAge } from '@/constants/bracketConfig';
+import { AppColors, CanvasFade, FontFamily, Radius, Shadow, Size } from '@/constants/theme';
 import { useChild } from '@/context/child';
 
 interface HomeHeaderProps {
   childName: string;
   avatarInitial: string;
   hasUnread: boolean;
+  /** New doctor replies + new prescriptions, for the bell's accessible name. */
+  unreadCount?: number;
   paddingTop: number;
   onNotifications?: () => void;
 }
@@ -20,6 +23,7 @@ export function HomeHeader({
   childName,
   avatarInitial,
   hasUnread,
+  unreadCount = 0,
   paddingTop,
   onNotifications,
 }: HomeHeaderProps) {
@@ -38,13 +42,13 @@ export function HomeHeader({
     setSwitcherOpen(false);
   }
 
-  function handleAddChild() {
+  function go(path: '/profile' | '/(onboarding)/add-child') {
     setSwitcherOpen(false);
-    router.push('/(onboarding)/add-child');
+    router.push(path);
   }
 
   return (
-    <View style={[styles.wrapper, { paddingTop }]} pointerEvents="box-none">
+    <View style={[styles.wrapper, { paddingTop }]}>
       <LinearGradient
         colors={[
           CanvasFade.solid,
@@ -56,18 +60,17 @@ export function HomeHeader({
           CanvasFade.a0,
         ]}
         locations={[0, 0.35, 0.5, 0.65, 0.78, 0.9, 1]}
-        style={StyleSheet.absoluteFill}
+        style={styles.fade}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
-        pointerEvents="none"
       />
 
-      <View style={styles.content} pointerEvents="box-none">
+      <View style={styles.content}>
         <Pressable
           onPress={handleAvatarPress}
           style={({ pressed }) => [styles.left, { opacity: pressed && canSwitch ? 0.7 : 1 }]}
           accessibilityRole="button"
-          accessibilityLabel={`Switch child. Currently ${childName}.`}
+          accessibilityLabel={`Showing ${childName}. Switch child or open profile and settings`}
         >
           <ChildAvatar
             name={childName || avatarInitial}
@@ -76,9 +79,8 @@ export function HomeHeader({
             size={36}
           />
           <View style={styles.namePill}>
-            <Text style={styles.childNameLabel} numberOfLines={1}>
-              {childName}
-            </Text>
+            {/* Wraps at large text sizes instead of cutting the name off. */}
+            <Text style={styles.childNameLabel}>{childName}</Text>
             {canSwitch && children.length > 1 ? (
               <Ionicons name="chevron-down" size={14} color={AppColors.primary} />
             ) : null}
@@ -91,7 +93,13 @@ export function HomeHeader({
             style={({ pressed }) => [styles.bellButton, pressed && styles.bellButtonPressed]}
             hitSlop={4}
             accessibilityRole="button"
-            accessibilityLabel={hasUnread ? 'Notifications and profile, unread updates' : 'Notifications and profile'}
+            accessibilityLabel={
+              hasUnread
+                ? unreadCount > 0
+                  ? `Updates, ${unreadCount} new`
+                  : 'Updates, new items'
+                : 'Updates'
+            }
           >
             <Ionicons name="notifications-outline" size={22} color={AppColors.onSurface} />
           </Pressable>
@@ -113,12 +121,28 @@ export function HomeHeader({
             <Text style={styles.sheetEyebrow}>Your children</Text>
             {children.map((c) => {
               const isActive = c.id === activeChild?.id;
+              // Web: react-native-web only presses on Space for role=button,
+              // but a radio must select on Space too (as in ChipGroup).
+              const webKeys =
+                Platform.OS === 'web'
+                  ? {
+                      onKeyDown: (e: { key: string; preventDefault: () => void }) => {
+                        if (e.key === ' ' || e.key === 'Spacebar') {
+                          e.preventDefault();
+                          handleSelect(c.id);
+                        }
+                      },
+                    }
+                  : null;
               return (
                 <Pressable
                   key={c.id}
                   onPress={() => handleSelect(c.id)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: isActive }}
+                  {...webKeys}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: isActive }}
+                  aria-checked={isActive}
+                  accessibilityLabel={`${c.name}, ${formatAge(c.dob)}`}
                   style={({ pressed }) => [
                     styles.sheetItem,
                     isActive && styles.sheetItemActive,
@@ -126,20 +150,32 @@ export function HomeHeader({
                   ]}
                 >
                   <ChildAvatar name={c.name} id={c.id} colorIndex={childColorIndex(children, c.id)} size={36} />
-                  <Text style={[styles.sheetItemName, isActive && styles.sheetItemNameActive]}>
-                    {c.name}
-                  </Text>
+                  <View style={styles.sheetItemText}>
+                    <Text style={[styles.sheetItemName, isActive && styles.sheetItemNameActive]}>
+                      {c.name}
+                    </Text>
+                    <Text style={styles.sheetItemAge}>{formatAge(c.dob)}</Text>
+                  </View>
                   {isActive ? <Ionicons name="checkmark-circle" size={20} color={AppColors.secondary} /> : null}
                 </Pressable>
               );
             })}
             <Pressable
-              onPress={handleAddChild}
+              onPress={() => go('/(onboarding)/add-child')}
               accessibilityRole="button"
               style={({ pressed }) => [styles.addButton, pressed && styles.addButtonPressed]}
             >
               <Ionicons name="add" size={18} color={AppColors.primary} />
               <Text style={styles.addButtonLabel}>Add another child</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => go('/profile')}
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.profileLink, pressed && styles.profileLinkPressed]}
+            >
+              <Ionicons name="person-circle-outline" size={18} color={AppColors.secondary} />
+              <Text style={styles.profileLinkLabel}>Profile and settings</Text>
+              <Ionicons name="chevron-forward" size={Size.iconMeta} color={AppColors.secondary} />
             </Pressable>
           </Pressable>
         </Pressable>
@@ -149,7 +185,10 @@ export function HomeHeader({
 }
 
 const styles = StyleSheet.create({
+  // pointerEvents in styles (the prop is deprecated on web).
+  fade: { ...StyleSheet.absoluteFill, pointerEvents: 'none' },
   wrapper: {
+    pointerEvents: 'box-none',
     position: 'absolute',
     top: 0,
     left: 0,
@@ -157,6 +196,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   content: {
+    pointerEvents: 'box-none',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -168,10 +208,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flexShrink: 1,
+    minWidth: 0,
+    marginRight: 12,
   },
   namePill: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexShrink: 1,
+    minWidth: 0,
     gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -183,7 +228,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: AppColors.onSurface,
     letterSpacing: -0.2,
-    maxWidth: 140,
+    flexShrink: 1,
   },
   bellWrapper: {
     position: 'relative',
@@ -247,14 +292,23 @@ const styles = StyleSheet.create({
   addButtonPressed: {
     backgroundColor: AppColors.mintSurface,
   },
+  sheetItemText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
   sheetItemName: {
-    fontFamily: 'Inter_600SemiBold',
+    fontFamily: FontFamily.semibold,
     fontSize: 15,
     color: AppColors.onSurface,
-    flex: 1,
+  },
+  sheetItemAge: {
+    fontFamily: FontFamily.regular,
+    fontSize: 13,
+    color: AppColors.muted,
   },
   sheetItemNameActive: {
-    fontFamily: 'Inter_700Bold',
+    fontFamily: FontFamily.bold,
     color: AppColors.primary,
   },
   addButton: {
@@ -266,6 +320,23 @@ const styles = StyleSheet.create({
     marginTop: 4,
     borderRadius: 16,
     backgroundColor: AppColors.greenWash,
+  },
+  profileLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+  },
+  profileLinkPressed: {
+    backgroundColor: AppColors.surfaceContainerLow,
+  },
+  profileLinkLabel: {
+    flex: 1,
+    fontFamily: FontFamily.semibold,
+    fontSize: 15,
+    color: AppColors.secondary,
   },
   addButtonLabel: {
     fontFamily: FontFamily.semibold,

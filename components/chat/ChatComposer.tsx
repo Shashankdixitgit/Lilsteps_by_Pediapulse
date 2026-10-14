@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Ref } from 'react';
+import { Ref, useState } from 'react';
 import { Platform, Pressable, StyleProp, StyleSheet, TextInput, View, ViewStyle } from 'react-native';
 
 import { AppColors, FontFamily } from '@/constants/theme';
@@ -37,11 +37,15 @@ export function ChatComposer({
   inputRef,
   style,
 }: ChatComposerProps) {
+  // Web: a textarea doesn't grow by itself, so track its content height
+  // (36–120, then it scrolls). Native multiline inputs already grow.
+  const [webHeight, setWebHeight] = useState(INPUT_MIN);
+  const height = value ? Math.min(INPUT_MAX, Math.max(INPUT_MIN, webHeight)) : INPUT_MIN;
   return (
     <View style={[styles.field, style]}>
       <TextInput
         ref={inputRef}
-        style={styles.input}
+        style={[styles.input, Platform.OS === 'web' ? { height } : null]}
         placeholder={placeholder}
         placeholderTextColor={AppColors.placeholder}
         value={value}
@@ -49,10 +53,27 @@ export function ChatComposer({
         editable={editable}
         maxLength={maxLength}
         multiline
-        // Web renders a 2-row textarea by default; keep it one 44-high line.
-        {...(Platform.OS === 'web' ? { numberOfLines: 1 } : null)}
+        {...(Platform.OS === 'web'
+          ? { onContentSizeChange: (e: { nativeEvent: { contentSize: { height: number } } }) => setWebHeight(e.nativeEvent.contentSize.height) }
+          : null)}
         {...(submitOnEnter
-          ? { onSubmitEditing: onSend, returnKeyType: 'send' as const, blurOnSubmit: false }
+          ? Platform.OS === 'web'
+            ? {
+                // A web textarea never fires onSubmitEditing: send on Enter,
+                // keep Shift+Enter for a new line.
+                onKeyPress: (e: { nativeEvent: { key: string; shiftKey?: boolean }; preventDefault?: () => void }) => {
+                  if (e.nativeEvent.key !== 'Enter' || e.nativeEvent.shiftKey) return;
+                  e.preventDefault?.();
+                  if (!sendDisabled) onSend();
+                },
+              }
+            : {
+                onSubmitEditing: () => {
+                  if (!sendDisabled) onSend();
+                },
+                returnKeyType: 'send' as const,
+                submitBehavior: 'submit' as const,
+              }
           : null)}
       />
       <Pressable
@@ -78,6 +99,9 @@ export function ChatComposer({
   );
 }
 
+const INPUT_MIN = 36;
+const INPUT_MAX = 120;
+
 const styles = StyleSheet.create({
   field: {
     flexDirection: 'row',
@@ -92,8 +116,8 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    minHeight: 36,
-    maxHeight: 120,
+    minHeight: INPUT_MIN,
+    maxHeight: INPUT_MAX,
     paddingTop: Platform.OS === 'ios' ? 9 : 7,
     paddingBottom: 7,
     fontFamily: FontFamily.regular,

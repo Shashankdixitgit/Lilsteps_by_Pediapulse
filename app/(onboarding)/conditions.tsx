@@ -1,5 +1,4 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { ChipGroup } from '@/components/chip-group';
@@ -7,7 +6,8 @@ import { TextButton } from '@/components/gradient-button';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors, Radius } from '@/constants/theme';
-import { useOnboarding } from '@/context/onboarding';
+import { EMPTY_MEDICATION, medicationsMissingName, useOnboarding, type MedicationEntry } from '@/context/onboarding';
+import { typography } from '@/styles/global';
 
 const CONDITIONS = [
   'Asthma', 'Type 1 Diabetes', 'Epilepsy',
@@ -16,59 +16,68 @@ const CONDITIONS = [
 const MED_OPTIONS = ['Yes', 'No'];
 const FREQUENCY_OPTIONS = ['Once daily', 'Twice daily', '3× daily', '4× daily', 'As needed'];
 
-interface MedEntry {
-  name: string;
-  dose: string;
-  frequency: string;
-}
-
 export default function ConditionsScreen() {
-  const { bracket, setConditions: saveConditions } = useOnboarding();
-  const [conditions, setConditions] = useState<string[]>([]);
-  const [conditionOther, setConditionOther] = useState('');
-  const [takingMeds, setTakingMeds] = useState<string[]>([]);
-  const [meds, setMeds] = useState<MedEntry[]>([{ name: '', dose: '', frequency: '' }]);
+  // Answers live in the onboarding context, so Back and forward keep them.
+  const { bracket, conditionsAnswers, updateSection } = useOnboarding();
+  const { selected, other, takingMeds, medications } = conditionsAnswers;
 
-  const updateMed = (index: number, field: keyof MedEntry, value: string) => {
-    setMeds((prev) => prev.map((m, i) => (i === index ? { ...m, [field]: value } : m)));
+  const setMeds = (next: MedicationEntry[]) => updateSection('conditionsAnswers', { medications: next });
+
+  const updateMed = (index: number, field: keyof MedicationEntry, value: string) => {
+    setMeds(medications.map((m, i) => (i === index ? { ...m, [field]: value } : m)));
   };
 
-  const addMed = () => setMeds((prev) => [...prev, { name: '', dose: '', frequency: '' }]);
+  const addMed = () => setMeds([...medications, { ...EMPTY_MEDICATION }]);
 
-  const removeMed = (index: number) => setMeds((prev) => prev.filter((_, i) => i !== index));
+  const removeMed = (index: number) => setMeds(medications.filter((_, i) => i !== index));
+
+  // A card with a dose or frequency but no name would be dropped on save (O3):
+  // ask for the name (or Remove) before moving on.
+  const missingName = new Set(medicationsMissingName(conditionsAnswers));
 
   const handleContinue = () => {
-    saveConditions(conditions.filter((c) => c !== 'None' && c !== 'Other').concat(
-      conditions.includes('Other') && conditionOther ? [conditionOther] : []
-    ));
+    if (missingName.size > 0) return;
+    // The path comes from the date of birth. Without it (e.g. a reload part-way
+    // through), go back to "Your child" instead of guessing a path.
     if (bracket === 'A') router.push('/(onboarding)/a-birth-history');
     else if (bracket === 'B') router.push('/(onboarding)/b-development');
-    else router.push('/(onboarding)/c-academic');
+    else if (bracket === 'C') router.push('/(onboarding)/c-academic');
+    else router.dismissTo('/(onboarding)/child-basics');
   };
 
   return (
     <OnboardingShell
-      progress={0.48}
+      screen="conditions"
       title="Conditions and medicines"
       subtitle="Helps doctors prepare before a consultation"
       ctaLabel="Continue"
       onCta={handleContinue}
+      ctaDisabled={missingName.size > 0}
+      footerExtra={
+        missingName.size > 0 ? (
+          <Text style={[typography.caption, styles.missingHint]}>
+            Add the medicine name, or clear its dose and frequency, to continue
+          </Text>
+        ) : null
+      }
     >
       <View>
         <Text style={styles.fieldLabel}>Any diagnosed chronic conditions?</Text>
         <ChipGroup
+          label="Any diagnosed chronic conditions?"
           options={CONDITIONS}
-          selected={conditions}
-          onChange={setConditions}
+          selected={selected}
+          onChange={(next) => updateSection('conditionsAnswers', { selected: next })}
           multiSelect
           noneValue="None"
         />
-        {conditions.includes('Other') && (
+        {selected.includes('Other') && (
           <View style={styles.otherField}>
             <TextInputField
               placeholder="Specify condition"
-              value={conditionOther}
-              onChangeText={setConditionOther}
+              accessibilityLabel="Specify condition"
+              value={other}
+              onChangeText={(v) => updateSection('conditionsAnswers', { other: v })}
             />
           </View>
         )}
@@ -76,17 +85,27 @@ export default function ConditionsScreen() {
 
       <View>
         <Text style={styles.fieldLabel}>Currently taking any regular medications?</Text>
-        <ChipGroup options={MED_OPTIONS} selected={takingMeds} onChange={setTakingMeds} />
+        <ChipGroup
+          label="Currently taking any regular medications?"
+          options={MED_OPTIONS}
+          selected={takingMeds ? [takingMeds] : []}
+          onChange={(vals) => updateSection('conditionsAnswers', { takingMeds: vals[0] ?? '' })}
+        />
       </View>
 
-      {takingMeds.includes('Yes') && (
+      {takingMeds === 'Yes' && (
         <View style={styles.medsSection}>
-          {meds.map((med, index) => (
+          {medications.map((med, index) => (
             <View key={index} style={styles.medCard}>
               <View style={styles.medCardHeader}>
                 <Text style={styles.medCardTitle}>Medicine {index + 1}</Text>
-                {meds.length > 1 && (
-                  <Pressable onPress={() => removeMed(index)}>
+                {medications.length > 1 && (
+                  <Pressable
+                    onPress={() => removeMed(index)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove medicine ${index + 1}`}
+                    style={styles.removeButton}
+                  >
                     <Text style={styles.removeText}>Remove</Text>
                   </Pressable>
                 )}
@@ -98,6 +117,7 @@ export default function ConditionsScreen() {
                 value={med.name}
                 onChangeText={(v) => updateMed(index, 'name', v)}
                 autoCapitalize="words"
+                error={missingName.has(index) ? 'Add the medicine name so the doctor can see it' : undefined}
               />
 
               <TextInputField
@@ -111,13 +131,15 @@ export default function ConditionsScreen() {
               <View>
                 <Text style={styles.freqLabel}>How often?</Text>
                 <ChipGroup
+                  label="How often?"
                   options={FREQUENCY_OPTIONS}
                   selected={med.frequency ? [med.frequency] : []}
                   onChange={(val) => updateMed(index, 'frequency', val[0] ?? '')}
                 />
               </View>
 
-              {med.name && med.dose && med.frequency && (
+              {/* Boolean guard: a bare '' here would be a text node outside <Text>. */}
+              {!!(med.name && med.dose && med.frequency) && (
                 <Text style={styles.previewText}>
                   {med.name} {med.dose} · {med.frequency}
                 </Text>
@@ -166,6 +188,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: AppColors.onSurface,
   },
+  removeButton: {
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    marginVertical: -12,
+  },
   removeText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 13,
@@ -184,5 +212,8 @@ const styles = StyleSheet.create({
   },
   addButton: {
     alignSelf: 'center',
+  },
+  missingHint: {
+    textAlign: 'center',
   },
 });

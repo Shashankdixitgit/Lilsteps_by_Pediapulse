@@ -1,9 +1,12 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { AiCheckinHeroCard } from '@/components/consult/AiCheckinHeroCard';
 import { AppointmentCard } from '@/components/consult/AppointmentCard';
 import { ConsultHistoryItem } from '@/components/consult/ConsultHistoryItem';
+import { ConversationListItem } from '@/components/consult/ConversationListItem';
+import { CancelNotice, cancelLabel, useCancelAppointment } from '@/components/consult/useCancelAppointment';
 import { DoctorCardCompact } from '@/components/consult/DoctorCardCompact';
 import { EmptyStateCard } from '@/components/consult/EmptyStateCard';
 import { HeaderChildAvatar } from '@/components/HeaderChildAvatar';
@@ -11,31 +14,55 @@ import { HeaderIconButton } from '@/components/ScreenHeader';
 import { TabScreenLayout } from '@/components/TabScreenLayout';
 import { AppColors, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
-import { useAppointments } from '@/hooks/useAppointments';
-import { useConsultations } from '@/hooks/useConsultations';
+import { appointmentHasVideoLink, isUrgentAppointment, useAppointments } from '@/hooks/useAppointments';
+import { parentConsultTitle, useConsultations } from '@/hooks/useConsultations';
+import { useConversations } from '@/hooks/useConversations';
 import { useDoctors } from '@/hooks/useDoctors';
 import { typography } from '@/styles/global';
 
 export default function ConsultScreen() {
   const { child } = useChild();
   const { doctors, loading: loadingDocs } = useDoctors();
-  const { upcoming, cancelAppointment, loading: loadingAppts } = useAppointments(child?.id ?? null);
-  const { consultations, loading: loadingConsult } = useConsultations(child?.id ?? null);
+  const {
+    upcoming,
+    cancelAppointment,
+    loading: loadingAppts,
+    refetch: refetchAppts,
+  } = useAppointments(child?.id ?? null);
+  const { consultations, loading: loadingConsult, refetch: refetchConsults } = useConsultations(child?.id ?? null);
+  const {
+    conversations,
+    loading: loadingConvos,
+    refetch: refetchConvos,
+    startConversation,
+  } = useConversations(child?.id ?? null);
+  const { requestCancel, notice: cancelNotice, cancellingId } = useCancelAppointment(cancelAppointment);
 
-  const nextAppointment = upcoming[0] ?? null;
-
-  async function handleCancel(id: string) {
+  // "Message doctor" on an appointment opens the chat directly, as on Home.
+  async function messageDoctor(doctorId: string) {
+    if (!child) return;
     try {
-      await cancelAppointment(id);
+      const convo = await startConversation({ child_id: child.id, doctor_id: doctorId });
+      router.push(`/chat/${convo.id}`);
     } catch {
-      // error handled
+      // Ignore: tapping again retries.
     }
   }
+
+  // Tabs stay mounted: refresh when the tab comes back into view (after a
+  // booking, a chat, or a consult the doctor just completed).
+  useFocusEffect(
+    useCallback(() => {
+      refetchAppts();
+      refetchConvos();
+      refetchConsults();
+    }, [refetchAppts, refetchConvos, refetchConsults]),
+  );
 
   const headerContent = (
     <>
       <Text style={typography.heading} accessibilityRole="header">
-        LilSteps AI
+        Consult
       </Text>
       <View style={styles.headerRight}>
         <HeaderIconButton
@@ -55,24 +82,66 @@ export default function ConsultScreen() {
 
       <View style={styles.section}>
         <Text style={typography.headingSM}>Upcoming</Text>
-        {loadingAppts ? (
+        <CancelNotice notice={cancelNotice} />
+        {loadingAppts && upcoming.length === 0 ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={AppColors.primary} />
           </View>
-        ) : nextAppointment ? (
-          <AppointmentCard
-            doctorName={nextAppointment.doctors?.name ?? 'Doctor'}
-            doctorSpecialisation={nextAppointment.doctors?.specialisation ?? ''}
-            hospital={nextAppointment.doctors?.hospital ?? ''}
-            date={nextAppointment.date}
-            time={nextAppointment.time.slice(0, 5)}
-            onJoinVideo={() =>
-              router.push({ pathname: '/consult/video/[id]', params: { id: nextAppointment.id } })
-            }
-            onCancel={() => handleCancel(nextAppointment.id)}
-          />
+        ) : upcoming.length > 0 ? (
+          upcoming.map((a) => {
+            const item = { id: a.id, date: a.date, time: a.time, doctorName: a.doctors?.name ?? 'Doctor' };
+            const summaryId = a.ai_summary_id;
+            return (
+              <AppointmentCard
+                key={a.id}
+                doctorName={item.doctorName}
+                doctorSpecialisation={a.doctors?.specialisation ?? ''}
+                date={a.date}
+                time={a.time}
+                onJoinVideo={() => router.push({ pathname: '/consult/video/[id]', params: { id: a.id } })}
+                videoLinkReady={appointmentHasVideoLink(a)}
+                onMessageDoctor={() => messageDoctor(a.doctor_id)}
+                onCancel={() => requestCancel(item)}
+                cancelAccessibilityLabel={cancelLabel(item)}
+                cancelling={cancellingId === a.id}
+                urgent={isUrgentAppointment(a)}
+                onViewSummary={
+                  summaryId
+                    ? () => router.push({ pathname: '/consult/summary/[id]', params: { id: summaryId } })
+                    : undefined
+                }
+              />
+            );
+          })
         ) : (
           <EmptyStateCard icon="calendar-outline" title="No upcoming appointments" />
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <Text style={typography.headingSM}>Messages</Text>
+        {loadingConvos && conversations.length === 0 ? (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator size="small" color={AppColors.primary} />
+          </View>
+        ) : conversations.length === 0 ? (
+          <EmptyStateCard icon="chatbubbles-outline" title="No messages yet" />
+        ) : (
+          <View style={styles.listCard}>
+            {conversations.map((c, i) => (
+              <ConversationListItem
+                key={c.id}
+                id={c.id}
+                doctorName={c.doctors?.name ?? 'Doctor'}
+                preview={c.last_message?.content ?? null}
+                previewFromParent={c.last_message?.sender === 'parent'}
+                lastAt={c.last_message?.created_at ?? c.last_message_at ?? c.created_at}
+                unread={c.unread_count ?? 0}
+                divider={i > 0}
+                onPress={(id) => router.push(`/chat/${id}`)}
+              />
+            ))}
+          </View>
         )}
       </View>
 
@@ -92,7 +161,7 @@ export default function ConsultScreen() {
                 doctor={doc}
                 inList
                 divider={i > 0}
-                onBook={() => router.push('/consult/booking')}
+                onBook={(id) => router.push({ pathname: '/consult/describe', params: { doctorId: id } })}
               />
             ))}
           </View>
@@ -115,7 +184,7 @@ export default function ConsultScreen() {
                 id={c.id}
                 createdAt={c.created_at}
                 doctorName={c.doctor_name}
-                chiefComplaint={c.chief_complaint}
+                chiefComplaint={parentConsultTitle(c)}
                 outcome={c.outcome}
                 divider={i > 0}
                 onPress={(id) => router.push(`/consult/${id}`)}

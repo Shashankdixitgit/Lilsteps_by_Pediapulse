@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { signInAsDoctor } from './_helpers';
 import {
+  ADMIN_SKIP_REASON,
   admin,
   bookTestAppointment,
   cleanupTestData,
@@ -11,6 +12,8 @@ import {
 } from './setup';
 
 test.describe('Issue prescription', () => {
+  test.skip(!!ADMIN_SKIP_REASON, ADMIN_SKIP_REASON ?? '');
+
   test.beforeEach(async () => {
     await cleanupTestData();
   });

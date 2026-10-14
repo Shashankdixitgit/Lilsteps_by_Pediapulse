@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -9,33 +9,50 @@ import { HeaderIconButton } from '@/components/ScreenHeader';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
-import { DEMO_LOGIN, useAuth } from '@/context/auth';
+import { DEMO_LOGIN, toMobileDigits, useAuth } from '@/context/auth';
 import { supabase } from '@/lib/supabase';
 import { dbg } from '@/lib/debug';
+import { formatPhone, isValidPhone, normalisePhone } from '@/lib/phone';
 
 export default function SignupScreen() {
   const insets = useSafeAreaInsets();
   const { signInWithOtp, verifyOtp } = useAuth();
 
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('+91');
+  // The 10-digit mobile number; the field shows a fixed +91 in front.
+  const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [step, setStep] = useState<'details' | 'otp'>('details');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The code box takes focus as soon as the code is sent (R2-17). Native
+  // uses autoFocus; on web it was lost while the step changed, so the field
+  // (the only one-time-code input) is focused once it is on the page.
+  useEffect(() => {
+    if (step !== 'otp' || Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const t = setTimeout(() => {
+      document.querySelector<HTMLInputElement>('input[autocomplete="one-time-code"], input[autocomplete="sms-otp"]')?.focus();
+    }, 50);
+    return () => clearTimeout(t);
+  }, [step]);
 
+  // One canonical number per parent: "98765 43210" and "+91 98765 43210"
+  // must reach the same account (R2-04).
   function normalisedPhone() {
-    return phone.replace(/[\s-]/g, '');
+    return normalisePhone(phone);
   }
 
   async function handleSendOtp() {
+    if (loading) return; // Enter and the button can both fire
     const p = normalisedPhone();
     if (!name.trim()) {
       setError('Please enter your name');
       return;
     }
-    if (!DEMO_LOGIN && !/^\+\d{10,15}$/.test(p)) {
-      setError('Enter your phone number in international format (e.g. +919876543210)');
+    // The format check runs in demo mode too (R3-10): only the SMS code is
+    // bypassed there, so a mistyped number cannot make a second account.
+    if (!isValidPhone(p)) {
+      setError('Enter your 10-digit mobile number (e.g. 98765 43210)');
       return;
     }
     setLoading(true);
@@ -55,6 +72,7 @@ export default function SignupScreen() {
   }
 
   async function handleVerifyOtp() {
+    if (loading) return;
     if (!DEMO_LOGIN && otp.length !== 6) {
       setError('Please enter the 6-digit code');
       return;
@@ -140,7 +158,7 @@ export default function SignupScreen() {
             <Text style={[typography.body, styles.subtitle]}>
               {step === 'details'
                 ? "A calm home for your child's health."
-                : `We sent a 6-digit code to ${phone}`}
+                : `We sent a 6-digit code to ${formatPhone(phone)}`}
             </Text>
           </View>
 
@@ -152,41 +170,54 @@ export default function SignupScreen() {
                   label="Your name"
                   hint="(Parent or Guardian)"
                   hintInline
-                  placeholder="e.g. Sarah Johnson"
+                  placeholder="e.g. Priya Sharma"
                   autoCapitalize="words"
                   autoComplete="name"
                   value={name}
                   onChangeText={setName}
+                  returnKeyType="go"
+                  onSubmitEditing={handleSendOtp}
                 />
                 <TextInputField
                   label="Phone"
-                  hint="Include the country code"
-                  placeholder="+919876543210"
+                  hint="10-digit mobile number"
+                  placeholder="98765 43210"
                   keyboardType="phone-pad"
                   autoCapitalize="none"
                   autoComplete="tel"
+                  leading={<Text style={styles.countryCode}>+91</Text>}
                   value={phone}
-                  onChangeText={setPhone}
+                  onChangeText={(text) => setPhone(toMobileDigits(text))}
+                  returnKeyType="go"
+                  onSubmitEditing={handleSendOtp}
                 />
               </View>
             ) : (
               <View style={styles.fields}>
                 <TextInputField
                   label="Verification code"
-                  placeholder="000000"
+                  placeholder="6-digit code"
                   keyboardType="number-pad"
                   textContentType="oneTimeCode"
-                  autoComplete="sms-otp"
+                  // Web: the HTML value, so browsers offer the SMS code too.
+                  autoComplete={Platform.OS === 'web' ? 'one-time-code' : 'sms-otp'}
                   maxLength={6}
                   style={styles.otpInput}
                   value={otp}
                   onChangeText={(text) => setOtp(text.replace(/[^0-9]/g, ''))}
+                  returnKeyType="go"
+                  onSubmitEditing={handleVerifyOtp}
                   autoFocus
                 />
               </View>
             )}
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {/* Announced by screen readers as soon as it appears (R2-17). */}
+            {error ? (
+              <Text style={styles.errorText} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+                {error}
+              </Text>
+            ) : null}
 
             <GradientButton
               label={step === 'details' ? 'Create account' : 'Verify'}
@@ -198,9 +229,13 @@ export default function SignupScreen() {
             {step === 'details' ? (
               <Text style={styles.termsText}>
                 By signing up, you agree to our{' '}
-                <Text style={styles.termsLink}>Terms of Service</Text>
+                <Text style={styles.termsLink} accessibilityRole="link" onPress={() => router.push('/profile/terms')}>
+                  Terms of Service
+                </Text>
                 {' '}and{' '}
-                <Text style={styles.termsLink}>Privacy Policy</Text>
+                <Text style={styles.termsLink} accessibilityRole="link" onPress={() => router.push('/profile/privacy')}>
+                  Privacy Policy
+                </Text>
               </Text>
             ) : null}
 
@@ -227,6 +262,11 @@ export default function SignupScreen() {
 const styles = StyleSheet.create({
   sprout: {
     marginBottom: 12,
+  },
+  countryCode: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    color: AppColors.onSurface,
   },
   otpInput: {
     fontFamily: 'Inter_600SemiBold',
@@ -261,7 +301,8 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: 'Inter_500Medium',
     fontSize: 13,
-    color: AppColors.tertiary,
+    lineHeight: 18,
+    color: AppColors.danger,
     marginTop: 10,
     textAlign: 'center',
   },

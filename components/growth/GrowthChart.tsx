@@ -3,16 +3,19 @@ import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from 'react-native-
 
 import { AppColors } from '@/constants/theme';
 import type { GrowthRow } from '@/hooks/useGrowth';
+import { parseDateOnly } from '@/lib/date';
 
 import {
   ChartTab,
+  GrowthSex,
   REFERENCE_AGES,
   TimeFilter,
-  WHO_BANDS,
+  bandsFor,
   getXAxisRange,
   interpolate,
   monthsBetween,
 } from './whoData';
+import { formatWeightValue } from './format';
 
 // Two colours only: the child's line is forest green, everything WHO is blue.
 const CHILD = AppColors.primary;
@@ -23,6 +26,45 @@ const CHART_H = 252;
 const PAD = { top: 30, right: 40, bottom: 30, left: 36 };
 const SAMPLE_COUNT = 40;
 const FONT = 'Inter_500Medium';
+const LABEL_GAP = 13;
+const CALLOUT_H = 22;
+
+/**
+ * Places the latest-value pill near its dot without covering the WHO 3rd /
+ * 50th / 97th lines. Tries positions above and below the dot, nearest first
+ * (above wins a tie), and takes the first that clears every line by 3px. If
+ * none does, it takes the one that crosses the fewest line samples.
+ * `curvesAt(px)` returns the y of each WHO line at that x.
+ */
+function placeCallout(
+  px: number,
+  py: number,
+  w: number,
+  curvesAt: (px: number) => number[],
+  plotW: number,
+): { x: number; y: number } {
+  const left = Math.min(Math.max(px - w / 2, PAD.left), PAD.left + plotW - w);
+  const plotBottom = CHART_H - PAD.bottom;
+  const samples: number[][] = [];
+  for (let sx = left; sx <= left + w; sx += 4) samples.push(curvesAt(sx));
+
+  const crossings = (top: number) => {
+    let n = 0;
+    for (const ys of samples) for (const cy of ys) if (cy >= top - 3 && cy <= top + CALLOUT_H + 3) n++;
+    return n;
+  };
+
+  let best: { y: number; n: number } | null = null;
+  for (let d = 12; d <= 120; d += 4) {
+    for (const top of [py - d - CALLOUT_H, py + d]) {
+      if (top < 2 || top + CALLOUT_H > plotBottom) continue;
+      const n = crossings(top);
+      if (n === 0) return { x: left, y: top };
+      if (!best || n < best.n) best = { y: top, n };
+    }
+  }
+  return { x: left, y: best?.y ?? Math.max(2, py - 12 - CALLOUT_H) };
+}
 
 export const UNIT: Record<ChartTab, string> = { weight: 'kg', height: 'cm', bmi: '' };
 
@@ -48,10 +90,13 @@ function niceStep(range: number, count: number): number {
   return nice * mag;
 }
 
+/** Tick spacing in months for an age span: at most ~5 intervals. */
+function ageTickStep(span: number): number {
+  return [1, 2, 3, 6, 12, 24, 36].find((s) => span / s <= 5) ?? 48;
+}
+
 /** Age ticks on whole months/years so labels read "6 mo", "1 yr", "2½ yr". */
-function ageTicks(xMin: number, xMax: number): number[] {
-  const span = xMax - xMin;
-  const step = [1, 2, 3, 6, 12, 24, 36].find((s) => span / s <= 5) ?? 48;
+function ageTicks(xMin: number, xMax: number, step: number): number[] {
   const ticks: number[] = [];
   for (let m = Math.ceil(xMin / step) * step; m <= xMax + 0.01; m += step) ticks.push(m);
   return ticks;
@@ -75,14 +120,24 @@ export interface GrowthChartProps {
   timeFilter: TimeFilter;
   width: number;
   childName: string;
+  /** What the tab is called for this child ("length" under 2, "height" after). */
+  label?: string;
+  /** Picks the boys or girls table; unknown sex uses the averaged one (G1). */
+  sex?: GrowthSex;
 }
 
-export function GrowthChart({ tab, measurements, dob, timeFilter, width, childName }: GrowthChartProps) {
+export function GrowthChart({ tab, measurements, dob, timeFilter, width, childName, label, sex }: GrowthChartProps) {
   const plotW = width - PAD.left - PAD.right;
   const plotH = CHART_H - PAD.top - PAD.bottom;
   const currentAgeMonths = monthsBetween(dob, new Date());
-  const [xMin, xMax] = getXAxisRange(timeFilter, currentAgeMonths);
-  const bands = WHO_BANDS[tab];
+  const [xMin, rawXMax] = getXAxisRange(timeFilter, currentAgeMonths);
+  // Extend the axis to the next whole tick so the last label always sits at
+  // (or past) the child's current age: a 14-year-old's chart ends at "15 yr",
+  // not at an unlabelled edge after "12 yr".
+  const tickStep = ageTickStep(rawXMax - xMin);
+  // A few days past a tick (e.g. on the 12th birthday) stays on that tick.
+  const xMax = Math.max(tickStep, Math.ceil((rawXMax - 0.25) / tickStep) * tickStep);
+  const bands = bandsFor(tab, sex);
   const unit = UNIT[tab];
 
   const ages = useMemo(
@@ -95,9 +150,13 @@ export function GrowthChart({ tab, measurements, dob, timeFilter, width, childNa
     p97: ages.map((a) => interpolate(REFERENCE_AGES, bands.p97, a)),
   }), [ages, bands]);
 
-  const points: [number, number][] = useMemo(() => measurements
+  // `measurements` is newest first; walk it oldest first so that, after the
+  // stable sort by age, the newest of several same-day entries is the last
+  // point (the one the "latest" pill labels).
+  const points: [number, number][] = useMemo(() => [...measurements]
+    .reverse()
     .map((m) => {
-      const age = monthsBetween(dob, new Date(m.measured_at));
+      const age = monthsBetween(dob, parseDateOnly(m.measured_at));
       const val = valueForTab(m, tab);
       if (val == null || age < xMin - 0.5 || age > xMax + 0.5) return null;
       return [age, val] as [number, number];
@@ -128,27 +187,42 @@ export function GrowthChart({ tab, measurements, dob, timeFilter, width, childNa
     ' Z';
   const childPath = points.map(([a, v], i) => `${i ? 'L' : 'M'}${x(a).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
 
-  // Right-edge percentile labels, nudged apart so they never overlap.
+  // Right-edge percentile labels, nudged apart so they never overlap, and kept
+  // inside the plot so they never run into the x-axis labels (a newborn chart
+  // with a far-off point squeezes all three lines onto the bottom gridline).
   const last = ages.length - 1;
+  const plotBottom = PAD.top + plotH;
   const labels = [
     { text: '97th', y: y(who.p97[last]) },
     { text: '50th', y: y(who.p50[last]) },
     { text: '3rd', y: y(who.p3[last]) },
   ];
   for (let i = 1; i < labels.length; i++) {
-    if (labels[i].y - labels[i - 1].y < 13) labels[i].y = labels[i - 1].y + 13;
+    if (labels[i].y - labels[i - 1].y < LABEL_GAP) labels[i].y = labels[i - 1].y + LABEL_GAP;
+  }
+  labels[labels.length - 1].y = Math.min(labels[labels.length - 1].y, plotBottom - 4);
+  for (let i = labels.length - 2; i >= 0; i--) {
+    labels[i].y = Math.min(labels[i].y, labels[i + 1].y - LABEL_GAP);
   }
 
   const latest = points[points.length - 1];
-  const callout = latest ? `${latest[1].toFixed(1)}${unit ? ` ${unit}` : ''}` : '';
+  const callout = latest
+    ? `${tab === 'weight' ? formatWeightValue(latest[1]) : latest[1].toFixed(1)}${unit ? ` ${unit}` : ''}`
+    : '';
   const calloutW = callout.length * 7 + 16;
-  const calloutX = latest ? Math.min(Math.max(x(latest[0]) - calloutW / 2, PAD.left), PAD.left + plotW - calloutW) : 0;
-  const calloutAbove = latest ? y(latest[1]) - 34 > PAD.top - 6 : true;
-  const calloutY = latest ? (calloutAbove ? y(latest[1]) - 34 : y(latest[1]) + 12) : 0;
+  const dotX = latest ? x(latest[0]) : 0;
+  const dotY = latest ? y(latest[1]) : 0;
+  const { x: calloutX, y: calloutY } = latest
+    ? placeCallout(dotX, dotY, calloutW, (px) => {
+        const age = xMin + ((px - PAD.left) / (plotW || 1)) * (xMax - xMin);
+        return [bands.p3, bands.p50, bands.p97].map((b) => y(interpolate(REFERENCE_AGES, b, age)));
+      }, plotW)
+    : { x: 0, y: 0 };
 
+  const name = label ?? (tab === 'bmi' ? 'BMI' : tab);
   const a11y = latest
-    ? `${tab} chart. ${childName}'s latest ${tab} is ${callout}. Blue shading shows the WHO range from the 3rd to the 97th percentile.`
-    : `${tab} chart showing the WHO range. No measurements logged yet.`;
+    ? `${name} chart. ${childName}'s latest ${name} is ${callout}. Blue shading shows the approximate typical range, 3rd to 97th percentile.`
+    : `${name} chart showing the approximate typical range. No measurements logged yet.`;
 
   return (
     <Svg width={width} height={CHART_H} accessible accessibilityLabel={a11y}>
@@ -168,7 +242,7 @@ export function GrowthChart({ tab, measurements, dob, timeFilter, width, childNa
       ) : null}
 
       {/* X axis */}
-      {ageTicks(xMin, xMax).map((m) => (
+      {ageTicks(xMin, xMax, tickStep).map((m) => (
         <SvgText key={m} x={x(m)} y={CHART_H - 8} fontSize={11} fontFamily={FONT} fill={AppColors.muted} textAnchor="middle">
           {formatAge(m)}
         </SvgText>
@@ -202,7 +276,18 @@ export function GrowthChart({ tab, measurements, dob, timeFilter, width, childNa
       ))}
       {latest ? (
         <G>
-          <Rect x={calloutX} y={calloutY} width={calloutW} height={22} rx={11} fill={CHILD} />
+          {/* Leader from the dot to the pill when the pill had to move clear of the WHO lines. */}
+          {Math.abs(calloutY + CALLOUT_H / 2 - dotY) > CALLOUT_H / 2 + 14 ? (
+            <Line
+              x1={dotX}
+              y1={calloutY > dotY ? dotY + 6 : dotY - 6}
+              x2={Math.min(Math.max(dotX, calloutX + CALLOUT_H / 2), calloutX + calloutW - CALLOUT_H / 2)}
+              y2={calloutY > dotY ? calloutY : calloutY + CALLOUT_H}
+              stroke={CHILD}
+              strokeWidth={1.5}
+            />
+          ) : null}
+          <Rect x={calloutX} y={calloutY} width={calloutW} height={CALLOUT_H} rx={CALLOUT_H / 2} fill={CHILD} />
           <SvgText
             x={calloutX + calloutW / 2}
             y={calloutY + 15}

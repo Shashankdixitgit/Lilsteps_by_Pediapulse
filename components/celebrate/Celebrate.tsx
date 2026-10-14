@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
-import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, FadeOutDown, SlideInDown, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -34,7 +34,11 @@ interface CelebrateProps {
  * One-shot celebration: confetti burst + a bottom card with Sprout.
  * - Confetti is skipped under reduced motion (the card still shows).
  * - Announces the title for screen readers (iOS announce + Android live region).
- * - Auto-dismisses after 4 s unless a screen reader is on.
+ * - Auto-dismisses after 4 s unless a native screen reader is on. On web it
+ *   always does: react-native-web reports a screen reader as always on, so the
+ *   card never closed there (R3-09). The close button works everywhere.
+ * - At narrow widths or large text (incl. 200% browser zoom) Sprout and the
+ *   sticker are hidden so the message keeps the room.
  * Mount it OUTSIDE any loading early-return so it survives refetches.
  */
 export function Celebrate({ ref, bottomOffset = 0 }: CelebrateProps) {
@@ -44,6 +48,8 @@ export function Celebrate({ ref, bottomOffset = 0 }: CelebrateProps) {
   const [burst, setBurst] = useState<{ seed: number; big: boolean } | null>(null);
   const [card, setCard] = useState<CelebrateOptions | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { width, fontScale } = useWindowDimensions();
+  const compact = width < 360 || fontScale > 1.3;
 
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
@@ -61,13 +67,13 @@ export function Celebrate({ ref, bottomOffset = 0 }: CelebrateProps) {
         setCard(opts);
         AccessibilityInfo.announceForAccessibility(opts.title);
         if (timer.current) clearTimeout(timer.current);
+        const autoClose = () => { timer.current = setTimeout(() => setCard(null), 4000); };
+        if (Platform.OS === 'web') { autoClose(); return; }
         AccessibilityInfo.isScreenReaderEnabled()
           .then((sr) => {
-            if (!sr) timer.current = setTimeout(() => setCard(null), 4000);
+            if (!sr) autoClose();
           })
-          .catch(() => {
-            timer.current = setTimeout(() => setCard(null), 4000);
-          });
+          .catch(autoClose);
       }
     },
   }));
@@ -80,18 +86,24 @@ export function Celebrate({ ref, bottomOffset = 0 }: CelebrateProps) {
           entering={reduceMotion ? undefined : SlideInDown.springify().damping(16)}
           exiting={reduceMotion ? undefined : FadeOutDown.duration(Motion.exit)}
           accessibilityLiveRegion={Platform.OS === 'android' ? 'polite' : undefined}
-          style={[styles.card, { bottom: insets.bottom + 16 + bottomOffset }]}
+          {...(Platform.OS === 'web' ? { role: 'status' as const, 'aria-live': 'polite' as const } : null)}
+          style={[styles.card, compact && styles.cardCompact, { bottom: insets.bottom + 16 + bottomOffset }]}
         >
-          <Sprout mood="cheer" size={64} />
+          {compact ? null : <Sprout mood="cheer" size={64} />}
           <View style={styles.textCol}>
             <Text style={styles.title}>{card.title}</Text>
             {card.body ? <Text style={styles.body}>{card.body}</Text> : null}
           </View>
-          <View style={styles.stickerWrap}>
-            <Sticker icon="star" size={30} />
-          </View>
+          {compact ? null : (
+            <View style={styles.stickerWrap}>
+              <Sticker icon="star" size={30} />
+            </View>
+          )}
           <Pressable
-            onPress={() => setCard(null)}
+            onPress={() => {
+              if (timer.current) clearTimeout(timer.current);
+              setCard(null);
+            }}
             accessibilityRole="button"
             accessibilityLabel="Close"
             hitSlop={10}
@@ -121,6 +133,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: AppColors.mintBorder,
     boxShadow: Shadow.raised,
+  },
+  cardCompact: {
+    padding: 12,
+    paddingRight: 40,
   },
   textCol: {
     flex: 1,

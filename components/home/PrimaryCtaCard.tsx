@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { TextButton } from '@/components/gradient-button';
+import { useCompactWidth } from '@/components/home/useCompactWidth';
 import { Sprout } from '@/components/mascot/Sprout';
 import { HeroBackdrop, HeroBadge, heroCardStyle } from '@/components/ui/HeroCard';
 import { PressableScale } from '@/components/ui/PressableScale';
@@ -22,7 +23,7 @@ interface PrimaryCtaCardProps {
 
 /**
  * Light-green glass hero card for the AI check-in: forestDeep title (17 Bold),
- * one-line subtitle, static Sprout (care, 56) and a deep-green pill CTA. The
+ * short subtitle, static Sprout (care, 56) and a deep-green pill CTA. The
  * pressable area is the card body (no nested buttons); the optional ghost
  * link sits beside it as its own button, inside the same hero.
  */
@@ -36,6 +37,8 @@ export function PrimaryCtaCard({
   onSecondary,
 }: PrimaryCtaCardProps) {
   const hasSecondary = !!secondaryLabel && !!onSecondary;
+  // Narrow window (200% zoom): drop the mascot so words don't break mid-word.
+  const compact = useCompactWidth();
   return (
     <View style={[heroCardStyle.card, heroCardStyle.elevated, styles.card]}>
       <HeroBackdrop />
@@ -50,11 +53,10 @@ export function PrimaryCtaCard({
         <View style={styles.inner}>
           <View style={styles.textBlock}>
             <Text style={styles.title}>{title}</Text>
-            <Text style={styles.subtitle} numberOfLines={2}>
-              {subtitle}
-            </Text>
+            {/* No line cap: at 200% text the subtitle wraps instead of "…". */}
+            <Text style={styles.subtitle}>{subtitle}</Text>
           </View>
-          <Sprout mood="care" size={56} />
+          {compact ? null : <Sprout mood="care" size={56} />}
         </View>
         <View style={styles.cta}>
           <Text style={styles.ctaLabel}>{ctaLabel}</Text>
@@ -102,16 +104,19 @@ const styles = StyleSheet.create({
   },
   cta: {
     alignSelf: 'flex-start',
+    maxWidth: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    height: 44,
+    minHeight: 44,
+    paddingVertical: 6,
     paddingLeft: 18,
     paddingRight: 6,
     borderRadius: Radius.full,
     backgroundColor: AppColors.primary,
   },
   ctaLabel: {
+    flexShrink: 1,
     fontFamily: FontFamily.semibold,
     fontSize: 15,
     color: AppColors.onPrimary,

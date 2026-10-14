@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { TextButton } from '@/components/gradient-button';
 import { PressableScale } from '@/components/ui/PressableScale';
@@ -25,6 +25,8 @@ interface CareTeamProps {
  * button under the list. Same handlers as before.
  */
 export function CareTeam({ providers, onAddProvider, onProviderPress }: CareTeamProps) {
+  const { width, fontScale } = useWindowDimensions();
+  const narrow = fontScale >= 1.3 || width / Math.max(fontScale, 1) < 340;
   return (
     <View style={styles.section}>
       <Text style={typography.headingSM}>Care team</Text>
@@ -40,14 +42,18 @@ export function CareTeam({ providers, onAddProvider, onProviderPress }: CareTeam
               accessibilityLabel={`${p.name}, ${p.role}`}
               style={[styles.row, i > 0 && styles.rowDivider]}
             >
-              <View style={styles.avatar}>
-                <Text style={styles.avatarText}>{p.initial}</Text>
-              </View>
+              {/* Decorative initial: dropped at 200% zoom / narrow widths so the
+                  name gets the room ("Dr. Madh av") (R3-05). */}
+              {narrow ? null : (
+                <View style={styles.avatar}>
+                  <Text style={styles.avatarText}>{p.initial}</Text>
+                </View>
+              )}
               <View style={styles.text}>
-                <Text style={styles.name} numberOfLines={1}>
+                <Text style={styles.name} numberOfLines={3}>
                   {p.name}
                 </Text>
-                <Text style={styles.role} numberOfLines={1}>
+                <Text style={styles.role} numberOfLines={3}>
                   {p.role}
                 </Text>
               </View>
@@ -102,6 +108,7 @@ const styles = StyleSheet.create({
   },
   text: {
     flex: 1,
+    minWidth: 0,
     gap: 2,
   },
   name: {

@@ -1,110 +1,110 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors, Radius } from '@/constants/theme';
-import { useOnboarding } from '@/context/onboarding';
+import {
+  ALLERGY_NONE,
+  ALLERGY_NOT_KNOWN,
+  ALLERGY_OTHER,
+  useOnboarding,
+  type AllergyGroup,
+} from '@/context/onboarding';
 
-const MED_ALLERGIES = ['Penicillin', 'Sulfa drugs', 'Aspirin', 'Ibuprofen', 'Codeine', 'Not known', 'Other'];
-const FOOD_ALLERGIES = ['Nuts', 'Dairy', 'Eggs', 'Shellfish', 'Gluten', 'Soy', 'Not known', 'Other'];
-const OTHER_ALLERGIES = ['Latex', 'Dust', 'Pollen', 'Animal dander', 'Insect stings', 'Not known', 'Other'];
+/** Answer chips at the end of every group: "None" and "Not known" are kept
+ *  apart, so "we don't know" is never saved as "no allergies". */
+const ANSWER_CHIPS = [ALLERGY_NONE, ALLERGY_NOT_KNOWN, ALLERGY_OTHER];
+
+const GROUPS: { key: AllergyGroup; title: string; options: string[]; otherPlaceholder: string }[] = [
+  {
+    key: 'medication',
+    title: 'Medication allergies',
+    options: ['Penicillin', 'Sulfa drugs', 'Aspirin', 'Ibuprofen', 'Codeine', ...ANSWER_CHIPS],
+    otherPlaceholder: 'Specify medication allergy',
+  },
+  {
+    key: 'food',
+    title: 'Food allergies',
+    options: ['Nuts', 'Dairy', 'Eggs', 'Shellfish', 'Gluten', 'Soy', ...ANSWER_CHIPS],
+    otherPlaceholder: 'Specify food allergy',
+  },
+  {
+    key: 'environmental',
+    title: 'Other allergies',
+    options: ['Latex', 'Dust', 'Pollen', 'Animal dander', 'Insect stings', ...ANSWER_CHIPS],
+    otherPlaceholder: 'Specify other allergy',
+  },
+];
+
+/**
+ * ChipGroup makes "None" exclusive (noneValue). "Not known" must be exclusive
+ * too: picking it clears the rest, and picking anything else clears it.
+ */
+function withExclusiveNotKnown(prev: string[], next: string[]): string[] {
+  const added = !prev.includes(ALLERGY_NOT_KNOWN) && next.includes(ALLERGY_NOT_KNOWN);
+  if (added) return [ALLERGY_NOT_KNOWN];
+  if (next.length > 1) return next.filter((s) => s !== ALLERGY_NOT_KNOWN);
+  return next;
+}
 
 export default function AllergiesScreen() {
-  const { childName, setAllergies: saveAllergies } = useOnboarding();
+  // Answers live in the onboarding context, so Back and forward keep them.
+  const { childName, allergyAnswers, setAllergyGroup, allergies, allergyStatus } = useOnboarding();
   const displayName = childName || 'your child';
-
-  const [medAllergies, setMedAllergies] = useState<string[]>([]);
-  const [foodAllergies, setFoodAllergies] = useState<string[]>([]);
-  const [otherAllergies, setOtherAllergies] = useState<string[]>([]);
-  const [medOther, setMedOther] = useState('');
-  const [foodOther, setFoodOther] = useState('');
-  const [otherOther, setOtherOther] = useState('');
-
-  // Collect all selected allergies (excluding "None" and "Other") for preview
-  const allSelected = [
-    ...medAllergies.filter((a) => a !== 'Not known' && a !== 'Other'),
-    ...(medAllergies.includes('Other') && medOther ? [medOther] : []),
-    ...foodAllergies.filter((a) => a !== 'Not known' && a !== 'Other'),
-    ...(foodAllergies.includes('Other') && foodOther ? [foodOther] : []),
-    ...otherAllergies.filter((a) => a !== 'Not known' && a !== 'Other'),
-    ...(otherAllergies.includes('Other') && otherOther ? [otherOther] : []),
-  ];
 
   return (
     <OnboardingShell
-      progress={0.38}
+      screen="allergies"
       title={`Does ${displayName} have any known allergies?`}
       subtitle="This will be flagged to every doctor, every time."
       ctaLabel="Continue"
-      onCta={() => { saveAllergies(allSelected); router.push('/(onboarding)/conditions'); }}
+      onCta={() => router.push('/(onboarding)/conditions')}
     >
-      {/* Medication allergies */}
-      <View>
-        <Text style={styles.sectionTitle}>Medication allergies</Text>
-        <ChipGroup
-          options={MED_ALLERGIES}
-          selected={medAllergies}
-          onChange={setMedAllergies}
-          multiSelect
-          noneValue="Not known"
-        />
-        {medAllergies.includes('Other') && (
-          <TextInputField
-            placeholder="Specify medication allergy"
-            value={medOther}
-            onChangeText={setMedOther}
-          />
-        )}
-      </View>
+      {GROUPS.map((group) => {
+        const answer = allergyAnswers[group.key];
+        return (
+          <View key={group.key}>
+            <Text style={styles.sectionTitle}>{group.title}</Text>
+            <ChipGroup
+              label={group.title}
+              options={group.options}
+              selected={answer.selected}
+              onChange={(next) =>
+                setAllergyGroup(group.key, { selected: withExclusiveNotKnown(answer.selected, next) })
+              }
+              multiSelect
+              noneValue={ALLERGY_NONE}
+            />
+            {answer.selected.includes(ALLERGY_OTHER) && (
+              <View style={styles.otherField}>
+                <TextInputField
+                  placeholder={group.otherPlaceholder}
+                  accessibilityLabel={group.otherPlaceholder}
+                  value={answer.other}
+                  onChangeText={(other) => setAllergyGroup(group.key, { other })}
+                />
+              </View>
+            )}
+          </View>
+        );
+      })}
 
-      {/* Food allergies */}
-      <View>
-        <Text style={styles.sectionTitle}>Food allergies</Text>
-        <ChipGroup
-          options={FOOD_ALLERGIES}
-          selected={foodAllergies}
-          onChange={setFoodAllergies}
-          multiSelect
-          noneValue="Not known"
-        />
-        {foodAllergies.includes('Other') && (
-          <TextInputField
-            placeholder="Specify food allergy"
-            value={foodOther}
-            onChangeText={setFoodOther}
-          />
-        )}
-      </View>
-
-      {/* Other allergies */}
-      <View>
-        <Text style={styles.sectionTitle}>Other allergies</Text>
-        <ChipGroup
-          options={OTHER_ALLERGIES}
-          selected={otherAllergies}
-          onChange={setOtherAllergies}
-          multiSelect
-          noneValue="Not known"
-        />
-        {otherAllergies.includes('Other') && (
-          <TextInputField
-            placeholder="Specify other allergy"
-            value={otherOther}
-            onChangeText={setOtherOther}
-          />
-        )}
-      </View>
+      {/* Nothing picked: Continue still works, but say what the doctor will see (R2-01). */}
+      {allergyStatus === 'unanswered' && (
+        <Text style={styles.skipHint}>
+          Skip for now: doctors will be told {displayName}&apos;s allergies are not known.
+        </Text>
+      )}
 
       {/* Allergy preview badge */}
-      {allSelected.length > 0 && (
+      {allergies.length > 0 && (
         <View style={styles.badge}>
           <Ionicons name="alert-circle" size={14} color={AppColors.danger} style={styles.badgeIcon} />
           <Text style={styles.badgeText}>
-            Allergy alert: {allSelected.join(', ')}
+            Allergy alert: {allergies.map((a) => a.name).join(', ')}
           </Text>
         </View>
       )}
@@ -120,6 +120,17 @@ const styles = StyleSheet.create({
     color: AppColors.onSurface,
     marginLeft: 2,
     marginBottom: 8,
+  },
+  // Same gap as the "Other" field on the conditions screen.
+  otherField: {
+    marginTop: 8,
+  },
+  skipHint: {
+    fontFamily: 'Inter_400Regular',
+    fontSize: 13,
+    lineHeight: 18,
+    color: AppColors.onSurfaceVariant,
+    marginLeft: 2,
   },
   badge: {
     backgroundColor: AppColors.dangerSurface,

@@ -18,12 +18,15 @@
 // Caller auth: standard Supabase JWT. We verify the caller is either the
 // parent on the appointment or the assigned doctor.
 //
-// Deploy: `supabase functions deploy video-room --project-ref opdosbudlzwywdmrxlqr`
+// Deploy: `supabase functions deploy video-room --project-ref ahikfefphptmtivwukpv`
+
+// NOT DEPLOYED: video calls use Google Meet (create-meet-event) for launch.
+// Kept for a possible 100ms switch; needs the HMS_* secrets before deploying.
 
 // deno-lint-ignore-file no-explicit-any
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { create as createJwt, getNumericDate } from 'https://deno.land/x/djwt@v3.0.2/mod.ts';
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
+import { createAdminClient, getCaller } from '../_shared/supabase.ts';
 
 const HMS_API = 'https://api.100ms.live/v2';
 
@@ -86,22 +89,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
-  const authHeader = req.headers.get('Authorization') ?? '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return jsonResponse({ error: 'Missing Authorization' }, 401);
-  }
-
-  const admin = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    { auth: { persistSession: false } },
-  );
-
-  const jwt = authHeader.replace('Bearer ', '');
-  const { data: userData, error: userErr } = await admin.auth.getUser(jwt);
-  if (userErr || !userData?.user) {
-    return jsonResponse({ error: 'Invalid session' }, 401);
-  }
+  const admin = createAdminClient();
+  const caller = await getCaller(req, admin);
+  if (!caller) return jsonResponse({ error: 'Invalid session' }, 401);
 
   let body: { appointmentId?: string };
   try {
@@ -112,7 +102,7 @@ Deno.serve(async (req) => {
   if (!body.appointmentId) return jsonResponse({ error: 'Missing appointmentId' }, 400);
 
   // Verify caller has access (parent OR doctor on this appointment).
-  const userId = userData.user.id;
+  const userId = caller.id;
   const { data: appt } = await admin
     .from('appointments')
     .select('id, parent_id, doctor_id, date, time')
@@ -175,7 +165,8 @@ Deno.serve(async (req) => {
       room = upserted;
     }
   } catch (e: any) {
-    return jsonResponse({ error: e?.message ?? '100ms call failed' }, 502);
+    console.error(`[video-room] 100ms call failed for ${appt.id}: ${e?.message ?? e}`);
+    return jsonResponse({ error: 'Could not start the video room' }, 502);
   }
 
   const code =

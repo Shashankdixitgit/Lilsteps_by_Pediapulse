@@ -12,36 +12,57 @@ export function MeetLinkForm({ initialLink }: { initialLink: string | null }) {
     setFeedback(null);
     startTransition(async () => {
       const res = await updateMeetLinkAction(link);
-      if (res.error) setFeedback({ kind: 'err', msg: res.error });
-      else setFeedback({ kind: 'ok', msg: link ? 'Saved' : 'Cleared' });
+      if (res.error) {
+        setFeedback({ kind: 'err', msg: res.error });
+        return;
+      }
+      setLink(res.link ?? '');
+      setFeedback({
+        kind: 'ok',
+        msg: res.link ? 'Saved. Parents will join this room.' : 'Cleared. Parents will see that no link is set yet.',
+      });
     });
   }
 
   return (
     <div className="space-y-5 fade-up" style={{ animationDelay: '60ms' }}>
       <div>
-        <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
-          Permanent video room URL
+        <label
+          htmlFor="meet-link"
+          className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]"
+        >
+          Your Google Meet link
         </label>
         <input
+          id="meet-link"
           type="url"
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
           value={link}
           onChange={(e) => setLink(e.target.value)}
-          placeholder="https://meet.google.com/abc-defg-hij"
+          placeholder="https://meet.google.com/xxx-xxxx-xxx"
           className="editorial-input mt-1"
         />
+        <ol className="mt-3 list-decimal space-y-1 pl-5 text-[14px] leading-[1.55] text-[var(--ink-3)]">
+          <li>
+            Open{' '}
+            <a
+              href="https://meet.google.com/new"
+              target="_blank"
+              rel="noreferrer"
+              className="link-underline text-[var(--accent)]"
+            >
+              meet.google.com/new
+            </a>{' '}
+            while signed in to the Google account you use for consults.
+          </li>
+          <li>Copy the meeting link and paste it here. Keep using this one room.</li>
+          <li>At consult time, open the same link and admit the parent from the waiting room.</li>
+        </ol>
         <p className="mt-2 text-[14px] leading-[1.55] text-[var(--ink-3)]">
-          Create a meeting at{' '}
-          <a
-            href="https://meet.google.com/new"
-            target="_blank"
-            rel="noreferrer"
-            className="link-underline text-[var(--accent)]"
-          >
-            meet.google.com/new
-          </a>{' '}
-          and paste the URL. Parents join the same room. Admit them from the
-          Meet waiting room.
+          Until a link is saved, parents are told you haven&apos;t added a video link yet, so
+          they can message you instead.
         </p>
       </div>
 

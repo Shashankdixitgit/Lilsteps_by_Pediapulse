@@ -16,6 +16,8 @@ interface GrowthCardsProps {
   /** Legacy per-column handlers (kept for call-site compatibility). */
   onWeightPress?: () => void;
   onHeightPress?: () => void;
+  /** "Length" for children under 2 (measured lying down), as on the Growth tab. */
+  heightLabel?: 'Height' | 'Length';
 }
 
 /**
@@ -23,12 +25,12 @@ interface GrowthCardsProps {
  * shared `number` preset (22) with a 13 muted unit. No sparklines, no icon
  * wells (the Growth tab owns the chart).
  */
-export function GrowthCards({ data, onPress, onWeightPress, onHeightPress }: GrowthCardsProps) {
+export function GrowthCards({ data, onPress, onWeightPress, onHeightPress, heightLabel = 'Height' }: GrowthCardsProps) {
   const content = (
     <>
       <Column label="Weight" value={data.weight} unit="kg" onPress={onPress ? undefined : onWeightPress} />
       <View style={styles.divider} />
-      <Column label="Height" value={data.height} unit="cm" onPress={onPress ? undefined : onHeightPress} />
+      <Column label={heightLabel} value={data.height} unit="cm" onPress={onPress ? undefined : onHeightPress} />
     </>
   );
 

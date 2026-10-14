@@ -17,7 +17,7 @@ export default async function LoginPage({
         {/* Masthead */}
         <div className="mb-12 fade-up">
           <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[var(--ink-3)]">
-            Pedia Pulse · Clinical Dashboard
+            LilSteps · Clinical Dashboard
           </div>
           <div className="mt-3 h-px w-12 bg-[var(--ink)]" />
           <h1 className="mt-6 font-display text-[40px] leading-tight text-[var(--ink)]">
@@ -31,7 +31,7 @@ export default async function LoginPage({
         <LoginForm initialError={initialError} />
 
         <div className="mt-12 border-t border-[var(--hairline)] pt-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-4)]">
-          Pedia Pulse · Pune
+          LilSteps · for paediatricians
         </div>
       </div>
     </main>

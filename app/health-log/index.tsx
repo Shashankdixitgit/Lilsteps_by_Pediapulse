@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import { useState } from 'react';
+import { Image } from 'expo-image';
+import { useRef, useState } from 'react';
 import {
-  Alert,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -13,48 +13,63 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ChipGroup } from '@/components/chip-group';
-import { GradientButton } from '@/components/gradient-button';
+import { GradientButton, TextButton } from '@/components/gradient-button';
+import { confirmAsync, notify } from '@/components/growth/confirm';
 import { HEALTH_CATEGORIES, SEVERITY_AWARE_CATEGORIES } from '@/components/health-log/categories';
 import { PhotoAttach } from '@/components/health-log/PhotoAttach';
 import { SeverityDots } from '@/components/health-log/SeverityDots';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { TextInputField } from '@/components/text-input-field';
-import { AppColors, FontFamily, Radius } from '@/constants/theme';
+import { StatusPill, type StatusTone } from '@/components/ui/StatusPill';
+import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useChild } from '@/context/child';
 import { useHealthNotes, type HealthNoteRow } from '@/hooks/useHealthNotes';
+import { formatDate } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
 
 const CATEGORY_LABELS = HEALTH_CATEGORIES.map((c) => c.label);
 
-function formatNow(): string {
-  const now = new Date();
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const h = now.getHours();
-  const m = now.getMinutes().toString().padStart(2, '0');
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const hour = h % 12 || 12;
-  return `Today, ${now.getDate()} ${months[now.getMonth()]} · ${hour}:${m} ${ampm}`;
+/** Same words as the SeverityDots scale. */
+const SEVERITY: Record<number, { label: string; tone: StatusTone }> = {
+  1: { label: 'Mild', tone: 'success' },
+  2: { label: 'Moderate', tone: 'warning' },
+  3: { label: 'Concerning', tone: 'warning' },
+  4: { label: 'Urgent', tone: 'danger' },
+};
+
+/** "Today · 4:05 pm", "12 Oct · 9:30 am" (en-IN, device time). */
+function formatStamp(value: string | Date): string {
+  const d = value instanceof Date ? value : new Date(value);
+  const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const day = d.toDateString() === new Date().toDateString() ? `Today, ${formatDate(d)}` : formatDate(d);
+  return `${day} · ${time}`;
 }
 
 export default function HealthLogScreen() {
   const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
   const [category, setCategory] = useState<HealthNoteRow['category']>('symptom');
   const [note, setNote] = useState('');
   const [severity, setSeverity] = useState(1);
-  const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
   const [photo, setPhoto] = useState<{ uri: string; mime: string } | null>(null);
+  // Editing an existing note: its id, and whether its saved photo is kept.
+  const [editing, setEditing] = useState<HealthNoteRow | null>(null);
+  const [keepPhoto, setKeepPhoto] = useState(true);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const { child } = useChild();
   const { user } = useAuth();
-  const { addNote } = useHealthNotes(child?.id ?? null);
+  const { notes, photoUrls, loading, addNote, updateNote, deleteNote } = useHealthNotes(child?.id ?? null);
   const childName = child?.name ?? 'Child';
 
   const activeCat = HEALTH_CATEGORIES.find((c) => c.id === category) ?? HEALTH_CATEGORIES[0];
   const canSave = note.trim().length >= 3;
   const showSeverity = SEVERITY_AWARE_CATEGORIES.includes(category);
+  const existingPhotoUrl = editing?.photo_url && keepPhoto ? photoUrls[editing.photo_url] ?? null : null;
 
   async function uploadPhoto(uri: string, mime: string, userId: string): Promise<string> {
     const res = await fetch(uri);
@@ -68,40 +83,78 @@ export default function HealthLogScreen() {
     return path;
   }
 
+  function resetForm() {
+    setEditing(null);
+    setKeepPhoto(true);
+    setNote('');
+    setSeverity(1);
+    setPhoto(null);
+  }
+
   async function handleSave() {
     if (!canSave || saving) return;
     setSaving(true);
+    setSavedMsg(null);
     try {
       let photoPath: string | undefined;
       if (photo && user) {
         photoPath = await uploadPhoto(photo.uri, photo.mime, user.id);
       }
-      await addNote({
-        category,
-        content: note.trim(),
-        severity: showSeverity ? severity : undefined,
-        photo_url: photoPath,
-      });
-      setSaved(true);
-      setTimeout(() => router.replace('/(tabs)'), 1500);
+      if (editing) {
+        await updateNote(editing.id, {
+          category,
+          content: note.trim(),
+          severity: showSeverity ? severity : null,
+          // New photo replaces; removed → null; otherwise keep.
+          photo_url: photoPath ?? (keepPhoto ? undefined : null),
+        });
+        setSavedMsg('Note updated.');
+      } else {
+        await addNote({
+          category,
+          content: note.trim(),
+          severity: showSeverity ? severity : undefined,
+          photo_url: photoPath,
+        });
+        setSavedMsg(`Added to ${childName}'s health log.`);
+      }
+      resetForm();
     } catch (e) {
-      Alert.alert('Could not save note', e instanceof Error ? e.message : 'Please try again.');
+      notify('Could not save note', e instanceof Error ? e.message : 'Please try again.');
+    } finally {
       setSaving(false);
     }
   }
 
-  if (saved) {
-    return (
-      <View style={[styles.screen, { paddingTop: insets.top }]}>
-        <View style={styles.successContainer}>
-          <View style={styles.successIcon}>
-            <Ionicons name="checkmark" size={32} color={AppColors.success} />
-          </View>
-          <Text style={typography.heading}>Note saved</Text>
-          <Text style={typography.meta}>Added to {childName}&apos;s health log.</Text>
-        </View>
-      </View>
+  function startEdit(n: HealthNoteRow) {
+    setEditing(n);
+    setKeepPhoto(true);
+    setPhoto(null);
+    setCategory(n.category);
+    setNote(n.content);
+    setSeverity(n.severity ?? 1);
+    setSavedMsg(null);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }
+
+  async function handleDelete(n: HealthNoteRow) {
+    if (deletingId) return;
+    const ok = await confirmAsync(
+      'Delete this note?',
+      `It will be removed from ${childName}'s health log. This can't be undone.`,
+      { confirmLabel: 'Delete', destructive: true },
     );
+    if (!ok) return;
+    setDeletingId(n.id);
+    try {
+      await deleteNote(n.id);
+      if (editing?.id === n.id) resetForm();
+      setSavedMsg('Note deleted.');
+    } catch {
+      notify('Could not delete', 'Please check your connection and try again.');
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   return (
@@ -109,21 +162,40 @@ export default function HealthLogScreen() {
       style={[styles.screen, { paddingTop: insets.top }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScreenHeader title="Health log" />
+      <ScreenHeader title={editing ? 'Edit note' : 'Health log'} subtitle={child?.name ? `For ${child.name}` : undefined} />
 
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={[styles.scroll, { paddingBottom: 32 }]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.timestampRow}>
           <Ionicons name="time-outline" size={14} color={AppColors.muted} />
-          <Text style={styles.timestampText}>{formatNow()}</Text>
+          <Text style={styles.timestampText}>{formatStamp(editing ? editing.noted_at : new Date())}</Text>
         </View>
+
+        {/* Who reads this (R3-21): the dashboard's visit page lists the
+            latest notes. Not watched in real time, so urgent needs go elsewhere. */}
+        <View style={styles.doctorInfo}>
+          <Ionicons name="information-circle-outline" size={16} color={AppColors.secondary} />
+          <Text style={[typography.bodySM, styles.flex]}>
+            The LilSteps doctor sees your recent notes when you have a visit. Notes are not checked in real
+            time: for anything urgent, book a consult or call 112.
+          </Text>
+        </View>
+
+        {savedMsg ? (
+          <View style={styles.savedNotice} accessibilityLiveRegion="polite" accessibilityRole="alert">
+            <Ionicons name="checkmark-circle" size={Size.iconRow} color={AppColors.success} />
+            <Text style={[typography.bodySM, styles.flex]}>{savedMsg}</Text>
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={typography.sectionLabel}>Category</Text>
           <ChipGroup
+            label="Category"
             options={CATEGORY_LABELS}
             selected={[activeCat.label]}
             onChange={(sel) => {
@@ -140,9 +212,13 @@ export default function HealthLogScreen() {
             multiline
             numberOfLines={5}
             value={note}
-            onChangeText={setNote}
+            onChangeText={(t) => {
+              setNote(t);
+              if (savedMsg) setSavedMsg(null);
+            }}
             textAlignVertical="top"
-            autoFocus
+            autoFocus={notes.length === 0}
+            accessibilityLabel="Note"
             style={styles.input}
           />
         </View>
@@ -154,17 +230,126 @@ export default function HealthLogScreen() {
           </View>
         )}
 
-        <PhotoAttach uri={photo?.uri ?? null} onChange={setPhoto} />
+        {existingPhotoUrl && !photo ? (
+          <View style={styles.existingPhoto}>
+            <Image source={{ uri: existingPhotoUrl }} style={styles.existingThumb} contentFit="cover" />
+            <Text style={[typography.bodySM, styles.flex]}>Photo saved with this note</Text>
+            <TextButton label="Remove" tone="danger" onPress={() => setKeepPhoto(false)} accessibilityLabel="Remove photo" />
+          </View>
+        ) : (
+          <PhotoAttach uri={photo?.uri ?? null} onChange={setPhoto} />
+        )}
+
+        {editing ? (
+          <TextButton label="Cancel editing" onPress={resetForm} style={styles.cancelEdit} />
+        ) : null}
+
+        <View style={styles.section}>
+          <Text style={typography.headingSM}>{childName}&apos;s notes</Text>
+          {loading && notes.length === 0 ? (
+            <ActivityIndicator color={AppColors.primary} />
+          ) : notes.length === 0 ? (
+            <Text style={typography.bodySM}>
+              No notes yet. Notes you save appear here, newest first.
+            </Text>
+          ) : (
+            <View style={styles.listCard}>
+              {notes.map((n, i) => (
+                <NoteItem
+                  key={n.id}
+                  note={n}
+                  photoUrl={n.photo_url ? photoUrls[n.photo_url] ?? null : null}
+                  divider={i > 0}
+                  editing={editing?.id === n.id}
+                  deleting={deletingId === n.id}
+                  onEdit={() => startEdit(n)}
+                  onDelete={() => handleDelete(n)}
+                />
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 16 }]}>
-        <GradientButton label="Save note" onPress={handleSave} disabled={!canSave} loading={saving} />
+        <GradientButton
+          label={editing ? 'Save changes' : 'Save note'}
+          onPress={handleSave}
+          disabled={!canSave}
+          loading={saving}
+        />
       </View>
     </KeyboardAvoidingView>
   );
 }
 
+/** One saved note: category + time, severity, text, photo, Edit / Delete. */
+function NoteItem({
+  note,
+  photoUrl,
+  divider,
+  editing,
+  deleting,
+  onEdit,
+  onDelete,
+}: {
+  note: HealthNoteRow;
+  photoUrl: string | null;
+  divider: boolean;
+  editing: boolean;
+  deleting: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const cat = HEALTH_CATEGORIES.find((c) => c.id === note.category) ?? HEALTH_CATEGORIES[HEALTH_CATEGORIES.length - 1];
+  const sev = note.severity ? SEVERITY[note.severity] : null;
+  const stamp = formatStamp(note.noted_at);
+  return (
+    <View
+      style={[styles.noteRow, divider && styles.divider, editing && styles.noteRowEditing]}
+      accessible={false}
+    >
+      <View style={styles.noteTop}>
+        <View style={styles.noteWell}>
+          <Ionicons name={cat.icon as keyof typeof Ionicons.glyphMap} size={Size.iconRow} color={AppColors.primary} />
+        </View>
+        <View style={styles.noteHead}>
+          <Text style={typography.title} numberOfLines={1}>
+            {cat.label}
+          </Text>
+          <Text style={typography.meta} numberOfLines={1}>
+            {stamp}
+          </Text>
+        </View>
+        {sev ? <StatusPill dot tone={sev.tone} label={sev.label} /> : null}
+      </View>
+      <View style={styles.noteBody}>
+        <Text style={[typography.body, styles.flex]}>{note.content}</Text>
+        {photoUrl ? (
+          <Image
+            source={{ uri: photoUrl }}
+            style={styles.thumb}
+            contentFit="cover"
+            accessibilityLabel={`Photo with the ${cat.label.toLowerCase()} note`}
+          />
+        ) : null}
+      </View>
+      <View style={styles.noteActions}>
+        <TextButton label={editing ? 'Editing' : 'Edit'} onPress={onEdit} disabled={editing} accessibilityLabel={`Edit ${cat.label} note from ${stamp}`} />
+        <TextButton
+          label={deleting ? 'Deleting…' : 'Delete'}
+          tone="danger"
+          onPress={onDelete}
+          disabled={deleting}
+          accessibilityLabel={`Delete ${cat.label} note from ${stamp}`}
+        />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  doctorInfo: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
   screen: { flex: 1, backgroundColor: AppColors.surface },
 
   scroll: { paddingHorizontal: 20, paddingTop: 8, gap: 24 },
@@ -197,14 +382,55 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.surface,
   },
 
-  successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  successIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+  flex: { flex: 1, minWidth: 0 },
+
+  savedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    padding: 12,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
     backgroundColor: AppColors.successSurface,
+  },
+
+  existingPhoto: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: AppColors.card,
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    padding: 12,
+  },
+  existingThumb: { width: 56, height: 56, borderRadius: Radius.sm, backgroundColor: AppColors.surfaceContainerHigh },
+  cancelEdit: { alignSelf: 'flex-start', marginTop: -12 },
+
+  listCard: {
+    backgroundColor: AppColors.card,
+    borderRadius: Radius.lg,
+    borderCurve: 'continuous',
+    borderWidth: 1,
+    borderColor: AppColors.border,
+    overflow: 'hidden',
+  },
+  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: AppColors.border },
+  noteRow: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4, gap: 8 },
+  noteRowEditing: { backgroundColor: AppColors.greenWash },
+  noteTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  noteWell: {
+    width: Size.iconWell,
+    height: Size.iconWell,
+    borderRadius: Radius.md,
+    borderCurve: 'continuous',
+    backgroundColor: AppColors.mintSurface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8,
   },
+  noteHead: { flex: 1, minWidth: 0, gap: 2 },
+  noteBody: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  thumb: { width: 56, height: 56, borderRadius: Radius.sm, backgroundColor: AppColors.surfaceContainerHigh },
+  noteActions: { flexDirection: 'row', gap: 8, marginLeft: -12 },
 });

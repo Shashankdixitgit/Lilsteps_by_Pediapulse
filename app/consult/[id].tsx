@@ -1,4 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -7,16 +8,37 @@ import { GradientButton, TextButton } from '@/components/gradient-button';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
-import { useConsultations } from '@/hooks/useConsultations';
+import type { ConsultationRow } from '@/hooks/useConsultations';
+import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
 
 export default function ConsultDetailScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { child } = useChild();
-  const { consultations, loading } = useConsultations(child?.id ?? null);
-
-  const consult = consultations.find((c) => c.id === id);
+  const { children } = useChild();
+  // Read by id, not from the active child's list: the Updates screen links
+  // here for any child (R2-12). RLS returns only the parent's own children.
+  const [consult, setConsult] = useState<ConsultationRow | null>(null);
+  const [loading, setLoading] = useState(!!id);
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('consultations')
+        .select('id, appointment_id, child_id, doctor_name, doctor_specialisation, chief_complaint, outcome, prescription, ai_summary, created_at')
+        .eq('id', id)
+        .maybeSingle();
+      if (!cancelled) {
+        setConsult((data as ConsultationRow | null) ?? null);
+        setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+  const child = children.find((c) => c.id === consult?.child_id) ?? null;
 
   if (loading) {
     return (
@@ -39,7 +61,7 @@ export default function ConsultDetailScreen() {
   }
 
   const { ai_summary: aiSummary, prescription } = consult;
-  const date = new Date(consult.created_at).toLocaleDateString('en-US', {
+  const date = new Date(consult.created_at).toLocaleDateString('en-IN', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -56,8 +78,8 @@ export default function ConsultDetailScreen() {
       >
         <Text style={typography.meta}>{meta}</Text>
 
-        {!!aiSummary && <SummaryCard summary={aiSummary} childName={child?.name ?? 'Your child'} />}
-
+        {/* R3-21: the doctor's own notes come first; the AI check-in that led
+            to the visit follows as background. */}
         <View style={styles.section}>
           <Text style={typography.headingSM}>Doctor&apos;s notes</Text>
           <View style={styles.card}>
@@ -78,6 +100,13 @@ export default function ConsultDetailScreen() {
             <Text style={typography.meta}>No prescription issued</Text>
           )}
         </View>
+
+        {!!aiSummary && (
+          <View style={styles.section}>
+            <Text style={typography.headingSM}>Your check-in before the visit</Text>
+            <SummaryCard summary={aiSummary} childName={child?.name ?? 'Your child'} sex={child?.sex} />
+          </View>
+        )}
       </ScrollView>
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>

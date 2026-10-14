@@ -1,12 +1,16 @@
 import Link from 'next/link';
+import { Suspense } from 'react';
+import { computeAge, formatDateTime } from '@/lib/format';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { FlashToast } from '../flash-toast';
 
 type PrescriptionRow = {
   id: string;
   issued_at: string;
   notes: string | null;
   child_id: string;
-  children: { id: string; name: string } | null;
+  appointment_id: string | null;
+  children: { id: string; name: string; dob: string | null; parents: { name: string | null } | null } | null;
   prescription_items: {
     id: string;
     medicine: string;
@@ -17,28 +21,18 @@ type PrescriptionRow = {
   }[];
 };
 
-function formatStamp(iso: string): { date: string; time: string } {
-  const d = new Date(iso);
-  return {
-    date: d
-      .toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: '2-digit' })
-      .toUpperCase(),
-    time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-  };
-}
-
 export default async function PrescriptionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ child?: string }>;
+  searchParams: Promise<{ child?: string; issued?: string }>;
 }) {
-  const { child: childFilter } = await searchParams;
+  const { child: childFilter, issued } = await searchParams;
   const supabase = await createSupabaseServerClient();
 
   let q = supabase
     .from('prescriptions')
     .select(
-      'id, issued_at, notes, child_id, children(id, name), prescription_items(id, medicine, dose, frequency, duration, position)',
+      'id, issued_at, notes, child_id, appointment_id, children(id, name, dob, parents(name)), prescription_items(id, medicine, dose, frequency, duration, position)',
     )
     .order('issued_at', { ascending: false });
 
@@ -50,6 +44,11 @@ export default async function PrescriptionsPage({
 
   return (
     <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-12">
+      {issued && (
+        <Suspense>
+          <FlashToast param="issued" message="Prescription issued — the parent can now see it in the app" />
+        </Suspense>
+      )}
       <header className="mb-10 flex items-end justify-between gap-6 fade-up">
         <div>
           <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
@@ -88,7 +87,6 @@ export default async function PrescriptionsPage({
         <ol className="space-y-10">
           {data.map((p, idx) => {
             const items = [...p.prescription_items].sort((a, b) => a.position - b.position);
-            const stamp = formatStamp(p.issued_at);
             return (
               <li
                 key={p.id}
@@ -101,14 +99,32 @@ export default async function PrescriptionsPage({
                   {String(idx + 1).padStart(3, '0')}
                 </div>
                 <div>
-                  <div className="flex items-baseline justify-between border-b border-[var(--hairline)] pb-3">
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-[var(--hairline)] pb-3">
                     {!childFilter && (
-                      <div className="font-display-italic text-[24px] text-[var(--ink)]">
-                        {p.children?.name ?? 'Unknown'}
+                      <div>
+                        <div className="font-display-italic text-[24px] text-[var(--ink)]">
+                          {p.children?.name ?? 'Unknown'}
+                        </div>
+                        {/* Age + parent tell two children with the same name apart. */}
+                        <div className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
+                          {[
+                            p.children?.dob ? computeAge(p.children.dob) : null,
+                            p.children?.parents?.name ? `Parent: ${p.children.parents.name}` : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || 'Details not available'}
+                        </div>
                       </div>
                     )}
-                    <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-                      {stamp.date} · {stamp.time}
+                    <div className="flex items-baseline gap-4 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
+                      <span>{formatDateTime(p.issued_at)}</span>
+                      {p.appointment_id ? (
+                        <Link href={`/consultations/${p.appointment_id}`} className="link-underline text-[var(--ink-2)]">
+                          View visit →
+                        </Link>
+                      ) : (
+                        <span className="text-[var(--ink-4)]">No linked visit</span>
+                      )}
                     </div>
                   </div>
                   {items.length > 0 && (

@@ -5,6 +5,7 @@ import Animated, { FadeInUp } from 'react-native-reanimated';
 
 import { OnboardingShell } from '@/components/onboarding-shell';
 import { AppColors, Radius } from '@/constants/theme';
+import { useChild } from '@/context/child';
 import { typography } from '@/styles/global';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -33,11 +34,15 @@ const SETUP_ITEMS: { icon: IoniconName; title: string; subtitle: string }[] = [
 ];
 
 export default function AddChildScreen() {
+  // Also the entry point for a second child (from the home header).
+  const { children } = useChild();
+  const isFirstChild = children.length === 0;
+
   return (
     <OnboardingShell
       sprout="wave"
-      progress={0.1}
-      title="Add your first child"
+      screen="add-child"
+      title={isFirstChild ? 'Add your first child' : 'Add another child'}
       subtitle="A few quick questions to personalise care."
       ctaLabel="Let's begin"
       onCta={() => router.push('/(onboarding)/child-basics')}
@@ -71,7 +76,7 @@ export default function AddChildScreen() {
       <View style={styles.note}>
         <Ionicons name="lock-closed-outline" size={14} color={AppColors.muted} />
         <Text style={[typography.caption, styles.noteText]}>
-          Your child&apos;s data is encrypted and never shared without your consent.
+          Your child&apos;s details are stored securely and shared only with the doctors you consult.
         </Text>
       </View>
     </OnboardingShell>

@@ -92,11 +92,11 @@ export default function RootLayout() {
                 options={{ animation: 'slide_from_right' }}
               />
               <Stack.Screen
-                name="chat"
+                name="chat/[id]"
                 options={{ animation: 'slide_from_right' }}
               />
               <Stack.Screen
-                name="prescriptions"
+                name="prescriptions/[id]"
                 options={{ animation: 'slide_from_right' }}
               />
             </Stack>

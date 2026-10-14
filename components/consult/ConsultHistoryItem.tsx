@@ -30,7 +30,7 @@ export function ConsultHistoryItem({
   divider,
 }: ConsultHistoryItemProps) {
   const d = new Date(createdAt);
-  const date = `${d.getDate()} ${d.toLocaleDateString('en-US', { month: 'short' })}`;
+  const date = `${d.getDate()} ${d.toLocaleDateString('en-IN', { month: 'short' })}`;
   const meta = doctorName ? `${date} · ${doctorName}` : date;
 
   return (

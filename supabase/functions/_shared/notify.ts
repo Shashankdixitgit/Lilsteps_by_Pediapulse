@@ -7,8 +7,15 @@
 
 export type Channel = 'sms' | 'whatsapp' | 'email' | 'push';
 
+export const CHANNELS: readonly Channel[] = ['sms', 'whatsapp', 'email', 'push'];
+
+export function isChannel(v: unknown): v is Channel {
+  return typeof v === 'string' && (CHANNELS as readonly string[]).includes(v);
+}
+
 export interface Recipient {
   parent_id?: string;
+  doctor_id?: string;
   child_id?: string;
   appointment_id?: string;
   phone?: string;
@@ -27,6 +34,8 @@ export interface DispatchResult {
   ok: boolean;
   providerId?: string;
   error?: string;
+  /** True when the channel's provider has no credentials yet (nothing was attempted). */
+  notConfigured?: boolean;
 }
 
 // ── Twilio (SMS + WhatsApp) ──────────────────────────────────────────────────
@@ -42,11 +51,11 @@ async function sendTwilioMessage(
   const fromWa = Deno.env.get('TWILIO_FROM_WHATSAPP');       // whatsapp:+1...
 
   if (!accountSid || !authToken) {
-    return { ok: false, error: 'Twilio not configured' };
+    return { ok: false, error: 'Twilio not configured', notConfigured: true };
   }
   const from = channel === 'whatsapp' ? fromWa : fromSms;
   if (!from) {
-    return { ok: false, error: `Twilio ${channel} sender not configured` };
+    return { ok: false, error: `Twilio ${channel} sender not configured`, notConfigured: true };
   }
 
   const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`;
@@ -88,7 +97,7 @@ async function sendEmail(to: string, subject: string, body: string): Promise<Dis
   if (!apiKey) {
     // No provider configured yet — short-circuit so the dispatcher records a
     // 'skipped' entry instead of failing the whole batch.
-    return { ok: false, error: 'Email provider not configured' };
+    return { ok: false, error: 'Email provider not configured', notConfigured: true };
   }
 
   const res = await fetch('https://api.resend.com/emails', {

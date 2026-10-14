@@ -38,9 +38,9 @@ const TEMPLATES: Record<TemplateKey, RenderedTemplate> = {
       'Pedia Pulse: Your appointment with {{doctor}} starts at {{time}} — please be ready.',
   },
   prescription_issued: {
-    subject: 'New prescription from Dr. {{doctor}}',
+    subject: 'New prescription from {{doctor}}',
     body:
-      'Pedia Pulse: Dr. {{doctor}} has issued a new prescription. Open the app to view.',
+      'Pedia Pulse: {{doctor}} has issued a new prescription. Open the app to view.',
   },
   vaccine_due_soon: {
     subject: 'Vaccination due soon',
@@ -48,16 +48,22 @@ const TEMPLATES: Record<TemplateKey, RenderedTemplate> = {
       'Pedia Pulse: {{vaccine}} is due for {{child}} on {{date}}. Book a slot in the app.',
   },
   new_message: {
-    subject: 'New message from Dr. {{doctor}}',
-    body: 'Pedia Pulse: Dr. {{doctor}} sent you a new message.',
+    subject: 'New message from {{doctor}}',
+    body: 'Pedia Pulse: {{doctor}} sent you a new message.',
     data: { type: 'message', conversationId: '{{conversationId}}' },
   },
   checkin_summary_ready: {
     subject: 'Check-in summary ready',
     body:
-      'Pedia Pulse: Your symptom summary is ready and has been shared with Dr. {{doctor}}.',
+      'Pedia Pulse: Your symptom summary is ready and has been shared with {{doctor}}.',
   },
 };
+
+export const TEMPLATE_KEYS = Object.keys(TEMPLATES) as TemplateKey[];
+
+export function isTemplateKey(v: unknown): v is TemplateKey {
+  return typeof v === 'string' && Object.prototype.hasOwnProperty.call(TEMPLATES, v);
+}
 
 export function renderTemplate(
   key: string,
@@ -70,8 +76,12 @@ export function renderTemplate(
   return {
     subject: tpl.subject ? fill(tpl.subject, params) : undefined,
     body: fill(tpl.body, params),
+    // Fill each value on its own — splicing params into a JSON string breaks
+    // on quotes / backslashes.
     data: tpl.data
-      ? JSON.parse(fill(JSON.stringify(tpl.data), params))
+      ? Object.fromEntries(
+          Object.entries(tpl.data).map(([k, v]) => [k, typeof v === 'string' ? fill(v, params) : v]),
+        )
       : undefined,
   };
 }

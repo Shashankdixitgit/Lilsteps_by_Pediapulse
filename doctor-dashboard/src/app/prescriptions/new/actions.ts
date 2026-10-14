@@ -1,7 +1,12 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { syncConsultationPrescription } from '@/lib/consultations';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+
+/** Shown by the form as a link to Settings; keep the wording in sync. */
+const REGISTRATION_MISSING_ERROR =
+  'Add your medical council registration number in Settings before issuing a prescription. It must be printed on every prescription.';
 
 export interface PrescriptionItemInput {
   medicine: string;
@@ -14,9 +19,11 @@ export interface PrescriptionItemInput {
 export async function createPrescriptionAction(params: {
   childId: string;
   appointmentId?: string | null;
+  /** Required when the appointment already has a prescription. */
+  confirmAnother?: boolean;
   notes?: string | null;
   items: PrescriptionItemInput[];
-}): Promise<{ error?: string; prescriptionId?: string }> {
+}): Promise<{ error?: string; prescriptionId?: string; needsRegistration?: boolean }> {
   if (!params.childId) return { error: 'Missing child' };
   if (params.items.length === 0) return { error: 'Add at least one medicine' };
 
@@ -40,6 +47,27 @@ export async function createPrescriptionAction(params: {
     .eq('id', user.id)
     .maybeSingle();
   if (!doctorAuth) return { error: 'Not a doctor account' };
+
+  // Telemedicine Practice Guidelines (2020): a prescription must carry the
+  // doctor's medical council registration number. Refuse until it is added.
+  const { data: registration } = await supabase
+    .from('doctors')
+    .select('registration_number')
+    .eq('id', doctorAuth.doctor_id)
+    .maybeSingle<{ registration_number: string | null }>();
+  if (!registration?.registration_number?.trim()) {
+    return { error: REGISTRATION_MISSING_ERROR, needsRegistration: true };
+  }
+
+  if (params.appointmentId && !params.confirmAnother) {
+    const { count } = await supabase
+      .from('prescriptions')
+      .select('id', { count: 'exact', head: true })
+      .eq('appointment_id', params.appointmentId);
+    if (count && count > 0) {
+      return { error: 'This visit already has a prescription. Confirm to issue another.' };
+    }
+  }
 
   const { data: prescription, error: prescErr } = await supabase
     .from('prescriptions')
@@ -100,5 +128,13 @@ export async function createPrescriptionAction(params: {
       });
   }
 
-  redirect(`/`);
+  // If the visit was already closed, keep the parent's visit summary current.
+  if (params.appointmentId) await syncConsultationPrescription(supabase, params.appointmentId);
+
+  // Back to where the doctor came from, with a confirmation toast.
+  redirect(
+    params.appointmentId
+      ? `/consultations/${params.appointmentId}?issued=1`
+      : `/prescriptions?child=${params.childId}&issued=1`,
+  );
 }

@@ -10,14 +10,20 @@
 // stands and UIs fall back to doctors.default_meet_link.
 //
 // Secrets needed:
-//   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
+//   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET — the SAME Google OAuth client
+//   that is set on the Google provider in Supabase Auth. The doctor's refresh
+//   token comes from that client (dashboard Settings → Connect Google), and
+//   Google only refreshes it for the client that issued it.
 //
 // Deploy:
-//   supabase functions deploy create-meet-event --project-ref opdosbudlzwywdmrxlqr
+//   supabase functions deploy create-meet-event --project-ref ahikfefphptmtivwukpv
+
+// Caller must be the parent on the appointment or its doctor. Google error
+// bodies are logged, never returned.
 
 // deno-lint-ignore-file no-explicit-any
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
+import { createAdminClient, getCaller } from '../_shared/supabase.ts';
 
 const CLINIC_TZ = 'Asia/Kolkata';
 const SLOT_DURATION_MIN = 30;
@@ -26,22 +32,9 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
-  const authHeader = req.headers.get('Authorization') ?? '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return jsonResponse({ error: 'Missing Authorization' }, 401);
-  }
-
-  const admin = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    { auth: { persistSession: false } },
-  );
-
-  const jwt = authHeader.replace('Bearer ', '');
-  const { data: userData, error: userErr } = await admin.auth.getUser(jwt);
-  if (userErr || !userData?.user) {
-    return jsonResponse({ error: 'Invalid session' }, 401);
-  }
+  const admin = createAdminClient();
+  const caller = await getCaller(req, admin);
+  if (!caller) return jsonResponse({ error: 'Invalid session' }, 401);
 
   let body: { appointmentId?: string };
   try {
@@ -54,13 +47,30 @@ Deno.serve(async (req) => {
   // Fetch appointment (RLS bypassed via service role)
   const { data: appt, error: apptErr } = await admin
     .from('appointments')
-    .select('id, date, time, doctor_id, parent_id, child_id, meet_link')
+    .select('id, date, time, status, doctor_id, parent_id, child_id, meet_link')
     .eq('id', body.appointmentId)
     .maybeSingle();
   if (apptErr || !appt) return jsonResponse({ error: 'Appointment not found' }, 404);
 
+  // Only the parent on the appointment or its doctor may create the event.
+  if (appt.parent_id !== caller.id) {
+    const { data: doctorAuth } = await admin
+      .from('doctor_auth')
+      .select('doctor_id')
+      .eq('id', caller.id)
+      .maybeSingle();
+    if (doctorAuth?.doctor_id !== appt.doctor_id) {
+      return jsonResponse({ error: 'Appointment not found' }, 404);
+    }
+  }
+
   // Idempotent — if already has a Meet link from a prior call, return it.
   if (appt.meet_link) return jsonResponse({ ok: true, meetLink: appt.meet_link, reused: true });
+
+  // No calendar invite for a consult that was cancelled or already happened.
+  if (appt.status !== 'upcoming') {
+    return jsonResponse({ error: 'This consult is no longer upcoming' }, 409);
+  }
 
   // Doctor's Google refresh token
   const { data: tok } = await admin
@@ -94,7 +104,8 @@ Deno.serve(async (req) => {
   });
   if (!tokenRes.ok) {
     const err = await tokenRes.text().catch(() => 'unknown');
-    return jsonResponse({ error: `Token refresh failed: ${err}` }, 502);
+    console.error(`[create-meet-event] token refresh ${tokenRes.status} for doctor ${appt.doctor_id}: ${err}`);
+    return jsonResponse({ error: 'Could not reach Google Calendar' }, 502);
   }
   const tokenData = await tokenRes.json();
   const accessToken: string | undefined = tokenData.access_token;
@@ -126,14 +137,14 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        summary: `Pedia Pulse — ${child?.name ?? 'Consultation'}`,
-        description: 'Paediatric video consultation booked via Pedia Pulse.',
+        summary: `LilSteps video consult — ${child?.name ?? 'your patient'}`,
+        description: 'Paediatric video consultation booked in the LilSteps app.',
         start: { dateTime: startIsoForApi, timeZone: CLINIC_TZ },
         end: { dateTime: endIso, timeZone: CLINIC_TZ },
         attendees,
         conferenceData: {
           createRequest: {
-            requestId: `pp-${appt.id}`,
+            requestId: `lilsteps-${appt.id}`,
             conferenceSolutionKey: { type: 'hangoutsMeet' },
           },
         },
@@ -142,7 +153,8 @@ Deno.serve(async (req) => {
   );
   if (!eventRes.ok) {
     const err = await eventRes.text().catch(() => 'unknown');
-    return jsonResponse({ error: `Calendar API ${eventRes.status}: ${err}` }, 502);
+    console.error(`[create-meet-event] Calendar API ${eventRes.status} for appt ${appt.id}: ${err}`);
+    return jsonResponse({ error: 'Could not create the calendar event' }, 502);
   }
   const event = await eventRes.json();
   const meetLink: string | undefined =
@@ -156,7 +168,8 @@ Deno.serve(async (req) => {
     .update({ meet_link: meetLink })
     .eq('id', appt.id);
   if (updateErr) {
-    return jsonResponse({ error: `DB update failed: ${updateErr.message}` }, 500);
+    console.error(`[create-meet-event] meet_link update failed for ${appt.id}: ${updateErr.message}`);
+    return jsonResponse({ error: 'Could not save the meeting link' }, 500);
   }
 
   return jsonResponse({ ok: true, meetLink, eventId: event.id });

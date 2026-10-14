@@ -13,11 +13,14 @@
 //
 // Or, simpler: invoke via Supabase Scheduled Functions in the dashboard.
 //
-// Deploy: `supabase functions deploy appointment-reminders --no-verify-jwt --project-ref opdosbudlzwywdmrxlqr`
+// NOT DEPLOYED yet: no SMS provider (Twilio/DLT) and no pg_cron schedule.
+// Rejects any caller without a server key, so deploying it is safe.
+//
+// Deploy: `supabase functions deploy appointment-reminders --no-verify-jwt --project-ref ahikfefphptmtivwukpv`
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { dispatch } from '../_shared/notify.ts';
 import { jsonResponse } from '../_shared/cors.ts';
+import { createAdminClient, isServerCaller } from '../_shared/supabase.ts';
 
 interface AppointmentRow {
   id: string;
@@ -35,12 +38,12 @@ function buildSlot(date: string, time: string): Date {
   return new Date(`${date}T${time.slice(0, 8)}+05:30`);
 }
 
-Deno.serve(async () => {
-  const admin = createClient(
-    Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-    { auth: { persistSession: false } },
-  );
+Deno.serve(async (req) => {
+  // Cron-only: deployed with --no-verify-jwt, so gate on a server key here.
+  // pg_net should send the secret key on the `apikey` header (from Vault).
+  if (!isServerCaller(req)) return jsonResponse({ error: 'Unauthorized' }, 401);
+
+  const admin = createAdminClient();
 
   const now = new Date();
   const horizonEnd = new Date(now.getTime() + 26 * 3600 * 1000); // a bit > 24h
@@ -58,7 +61,10 @@ Deno.serve(async () => {
     .lte('date', horizonIso)
     .returns<AppointmentRow[]>();
 
-  if (error) return jsonResponse({ error: error.message }, 500);
+  if (error) {
+    console.error(`[appointment-reminders] query failed: ${error.message}`);
+    return jsonResponse({ error: 'Query failed' }, 500);
+  }
 
   const results: Array<{ id: string; template: string; ok: boolean; error?: string }> = [];
 

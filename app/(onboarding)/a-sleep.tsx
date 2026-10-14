@@ -1,22 +1,23 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ChipGroup } from '@/components/chip-group';
 import { OnboardingShell } from '@/components/onboarding-shell';
+import { fromChips, toChips } from '@/components/onboarding/chips';
 import { AppColors } from '@/constants/theme';
+import { useOnboarding } from '@/context/onboarding';
 
 const SLEEP_HOURS = ['8–10 hrs', '10–12 hrs', '12–14 hrs', '14–16 hrs', '16–18 hrs', '18–20 hrs'];
 const CONCERNS = ['Frequent night waking', 'Breathing issues during sleep', 'None'];
 
 export default function SleepInfantScreen() {
-  const [hours, setHours] = useState<string[]>([]);
-  const [concerns, setConcerns] = useState<string[]>([]);
+  const { aSleep: answers, updateSection } = useOnboarding();
+  const set = (patch: Partial<typeof answers>) => updateSection('aSleep', patch);
 
   return (
     <OnboardingShell
+      screen="a-sleep"
       sprout="sleepy"
-      progress={1}
       title="Sleep"
       subtitle="Helps us keep an eye on wellbeing"
       ctaLabel="Finish"
@@ -24,15 +25,16 @@ export default function SleepInfantScreen() {
     >
       <View>
         <Text style={styles.fieldLabel}>Average sleep hours per day</Text>
-        <ChipGroup options={SLEEP_HOURS} selected={hours} onChange={setHours} />
+        <ChipGroup label="Average sleep hours per day" options={SLEEP_HOURS} selected={toChips(answers.hours)} onChange={(v) => set({ hours: fromChips(v) })} />
       </View>
 
       <View>
         <Text style={styles.fieldLabel}>Any sleep concerns?</Text>
         <ChipGroup
+          label="Any sleep concerns?"
           options={CONCERNS}
-          selected={concerns}
-          onChange={setConcerns}
+          selected={answers.concerns}
+          onChange={(concerns) => set({ concerns })}
           multiSelect
           noneValue="None"
         />
