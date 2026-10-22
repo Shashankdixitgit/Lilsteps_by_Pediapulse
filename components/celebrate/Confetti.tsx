@@ -4,7 +4,7 @@ import Animated, { SharedValue, useAnimatedStyle } from 'react-native-reanimated
 
 import { AppColors } from '@/constants/theme';
 
-const COLORS = [AppColors.mint, AppColors.sunshine, AppColors.peach, AppColors.sky, AppColors.secondary];
+const COLORS = [AppColors.mint, AppColors.sunshine, AppColors.peach, AppColors.sky, AppColors.primary];
 
 interface Piece {
   vx: number;

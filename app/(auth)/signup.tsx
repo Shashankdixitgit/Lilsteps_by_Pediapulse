@@ -12,7 +12,7 @@ import { layout, typography } from '@/styles/global';
 import { DEMO_LOGIN, toMobileDigits, useAuth } from '@/context/auth';
 import { supabase } from '@/lib/supabase';
 import { dbg } from '@/lib/debug';
-import { DEMO_FAMILY_PHONE, DEMO_OTP, DEMO_PARENT_NAME, randomDemoPhone, WEB_DEMO } from '@/lib/webDemo';
+import { DEMO_OTP, DEMO_PARENT_NAME, randomDemoPhone, WEB_DEMO } from '@/lib/webDemo';
 import { formatPhone, isValidPhone, normalisePhone } from '@/lib/phone';
 
 export default function SignupScreen() {

@@ -510,7 +510,9 @@ export default async function ConsultationPage({
                       <div className="truncate text-[14px] text-[var(--ink)]">{d.title}</div>
                       <div className="text-[12px] text-[var(--ink-3)]">
                         {DOC_CATEGORY[d.category] ?? d.category} · {formatDate(d.document_date)}
+                        {d.doctor_name ? ` · ${d.doctor_name}` : ''}
                       </div>
+                      {d.notes ? <div className="text-[12px] text-[var(--ink-2)]">{d.notes}</div> : null}
                     </div>
                     <a href={`/records/${d.id}`} target="_blank" rel="noreferrer" className="link-underline shrink-0 text-[13px] text-[var(--ink)]">
                       Open ↗
@@ -690,8 +692,8 @@ function FlagList({ label, items, alert }: { label: string; items: string[]; ale
     <div className={alert ? 'border-l-[3px] border-[var(--ink)] pl-3' : ''}>
       <div className={`text-[12px] ${alert ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-3)]'}`}>{label}</div>
       <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[14px] text-[var(--ink)]">
-        {items.map((it) => (
-          <li key={it}>{it}</li>
+        {items.map((it, i) => (
+          <li key={`${i}-${it}`}>{it}</li>
         ))}
       </ul>
     </div>

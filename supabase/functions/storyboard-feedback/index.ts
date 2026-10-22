@@ -1,7 +1,7 @@
 // Edge Function: storyboard-feedback
 //
 // Feedback from the client on the shared storyboard page. Public (no login):
-// verify_jwt is off and the page sends no key. Rows live in
+// verify_jwt is off (deploy with --no-verify-jwt) and the page sends no key. Rows live in
 // public.storyboard_feedback and are only reached through this function.
 //
 //   GET                                   → all feedback, oldest first
@@ -25,7 +25,9 @@ const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/openai/
 const MODEL = 'gemini-3.5-flash';
 const FIELDS = 'id, screen_id, screen_name, author, feedback, ai_followup, reply, created_at, replied_at';
 
-const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+// Cut by code point so an emoji is never split into a lone surrogate.
+const str = (v: unknown, max: number) => (typeof v === 'string' ? Array.from(v.trim()).slice(0, max).join('') : '');
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** One short follow-up question when the feedback is too vague to act on, else null. */
 async function followUp(screenName: string, feedback: string): Promise<string | null> {
@@ -49,6 +51,8 @@ If it is vague, reply with ONE short, friendly follow-up question (max 25 words)
         max_tokens: 80,
         reasoning_effort: 'none',
       }),
+      // A stalled model must not cost the client their note.
+      signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) {
       console.error('gemini', res.status, (await res.text()).slice(0, 300));
@@ -91,7 +95,8 @@ Deno.serve(async (req) => {
 
     // Light abuse guard: at most 120 new notes an hour across the page.
     const since = new Date(Date.now() - 3600_000).toISOString();
-    const { count } = await db.from('storyboard_feedback').select('id', { count: 'exact', head: true }).gte('created_at', since);
+    const { count, error: countError } = await db.from('storyboard_feedback').select('id', { count: 'exact', head: true }).gte('created_at', since);
+    if (countError) return json({ error: 'Please try again in a moment.' }, 503);
     if ((count ?? 0) >= 120) return json({ error: 'Too much feedback in the last hour. Please try again later.' }, 429);
 
     const ai_followup = await followUp(screen_name || screen_id, feedback);
@@ -107,7 +112,7 @@ Deno.serve(async (req) => {
   if (body?.action === 'reply') {
     const id = str(body.id, 40);
     const reply = str(body.reply, 3000);
-    if (!id || !reply) return json({ error: 'Write a reply first.' }, 400);
+    if (!UUID.test(id) || !reply) return json({ error: 'Write a reply first.' }, 400);
     const { data, error } = await db
       .from('storyboard_feedback')
       .update({ reply, replied_at: new Date().toISOString() })
