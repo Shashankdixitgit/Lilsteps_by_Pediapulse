@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { AuthError, Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { dbg } from '@/lib/debug';
+import { WEB_DEMO } from '@/lib/webDemo';
 import { analytics, crash } from '@/lib/observability';
 
 interface AuthState {
@@ -24,9 +25,10 @@ const AuthContext = createContext<AuthState | null>(null);
  * any code is accepted. Each phone number maps to its own email/password
  * account, so logging in again with the same number returns the same data.
  * Remove the env var to go back to real SMS OTP. Never active in release
- * builds (__DEV__ is false there), even if the env var is set.
+ * builds (__DEV__ is false there), even if the env var is set, except the
+ * hosted web demo (lib/webDemo), which is web only.
  */
-export const DEMO_LOGIN = __DEV__ && process.env.EXPO_PUBLIC_DEMO_LOGIN === '1';
+export const DEMO_LOGIN = (__DEV__ && process.env.EXPO_PUBLIC_DEMO_LOGIN === '1') || WEB_DEMO;
 
 /**
  * What a parent types in the phone field, reduced to the 10-digit Indian
@@ -86,7 +88,7 @@ export function authErrorText(error: unknown, step: 'send' | 'verify'): string {
 }
 
 /**
- * DEV ONLY (reachable only when DEMO_LOGIN, which is gated on __DEV__): each
+ * DEV / WEB DEMO ONLY (reachable only when DEMO_LOGIN): each
  * phone maps to its own email/password test account. The password meets the
  * Auth password policy (lower + upper case + digit); accounts created before
  * that policy still use the old password, so sign-in falls back to it.

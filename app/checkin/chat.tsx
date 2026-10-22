@@ -27,6 +27,7 @@ import { AppColors, CanvasFade, FontFamily, Radius } from '@/constants/theme';
 import { typography } from '@/styles/global';
 import { useChild } from '@/context/child';
 import { useCheckin } from '@/hooks/useCheckin';
+import { WEB_DEMO } from '@/lib/webDemo';
 
 function callEmergency() {
   Linking.openURL('tel:112').catch(() => {});
@@ -67,7 +68,7 @@ export default function CheckinChatScreen() {
 
   const { child, loading: childLoading, refetch: refetchChildren } = useChild();
   const checkin = useCheckin(child);
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState(WEB_DEMO ? 'Since yesterday evening. She is drinking fluids well.' : '');
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [started, setStarted] = useState(false);
   const [refetchingChild, setRefetchingChild] = useState(false);

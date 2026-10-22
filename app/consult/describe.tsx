@@ -18,6 +18,7 @@ import { TextInputField } from '@/components/text-input-field';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { typography } from '@/styles/global';
+import { WEB_DEMO } from '@/lib/webDemo';
 
 // Bracket-specific quick complaint chips
 const COMPLAINT_CHIPS: Record<string, string[]> = {
@@ -41,7 +42,8 @@ export default function DescribeScreen() {
   const chips = COMPLAINT_CHIPS[bracket ?? ''] ?? DEFAULT_CHIPS;
 
   const [selectedChips, setSelectedChips] = useState<string[]>([]);
-  const [description, setDescription] = useState('');
+  // Web demo: a sample concern so the booking can be tried in one tap.
+  const [description, setDescription] = useState(WEB_DEMO ? 'Mild fever since yesterday evening, eating a little less than usual.' : '');
 
   const canContinue = selectedChips.length > 0 || description.trim().length >= 3;
   const summaryText = [

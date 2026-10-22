@@ -12,6 +12,7 @@ import { AppColors } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
 import { DEMO_LOGIN, toMobileDigits, useAuth } from '@/context/auth';
 import { dbg } from '@/lib/debug';
+import { DEMO_FAMILY_PHONE, DEMO_OTP, DEMO_PARENT_NAME, randomDemoPhone, WEB_DEMO } from '@/lib/webDemo';
 import { formatPhone, isValidPhone, normalisePhone } from '@/lib/phone';
 
 export default function LoginScreen() {
@@ -19,8 +20,9 @@ export default function LoginScreen() {
   const { signInWithOtp, verifyOtp } = useAuth();
 
   // The 10-digit mobile number; the field shows a fixed +91 in front.
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
+  // Web demo: the sample family that already has visits and records.
+  const [phone, setPhone] = useState(WEB_DEMO ? DEMO_FAMILY_PHONE : '');
+  const [otp, setOtp] = useState(WEB_DEMO ? DEMO_OTP : '');
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

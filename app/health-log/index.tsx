@@ -28,6 +28,7 @@ import { useHealthNotes, type HealthNoteRow } from '@/hooks/useHealthNotes';
 import { formatDate } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
+import { WEB_DEMO } from '@/lib/webDemo';
 
 const CATEGORY_LABELS = HEALTH_CATEGORIES.map((c) => c.label);
 
@@ -51,7 +52,7 @@ export default function HealthLogScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [category, setCategory] = useState<HealthNoteRow['category']>('symptom');
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(WEB_DEMO ? 'Slight cough at night, no fever.' : '');
   const [severity, setSeverity] = useState(1);
   const [saving, setSaving] = useState(false);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);

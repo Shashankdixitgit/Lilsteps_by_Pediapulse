@@ -12,16 +12,18 @@ import { layout, typography } from '@/styles/global';
 import { DEMO_LOGIN, toMobileDigits, useAuth } from '@/context/auth';
 import { supabase } from '@/lib/supabase';
 import { dbg } from '@/lib/debug';
+import { DEMO_FAMILY_PHONE, DEMO_OTP, DEMO_PARENT_NAME, randomDemoPhone, WEB_DEMO } from '@/lib/webDemo';
 import { formatPhone, isValidPhone, normalisePhone } from '@/lib/phone';
 
 export default function SignupScreen() {
   const insets = useSafeAreaInsets();
   const { signInWithOtp, verifyOtp } = useAuth();
 
-  const [name, setName] = useState('');
+  // Web demo: filled in, with a fresh number so each tester gets a new account.
+  const [name, setName] = useState(WEB_DEMO ? DEMO_PARENT_NAME : '');
   // The 10-digit mobile number; the field shows a fixed +91 in front.
-  const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
+  const [phone, setPhone] = useState(() => (WEB_DEMO ? randomDemoPhone() : ''));
+  const [otp, setOtp] = useState(WEB_DEMO ? DEMO_OTP : '');
   const [step, setStep] = useState<'details' | 'otp'>('details');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

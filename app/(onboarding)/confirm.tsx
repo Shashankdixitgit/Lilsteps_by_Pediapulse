@@ -38,6 +38,7 @@ import {
 import { formatAgeLabel } from '@/lib/age';
 import { formatDate, toDateOnlyString, todayDateOnly } from '@/lib/date';
 import { dbg } from '@/lib/debug';
+import { WEB_DEMO } from '@/lib/webDemo';
 import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
 
@@ -152,7 +153,7 @@ export default function ConfirmScreen() {
   } = useOnboarding();
   const { user, refreshHasChildren } = useAuth();
   const { children: existingChildren, refetch, refetchParentName, selectChild } = useChild();
-  const [agreed, setAgreed] = useState(false);
+  const [agreed, setAgreed] = useState(WEB_DEMO);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const progress = useRef<SaveProgress>({ ...EMPTY_PROGRESS });
