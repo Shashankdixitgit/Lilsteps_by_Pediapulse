@@ -48,21 +48,32 @@ export function OnboardingAnswersList({
       </p>
     );
   }
+  // One table, grouped by section, so the doctor can scan question → answer.
   return (
-    <div className="grid grid-cols-1 gap-x-10 gap-y-6 md:grid-cols-2">
-      {sections.map((s) => (
-        <div key={s.title}>
-          <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">{s.title}</div>
-          <dl className="mt-2 border-t border-[var(--hairline)]">
+    <div className="overflow-x-auto rounded-xl border border-[var(--hairline)]">
+      <table className="w-full border-collapse text-left text-[14px]">
+        <thead className="bg-[var(--paper-soft)]">
+          <tr>
+            <th className="w-[55%] border-b border-[var(--hairline)] px-4 py-2.5 text-[12px] font-semibold text-[var(--ink-2)]">Question</th>
+            <th className="border-b border-[var(--hairline)] px-4 py-2.5 text-[12px] font-semibold text-[var(--ink-2)]">Parent&apos;s answer</th>
+          </tr>
+        </thead>
+        {sections.map((s) => (
+          <tbody key={s.title}>
+            <tr className="border-t border-[var(--hairline)] first:border-t-0">
+              <th colSpan={2} className="bg-[var(--paper-soft)]/60 px-4 pb-1.5 pt-3 text-[12px] font-semibold uppercase tracking-[0.08em] text-[var(--ink)]">
+                {s.title}
+              </th>
+            </tr>
             {s.items.map((i) => (
-              <div key={i.label} className="grid grid-cols-1 gap-0.5 border-b border-[var(--hairline)] py-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:gap-4">
-                <dt className="text-[13px] leading-[1.45] text-[var(--ink-3)]">{i.label}</dt>
-                <dd className="whitespace-pre-line break-words text-[14px] leading-[1.45] text-[var(--ink)]">{i.value}</dd>
-              </div>
+              <tr key={i.label} className="border-t border-[var(--hairline)]">
+                <td className="px-4 py-2.5 align-top leading-[1.5] text-[var(--ink-3)]">{i.label}</td>
+                <td className="whitespace-pre-line break-words px-4 py-2.5 align-top leading-[1.5] text-[var(--ink)]">{i.value}</td>
+              </tr>
             ))}
-          </dl>
-        </div>
-      ))}
+          </tbody>
+        ))}
+      </table>
     </div>
   );
 }

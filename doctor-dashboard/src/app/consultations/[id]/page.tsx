@@ -209,399 +209,339 @@ export default async function ConsultationPage({
   );
   const allVaccines = vaccinations ?? [];
 
+  const firstName = child.name.split(' ')[0];
+  const hasFlags = !!(allergies?.length || conditions?.length || medications?.length || allergiesNotKnown);
+  const lastMeasured = growth?.[0]?.measured_at ?? null;
+
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-12">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-10">
       {issued && (
         <Suspense>
-          <FlashToast param="issued" message={`Prescription issued to ${child.name.split(' ')[0]}'s parent`} />
+          <FlashToast param="issued" message={`Prescription issued to ${firstName}'s parent`} />
         </Suspense>
       )}
-      {/* Editorial header */}
-      <header className="mb-10 fade-up">
-        <Link href="/" className="link-underline font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
-          ← back to queue
-        </Link>
-        <div className="mt-6 grid grid-cols-[6rem_1fr_auto] items-baseline gap-6 border-b border-[var(--hairline)] pb-6">
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-              {stamp.weekday} {stamp.month}
-            </div>
-            <div className="font-display text-[44px] leading-[1] text-[var(--ink)]">{stamp.day}</div>
-            <div className="mt-1 font-mono text-[12px] tracking-[0.1em] text-[var(--ink-2)]">{stamp.time}</div>
+
+      <Link href="/" className="link-underline text-[13px] text-[var(--ink-3)]">
+        ← Back to queue
+      </Link>
+
+      {/* Patient header */}
+      <header className="mt-5 fade-up rounded-2xl border border-[var(--hairline)] bg-[var(--card)] p-6">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="min-w-0">
+            <h1 className="font-display text-[32px] leading-tight text-[var(--ink)]">{child.name}</h1>
+            <p className="mt-1 text-[15px] text-[var(--ink-2)]">
+              {age} · <span className="capitalize">{child.sex}</span>
+            </p>
+            <p className="mt-1 text-[14px] text-[var(--ink-3)]">Parent: {parentContact(appointment.parents)}</p>
           </div>
-          <div>
-            <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">Patient</div>
-            <h1 className="mt-2 font-display text-[36px] leading-tight text-[var(--ink)]">{child.name}</h1>
-            <div className="mt-2 font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
-              {age} · {child.sex} · parent{' '}
-              <span className="normal-case tracking-normal">{parentContact(appointment.parents)}</span>
+          <div className="text-right">
+            <div className="text-[15px] font-semibold text-[var(--ink)]">
+              {stamp.weekday} {stamp.day} {stamp.month} · {stamp.time}
             </div>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <span
-              className={`inline-flex items-center rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.14em] ${
-                appointment.status === 'upcoming'
-                  ? 'border-[var(--ink)] text-[var(--ink)]'
-                  : 'border-[var(--hairline-strong)] text-[var(--ink-3)]'
-              }`}
-            >
-              {STATUS_LABEL[appointment.status] ?? appointment.status}
-            </span>
-            <UrgencyBadge urgency={urgency} />
-            {isLate && <LateBadge />}
-            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-4)]">
-              Video · 30 min
-            </span>
+            <div className="mt-0.5 text-[13px] text-[var(--ink-3)]">Video consult · 30 min</div>
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              <span
+                className={`inline-flex items-center rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] ${
+                  appointment.status === 'upcoming'
+                    ? 'border-[var(--ink)] text-[var(--ink)]'
+                    : 'border-[var(--hairline-strong)] text-[var(--ink-3)]'
+                }`}
+              >
+                {STATUS_LABEL[appointment.status] ?? appointment.status}
+              </span>
+              <UrgencyBadge urgency={urgency} />
+              {isLate && <LateBadge />}
+            </div>
           </div>
         </div>
 
-        {urgency === 'urgent' && appointment.status === 'upcoming' && (
-          <div
-            role="note"
-            className="mt-6 border-l-[3px] border-[var(--ink)] bg-[var(--paper-soft)] px-5 py-3 text-[14px] leading-[1.55] text-[var(--ink)]"
-          >
-            <span className="font-semibold">Urgent check-in.</span> The AI check-in flagged this child to be
-            seen today. Review the summary below before the call.
-          </div>
-        )}
-
-        {showVideoBanner && <VideoLinkBanner className="mt-6" />}
-
-        {/* Actions */}
-        <div className="mt-6 flex flex-wrap items-center gap-3">
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[var(--hairline)] pt-5">
           {meetLink && (
-            // Prefer the per-appointment Calendar-event Meet link;
-            // fall back to the doctor's permanent room.
+            // Per-appointment Calendar-event Meet link, else the doctor's permanent room.
             <a href={meetLink} target="_blank" rel="noreferrer" className="editorial-btn">
               Start video
             </a>
           )}
           <OpenChatButton appointmentId={appointment.id} />
-          <Link
-            href={`/prescriptions?child=${child.id}`}
-            className="editorial-btn-ghost"
-          >
-            Prescriptions
-          </Link>
-          <Link
-            href={`/prescriptions/new?child=${child.id}&appointment=${appointment.id}`}
-            className="editorial-btn-ghost"
-          >
+          <Link href={`/prescriptions/new?child=${child.id}&appointment=${appointment.id}`} className="editorial-btn-ghost">
             {prescriptions.length > 0 ? 'Issue another prescription' : 'Issue prescription'}
+          </Link>
+          <Link href={`/prescriptions?child=${child.id}`} className="editorial-btn-ghost">
+            Past prescriptions
           </Link>
         </div>
       </header>
 
-      {/* appointments.concern (migration 0020): typed by the parent in "Book a
-          doctor", or the AI chief complaint when booked from a check-in. */}
-      {concern && (
-        <Section
-          title={concernFromCheckin ? 'Reason (from check-in)' : 'Reason for visit'}
-          eyebrow={concernFromCheckin ? 'AI check-in' : 'From the parent'}
+      {urgency === 'urgent' && appointment.status === 'upcoming' && (
+        <div
+          role="note"
+          className="mt-4 rounded-xl border-l-[3px] border-[var(--ink)] bg-[var(--paper-soft)] px-5 py-3 text-[14px] leading-[1.55] text-[var(--ink)]"
         >
-          <p className="border-l-2 border-[var(--ink)] pl-5 font-display-italic text-[18px] leading-[1.45] text-[var(--ink)]">
-            &ldquo;{concern}&rdquo;
-          </p>
-        </Section>
-      )}
-
-      {/* AI summary */}
-      <Section title="AI pre-visit summary" eyebrow={checkin?.ai_summary ? 'Generated' : 'Check-in'} className={concern ? 'mt-10' : ''}>
-        {checkin?.ai_summary ? (
-          <>
-            <div className="border-l-2 border-[var(--accent)] pl-5">
-              <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
-                Chief complaint · AI-generated · {URGENCY_LABEL[checkin.ai_summary.suggestedUrgency] ?? `urgency ${checkin.ai_summary.suggestedUrgency}`}
-              </div>
-              <p className="mt-2 font-display text-[22px] leading-[1.25] text-[var(--ink)]">
-                {checkin.ai_summary.chiefComplaint}
-              </p>
-              {checkin.ai_summary.allergyNote && (
-                <p className="mt-3 border-l-[3px] border-[var(--ink)] bg-[var(--paper-soft)] py-2 pl-3 text-[14px] font-semibold text-[var(--ink)]">
-                  ⚠ {checkin.ai_summary.allergyNote}
-                </p>
-              )}
-              {checkin.ai_summary.relevantHistory && (
-                <p className="mt-3 text-[14px] leading-[1.55] text-[var(--ink-2)]">
-                  Relevant history: {checkin.ai_summary.relevantHistory}
-                </p>
-              )}
-            </div>
-            <dl className="mt-5 space-y-3 border-t border-[var(--hairline)] pt-4">
-              {checkin.ai_summary.details.map((d, i) => (
-                <div key={i} className="grid grid-cols-[10rem_1fr] gap-4">
-                  <dt className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]">{d.label}</dt>
-                  <dd className="font-sans text-[14px] leading-[1.55] text-[var(--ink)]">{cleanSummaryValue(d.value)}</dd>
-                </div>
-              ))}
-            </dl>
-            <CheckinTranscript messages={transcript} childFirstName={child.name.split(' ')[0]} />
-          </>
-        ) : (
-          <div className="rounded-xl border border-dashed border-[var(--hairline-strong)] bg-[var(--card)] px-6 py-6">
-            <p className="font-display text-[18px] text-[var(--ink-2)]">No pre-visit summary</p>
-            <p className="mt-1 text-[14px] leading-[1.55] text-[var(--ink-3)]">
-              {checkin?.initial_complaint
-                ? `The parent started a check-in ("${checkin.initial_complaint}") but no summary was generated.`
-                : 'The parent booked without an AI check-in. Ask about symptoms at the start of the call.'}
-            </p>
-            {transcript.length > 0 && (
-              <CheckinTranscript messages={transcript} childFirstName={child.name.split(' ')[0]} />
-            )}
-          </div>
-        )}
-      </Section>
-
-      {/* Vitals + flags row */}
-      <div className="mt-10 grid grid-cols-1 gap-x-10 gap-y-10 md:grid-cols-2">
-        <Section title="Vitals" eyebrow="Measurements">
-          <div className="grid grid-cols-3 gap-6">
-            <Vital label="Weight" value={latestWeight ? `${latestWeight} kg` : '—'} />
-            <Vital label="Height" value={latestHeight ? `${latestHeight} cm` : '—'} />
-            <Vital label="Blood gp" value={child.blood_group ?? '—'} />
-          </div>
-          {growth && growth.length > 0 && (
-            <ul className="mt-5 space-y-1.5 border-t border-[var(--hairline)] pt-3">
-              {growth.map((g) => (
-                <li key={g.id} className="grid grid-cols-[7rem_1fr] gap-4 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--ink-3)]">
-                  <span>{formatDate(g.measured_at)}</span>
-                  <span className="lowercase tracking-normal text-[var(--ink-2)]">
-                    {g.weight ? `${g.weight} kg` : '—'} · {g.height ? `${g.height} cm` : '—'}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        <Section title="Clinical flags" eyebrow="Profile">
-          {!allergies?.length && !conditions?.length && !medications?.length && !allergiesNotKnown ? (
-            <p className="text-[15px] text-[var(--ink-3)]">No flags on file.</p>
-          ) : (
-            <>
-              {!allergies?.length && allergiesNotKnown && (
-                <FlagBlock label="Allergies">
-                  <p className="font-sans text-[14px] font-semibold text-[var(--ink)]">
-                    ⚠ {noAllergiesLabel(true)}.
-                  </p>
-                </FlagBlock>
-              )}
-              {allergies && allergies.length > 0 && (
-                <FlagBlock label="Allergies" color="alert">
-                  <ul className="space-y-1">
-                    {allergies.map((a) => (
-                      <li key={a.id} className="font-sans text-[14px]">
-                        {a.name}{' '}
-                        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-                          · {severityLabel(a.severity)} · {a.type}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </FlagBlock>
-              )}
-              {conditions && conditions.length > 0 && (
-                <FlagBlock label="Chronic conditions">
-                  <ul className="space-y-1">
-                    {conditions.map((c) => (
-                      <li key={c.id} className="font-sans text-[14px]">
-                        {c.name}
-                        {c.details && <span className="text-[var(--ink-3)]"> — {c.details}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </FlagBlock>
-              )}
-              {medications && medications.length > 0 && (
-                <FlagBlock label="Current medications">
-                  <ul className="space-y-1">
-                    {medications.map((m) => (
-                      <li key={m.id} className="font-sans text-[14px]">
-                        {m.name}
-                        {m.dosage && <span className="text-[var(--ink-3)]"> · {m.dosage}</span>}
-                        {m.frequency && <span className="text-[var(--ink-3)]"> · {m.frequency}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                </FlagBlock>
-              )}
-            </>
-          )}
-        </Section>
-      </div>
-
-      {/* Path-specific onboarding answers (C1, children.onboarding_answers) */}
-      <Section title="From onboarding" eyebrow={onboardingAnswersEyebrow(child.onboarding_answers)} className="mt-10">
-        <OnboardingAnswersList answers={child.onboarding_answers} childFirstName={child.name.split(' ')[0]} />
-      </Section>
-
-      {/* Parent's health log (health_notes) */}
-      <Section
-        title="Health log"
-        eyebrow={healthNotes?.length ? `Latest ${healthNotes.length} · from the parent` : 'From the parent'}
-        className="mt-10"
-      >
-        {healthNotesError ? (
-          <p className="font-mono text-[12px] text-[var(--ink-3)]">Could not load the health log: {healthNotesError.message}</p>
-        ) : !healthNotes || healthNotes.length === 0 ? (
-          <p className="text-[15px] text-[var(--ink-3)]">
-            The parent hasn&apos;t logged any notes for {child.name.split(' ')[0]}.
-          </p>
-        ) : (
-          <ul className="border-t border-[var(--hairline)]">
-            {healthNotes.map((n) => (
-              <li key={n.id} className="grid grid-cols-1 gap-1 border-b border-[var(--hairline)] py-3 sm:grid-cols-[11rem_minmax(0,1fr)] sm:gap-4">
-                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-                  <div>{formatDateTime(n.noted_at)}</div>
-                  <div className="mt-0.5 text-[var(--ink-2)]">
-                    {NOTE_CATEGORY[n.category] ?? n.category}
-                    {n.severity ? ` · severity ${n.severity}/5` : ''}
-                  </div>
-                </div>
-                <p className="whitespace-pre-line break-words text-[14px] leading-[1.55] text-[var(--ink)]">{n.content}</p>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {/* Health records uploaded by the parent */}
-      <Section title="Health records" eyebrow={`${documents?.length ?? 0} on file`} className="mt-10">
-        {documentsError ? (
-          <p className="font-mono text-[12px] text-[var(--ink-3)]">Could not load records: {documentsError.message}</p>
-        ) : !documents || documents.length === 0 ? (
-          <p className="text-[15px] text-[var(--ink-3)]">The parent hasn&apos;t uploaded any records for {child.name.split(' ')[0]}.</p>
-        ) : (
-          <ul className="border-t border-[var(--hairline)]">
-            {documents.map((d) => (
-              <li key={d.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 border-b border-[var(--hairline)] py-3">
-                <div className="min-w-0">
-                  <div className="truncate text-[15px] text-[var(--ink)]">{d.title}</div>
-                  <div className="mt-0.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-                    {DOC_CATEGORY[d.category] ?? d.category} · {formatDate(d.document_date)} · {d.file_type}
-                    {d.doctor_name ? <span className="normal-case tracking-normal"> · {d.doctor_name}</span> : null}
-                  </div>
-                  {d.notes && <div className="mt-1 truncate text-[13px] text-[var(--ink-3)]">{d.notes}</div>}
-                </div>
-                <a
-                  href={`/records/${d.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="link-underline font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink)]"
-                >
-                  Open ↗
-                </a>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-
-      {/* Prescriptions issued for this appointment */}
-      <Section
-        title="Prescriptions for this visit"
-        eyebrow={prescriptions.length ? `${prescriptions.length} issued` : 'None issued'}
-        className="mt-10"
-      >
-        {prescriptions.length === 0 ? (
-          <p className="text-[15px] text-[var(--ink-3)]">No prescription has been issued for this visit yet.</p>
-        ) : (
-          <ol className="border-t border-[var(--hairline)]">
-            {prescriptions.map((p, i) => (
-              <li key={p.id} className="border-b border-[var(--hairline)] py-3">
-                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-                  ℞ {i + 1} · issued {formatDateTime(p.issued_at)}
-                </div>
-                <ul className="mt-1 space-y-0.5">
-                  {[...p.prescription_items]
-                    .sort((a, b) => a.position - b.position)
-                    .map((it) => (
-                      <li key={it.id} className="text-[14px] text-[var(--ink)]">
-                        {it.medicine}
-                        <span className="text-[var(--ink-3)]">
-                          {' '}· {it.dose} · {it.frequency}
-                          {it.duration ? ` · ${it.duration}` : ''}
-                        </span>
-                      </li>
-                    ))}
-                </ul>
-                {p.notes && <p className="mt-1 text-[13px] text-[var(--ink-3)]">Note: {p.notes}</p>}
-              </li>
-            ))}
-          </ol>
-        )}
-      </Section>
-
-      {/* Visit notes — writes consultations + appointments.status */}
-      <Section
-        title="Visit notes"
-        eyebrow={appointment.status === 'upcoming' ? 'Close the visit' : STATUS_LABEL[appointment.status] ?? appointment.status}
-        className="mt-12 border-y border-[var(--hairline)] py-10"
-      >
-        <VisitNotesForm
-          appointmentId={appointment.id}
-          status={appointment.status}
-          initial={notesInitial}
-          childFirstName={child.name.split(' ')[0]}
-          slotDate={appointment.date}
-          slotTime={appointment.time}
-        />
-      </Section>
-
-      {/* Vaccinations */}
-      <Section title="Immunisation" eyebrow="Schedule" className="mt-10">
-        <div className="mb-4 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.12em]">
-          <span className="rounded-full border border-[var(--hairline-strong)] px-2.5 py-1 text-[var(--ink-3)]">
-            {doneVaccines.length} done
-          </span>
-          <span
-            className={`rounded-full px-2.5 py-1 ${
-              overdueVaccines.length > 0
-                ? 'border border-[var(--ink)] bg-[var(--ink)] font-semibold text-[var(--paper)]'
-                : 'border border-[var(--hairline-strong)] text-[var(--ink-4)]'
-            }`}
-          >
-            {overdueVaccines.length} overdue
-          </span>
-          <span className="rounded-full border border-[var(--hairline-strong)] px-2.5 py-1 text-[var(--ink-2)]">
-            {upcomingVaccines.length} upcoming
-          </span>
+          <span className="font-semibold">Urgent check-in.</span> The AI check-in suggests seeing {firstName} today.
         </div>
-        {allVaccines.length === 0 && (
-          <p className="text-[15px] text-[var(--ink-3)]">No vaccination schedule on file.</p>
-        )}
-        {overdueVaccines.length > 0 && (
-          <VaccineList label="Overdue" emphasis rows={overdueVaccines} />
-        )}
-        {upcomingVaccines.length > 0 && (
-          <VaccineList label="Upcoming" rows={upcomingVaccines.slice(0, UPCOMING_PREVIEW)} />
-        )}
-        {upcomingVaccines.length > UPCOMING_PREVIEW && (
-          <details className="group mb-5">
-            <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)] hover:text-[var(--ink)]">
-              <span className="group-open:hidden">Show {upcomingVaccines.length - UPCOMING_PREVIEW} more upcoming ▸</span>
-              <span className="hidden group-open:inline">Hide later doses ▾</span>
-            </summary>
-            <VaccineList label="Later" rows={upcomingVaccines.slice(UPCOMING_PREVIEW)} />
-          </details>
-        )}
-        {yearlyVaccines.length > 0 && (
-          <VaccineList label="Yearly · offer each flu season" rows={yearlyVaccines} yearly />
-        )}
-        {otherVaccines.length > 0 && (
-          <VaccineList label="Not sure if given · discuss catch-up" rows={otherVaccines} />
-        )}
-        {doneVaccines.length > 0 && (
-          <details className="group mt-2">
-            <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)] hover:text-[var(--ink)]">
-              <span className="group-open:hidden">Show {doneVaccines.length} given ▸</span>
-              <span className="hidden group-open:inline">Hide given ▾</span>
-            </summary>
-            <VaccineList label="Given" rows={doneVaccines} given />
-          </details>
-        )}
-      </Section>
+      )}
+      {showVideoBanner && <VideoLinkBanner className="mt-4" />}
 
+      <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        {/* ── Main column ── */}
+        <div className="min-w-0 space-y-6">
+          {/* appointments.concern (migration 0020): typed by the parent in "Book a doctor". */}
+          {concern && (
+            <Card title={concernFromCheckin ? 'Reason (from check-in)' : 'Reason for visit, in the parent’s words'}>
+              <p className="text-[16px] leading-[1.5] text-[var(--ink)]">&ldquo;{concern}&rdquo;</p>
+            </Card>
+          )}
+
+          <Card title="Pre-visit summary" tag={summary ? 'Written by AI' : undefined}>
+            {summary ? (
+              <>
+                <div
+                  role="note"
+                  className="mb-5 rounded-lg border border-[var(--hairline-strong)] bg-[var(--paper-soft)] px-4 py-3 text-[13.5px] leading-[1.55] text-[var(--ink-2)]"
+                >
+                  <span className="font-semibold text-[var(--ink)]">This is a summary the AI created</span> from the
+                  parent&apos;s check-in answers. It can miss or misread details and is not a diagnosis. Use it as a
+                  starting point, and talk to the parent in your own natural flow.
+                </div>
+
+                <div className="text-[12px] font-medium uppercase tracking-[0.08em] text-[var(--ink-3)]">Main concern</div>
+                <p className="mt-1 font-display text-[22px] leading-[1.3] text-[var(--ink)]">{summary.chiefComplaint}</p>
+                {urgency && (
+                  <p className="mt-1 text-[13px] text-[var(--ink-3)]">
+                    AI-suggested urgency: <span className="font-medium text-[var(--ink-2)]">{URGENCY_LABEL[urgency] ?? urgency}</span>
+                  </p>
+                )}
+
+                {summary.allergyNote && (
+                  <p className="mt-4 rounded-lg border-l-[3px] border-[var(--ink)] bg-[var(--paper-soft)] px-4 py-2 text-[14px] font-semibold text-[var(--ink)]">
+                    ⚠ {summary.allergyNote}
+                  </p>
+                )}
+
+                <Table
+                  className="mt-5"
+                  head={['What the AI asked about', 'What the parent said']}
+                  rows={summary.details.map((d) => [d.label, cleanSummaryValue(d.value)])}
+                />
+
+                {summary.relevantHistory && (
+                  <p className="mt-4 text-[14px] leading-[1.55] text-[var(--ink-2)]">
+                    <span className="font-semibold text-[var(--ink)]">Relevant history:</span> {summary.relevantHistory}
+                  </p>
+                )}
+
+                <CheckinTranscript messages={transcript} childFirstName={firstName} />
+              </>
+            ) : (
+              <>
+                <p className="text-[14px] leading-[1.55] text-[var(--ink-3)]">
+                  {checkin?.initial_complaint
+                    ? `The parent started a check-in ("${checkin.initial_complaint}") but no summary was generated.`
+                    : 'The parent booked without an AI check-in. Ask about symptoms at the start of the call.'}
+                </p>
+                {transcript.length > 0 && <CheckinTranscript messages={transcript} childFirstName={firstName} />}
+              </>
+            )}
+          </Card>
+
+          <Card
+            title="Visit notes"
+            tag={appointment.status === 'upcoming' ? 'Close the visit' : STATUS_LABEL[appointment.status] ?? appointment.status}
+          >
+            <VisitNotesForm
+              appointmentId={appointment.id}
+              status={appointment.status}
+              initial={notesInitial}
+              childFirstName={firstName}
+              slotDate={appointment.date}
+              slotTime={appointment.time}
+            />
+          </Card>
+
+          {/* Path-specific onboarding answers (C1, children.onboarding_answers) */}
+          <Card title="Background from onboarding" tag={onboardingAnswersEyebrow(child.onboarding_answers)}>
+            <OnboardingAnswersList answers={child.onboarding_answers} childFirstName={firstName} />
+          </Card>
+
+          <Card title="Immunisation">
+            <div className="mb-4 flex flex-wrap gap-2 text-[12px]">
+              <Pill>{doneVaccines.length} given</Pill>
+              <Pill strong={overdueVaccines.length > 0}>{overdueVaccines.length} overdue</Pill>
+              <Pill>{upcomingVaccines.length} upcoming</Pill>
+            </div>
+            {allVaccines.length === 0 ? (
+              <Empty>No vaccination schedule on file.</Empty>
+            ) : (
+              <>
+                {(overdueVaccines.length > 0 || upcomingVaccines.length > 0 || yearlyVaccines.length > 0 || otherVaccines.length > 0) && (
+                  <Table
+                    head={['Vaccine', 'Dose', 'Status']}
+                    rows={[
+                      ...overdueVaccines.map((v) => [v.vaccine_name, v.dose_label, <b key="s">Overdue · due {formatDate(v.scheduled_date)}</b>]),
+                      ...upcomingVaccines.slice(0, UPCOMING_PREVIEW).map((v) => [v.vaccine_name, v.dose_label, `Due ${formatDate(v.scheduled_date)}`]),
+                      ...yearlyVaccines.map((v) => [
+                        v.vaccine_name,
+                        v.dose_label,
+                        v.scheduled_date > today ? `From ${formatDate(v.scheduled_date)}, then yearly` : 'Yearly · offer each flu season',
+                      ]),
+                      ...otherVaccines.map((v) => [v.vaccine_name, v.dose_label, 'Not sure if given · discuss catch-up']),
+                    ]}
+                  />
+                )}
+                {upcomingVaccines.length > UPCOMING_PREVIEW && (
+                  <Fold label={`Show ${upcomingVaccines.length - UPCOMING_PREVIEW} later doses`}>
+                    <Table
+                      head={['Vaccine', 'Dose', 'Status']}
+                      rows={upcomingVaccines.slice(UPCOMING_PREVIEW).map((v) => [v.vaccine_name, v.dose_label, `Due ${formatDate(v.scheduled_date)}`])}
+                    />
+                  </Fold>
+                )}
+                {doneVaccines.length > 0 && (
+                  <Fold label={`Show ${doneVaccines.length} given`}>
+                    <Table
+                      head={['Vaccine', 'Dose', 'Given']}
+                      rows={doneVaccines.map((v) => [
+                        v.vaccine_name,
+                        v.dose_label,
+                        v.administered_date ? formatDate(v.administered_date) : 'Date unknown',
+                      ])}
+                    />
+                  </Fold>
+                )}
+              </>
+            )}
+          </Card>
+        </div>
+
+        {/* ── Sidebar: quick reference ── */}
+        <aside className="min-w-0 space-y-6">
+          <Card title="Vitals" small>
+            <Table
+              compact
+              rows={[
+                ['Weight', latestWeight ? `${latestWeight} kg` : '—'],
+                ['Height', latestHeight ? `${latestHeight} cm` : '—'],
+                ['Blood group', child.blood_group ?? '—'],
+                ...(lastMeasured ? [['Last measured', formatDate(lastMeasured)]] : []),
+              ]}
+            />
+            {growth && growth.length > 1 && (
+              <Fold label="Earlier measurements">
+                <Table
+                  compact
+                  head={['Date', 'Weight', 'Height']}
+                  rows={growth.map((g) => [formatDate(g.measured_at), g.weight ? `${g.weight} kg` : '—', g.height ? `${g.height} cm` : '—'])}
+                />
+              </Fold>
+            )}
+          </Card>
+
+          <Card title="Allergies & conditions" small>
+            {!hasFlags ? (
+              <Empty>None on file.</Empty>
+            ) : (
+              <div className="space-y-4">
+                {(allergies?.length || allergiesNotKnown) ? (
+                  <FlagList
+                    label="Allergies"
+                    alert
+                    items={
+                      allergies?.length
+                        ? allergies.map((a) => `${a.name} · ${severityLabel(a.severity)} (${a.type})`)
+                        : [`${noAllergiesLabel(true)}`]
+                    }
+                  />
+                ) : null}
+                {conditions?.length ? (
+                  <FlagList label="Conditions" items={conditions.map((c) => (c.details ? `${c.name}: ${c.details}` : c.name))} />
+                ) : null}
+                {medications?.length ? (
+                  <FlagList
+                    label="Current medicines"
+                    items={medications.map((m) => [m.name, m.dosage, m.frequency].filter(Boolean).join(' · '))}
+                  />
+                ) : null}
+              </div>
+            )}
+          </Card>
+
+          <Card title="Prescriptions for this visit" small>
+            {prescriptions.length === 0 ? (
+              <Empty>None issued yet.</Empty>
+            ) : (
+              <div className="space-y-4">
+                {prescriptions.map((p, i) => (
+                  <div key={p.id}>
+                    <div className="text-[12px] text-[var(--ink-3)]">
+                      ℞ {i + 1} · {formatDateTime(p.issued_at)}
+                    </div>
+                    <ul className="mt-1 list-disc space-y-1 pl-5 text-[14px] text-[var(--ink)]">
+                      {[...p.prescription_items]
+                        .sort((a, b) => a.position - b.position)
+                        .map((it) => (
+                          <li key={it.id}>
+                            <span className="font-medium">{it.medicine}</span>
+                            <span className="text-[var(--ink-3)]">
+                              {' '}
+                              · {it.dose} · {it.frequency}
+                              {it.duration ? ` · ${it.duration}` : ''}
+                            </span>
+                          </li>
+                        ))}
+                    </ul>
+                    {p.notes && <p className="mt-1 text-[13px] text-[var(--ink-3)]">Note: {p.notes}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card title="Health records" small tag={documents?.length ? `${documents.length}` : undefined}>
+            {documentsError ? (
+              <Empty>Could not load records: {documentsError.message}</Empty>
+            ) : !documents || documents.length === 0 ? (
+              <Empty>No records uploaded.</Empty>
+            ) : (
+              <ul className="divide-y divide-[var(--hairline)]">
+                {documents.map((d) => (
+                  <li key={d.id} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="truncate text-[14px] text-[var(--ink)]">{d.title}</div>
+                      <div className="text-[12px] text-[var(--ink-3)]">
+                        {DOC_CATEGORY[d.category] ?? d.category} · {formatDate(d.document_date)}
+                      </div>
+                    </div>
+                    <a href={`/records/${d.id}`} target="_blank" rel="noreferrer" className="link-underline shrink-0 text-[13px] text-[var(--ink)]">
+                      Open ↗
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          <Card title="Health log" small tag={healthNotes?.length ? `Latest ${healthNotes.length}` : undefined}>
+            {healthNotesError ? (
+              <Empty>Could not load the health log: {healthNotesError.message}</Empty>
+            ) : !healthNotes || healthNotes.length === 0 ? (
+              <Empty>No notes from the parent.</Empty>
+            ) : (
+              <ul className="divide-y divide-[var(--hairline)]">
+                {healthNotes.map((n) => (
+                  <li key={n.id} className="py-2.5">
+                    <div className="text-[12px] text-[var(--ink-3)]">
+                      {formatDateTime(n.noted_at)} · {NOTE_CATEGORY[n.category] ?? n.category}
+                      {n.severity ? ` · severity ${n.severity}/5` : ''}
+                    </div>
+                    <p className="mt-0.5 whitespace-pre-line break-words text-[14px] leading-[1.5] text-[var(--ink)]">{n.content}</p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </aside>
+      </div>
     </main>
   );
 }
@@ -617,151 +557,143 @@ function cleanSummaryValue(value: string): string {
 /** The full AI check-in conversation (checkin_messages), folded away under the summary. */
 function CheckinTranscript({ messages, childFirstName }: { messages: CheckinMessageRow[]; childFirstName: string }) {
   return (
-    <details className="group mt-5 border-t border-[var(--hairline)] pt-4">
-      <summary className="cursor-pointer list-none font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)] hover:text-[var(--ink)]">
-        <span className="group-open:hidden">View full check-in ▸</span>
-        <span className="hidden group-open:inline">Hide full check-in ▾</span>
-      </summary>
+    <Fold label="Read the full check-in conversation" className="mt-5 border-t border-[var(--hairline)] pt-4">
       {messages.length === 0 ? (
-        <p className="mt-3 text-[14px] text-[var(--ink-3)]">The check-in conversation isn&apos;t available.</p>
+        <Empty>The check-in conversation isn&apos;t available.</Empty>
       ) : (
-        <ol className="mt-3 space-y-3">
+        <ol className="space-y-2.5">
           {messages.map((m) => {
             const fromParent = m.role === 'user';
             return (
-              <li
-                key={m.id}
-                className={`grid grid-cols-[7rem_minmax(0,1fr)] gap-4 ${fromParent ? '' : 'text-[var(--ink-2)]'}`}
-              >
-                <div className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-                  <div className={fromParent ? 'font-semibold text-[var(--ink)]' : ''}>
-                    {fromParent ? `${childFirstName}'s parent` : 'AI'}
+              <li key={m.id} className={`flex ${fromParent ? 'justify-end' : 'justify-start'}`}>
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-[14px] leading-[1.5] ${
+                    fromParent ? 'bg-[var(--ink)] text-[var(--paper)]' : 'border border-[var(--hairline)] bg-[var(--paper-soft)] text-[var(--ink)]'
+                  }`}
+                >
+                  <div className={`mb-0.5 text-[11px] ${fromParent ? 'text-[var(--ink-4)]' : 'text-[var(--ink-3)]'}`}>
+                    {fromParent ? `${childFirstName}'s parent` : 'AI'} · {formatClock(m.created_at)}
                   </div>
-                  <div className="mt-0.5">{formatClock(m.created_at)}</div>
+                  <p className="whitespace-pre-line break-words">{m.content}</p>
                 </div>
-                <p className={`whitespace-pre-line break-words text-[14px] leading-[1.55] ${fromParent ? 'text-[var(--ink)]' : ''}`}>
-                  {m.content}
-                </p>
               </li>
             );
           })}
         </ol>
       )}
-    </details>
+    </Fold>
   );
 }
 
-function VaccineList({
-  label,
-  rows,
-  emphasis,
-  given,
-  yearly,
-}: {
-  label: string;
-  rows: VaccinationRow[];
-  emphasis?: boolean;
-  given?: boolean;
-  /** Annual vaccine: no due date to chase, never overdue. */
-  yearly?: boolean;
-}) {
-  return (
-    <div className="mb-5">
-      <div
-        className={`font-mono text-[10px] uppercase tracking-[0.18em] ${
-          emphasis
-            ? 'font-semibold text-[var(--ink)] underline decoration-[var(--hairline-strong)] underline-offset-4'
-            : 'text-[var(--ink-3)]'
-        }`}
-      >
-        {label} · {rows.length}
-      </div>
-      <ul className="mt-2 space-y-1">
-        {rows.map((v) => (
-          <li key={v.id} className="grid grid-cols-[1fr_auto] gap-4 border-b border-[var(--hairline)] py-2 text-[14px]">
-            <span>
-              {v.vaccine_name}{' '}
-              <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-3)]">· {v.dose_label}</span>
-            </span>
-            <span
-              className={`font-mono text-[11px] uppercase tracking-[0.14em] ${
-                emphasis ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-2)]'
-              }`}
-            >
-              {given
-                ? v.administered_date
-                  ? `given ${formatDate(v.administered_date)}`
-                  : 'given · date unknown'
-                : yearly
-                  ? v.scheduled_date > todayIst()
-                    ? `from ${formatDate(v.scheduled_date)}, then yearly`
-                    : 'every year'
-                  : `due ${formatDate(v.scheduled_date)}`}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function Section({
+function Card({
   title,
-  eyebrow,
-  className,
+  tag,
+  small,
   children,
 }: {
   title: string;
-  eyebrow?: string;
-  className?: string;
+  tag?: string;
+  small?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <section className={`fade-up ${className ?? ''}`}>
-      {eyebrow && (
-        <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-3)]">{eyebrow}</div>
-      )}
-      <h2 className="mb-5 mt-1 font-display text-[26px] leading-none tracking-[-0.02em] text-[var(--ink)]">
-        {title}
-      </h2>
-      <div>{children}</div>
+    <section className={`fade-up rounded-2xl border border-[var(--hairline)] bg-[var(--card)] ${small ? 'p-5' : 'p-6'}`}>
+      <div className="mb-4 flex items-baseline justify-between gap-3">
+        <h2 className={`font-display leading-tight text-[var(--ink)] ${small ? 'text-[17px]' : 'text-[21px]'}`}>{title}</h2>
+        {tag && <span className="shrink-0 text-[12px] text-[var(--ink-3)]">{tag}</span>}
+      </div>
+      {children}
     </section>
   );
 }
 
-function Vital({ label, value }: { label: string; value: string }) {
+/** A plain bordered table: first column is the label, the rest the values. */
+function Table({
+  head,
+  rows,
+  compact,
+  className,
+}: {
+  head?: string[];
+  rows: React.ReactNode[][];
+  compact?: boolean;
+  className?: string;
+}) {
+  const pad = compact ? 'px-3 py-2' : 'px-4 py-2.5';
   return (
-    <div>
-      <div className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]">{label}</div>
-      <div className="mt-1 font-display text-[28px] leading-none text-[var(--ink)]">{value}</div>
+    <div className={`overflow-x-auto rounded-xl border border-[var(--hairline)] ${className ?? ''}`}>
+      <table className="w-full border-collapse text-left text-[14px]">
+        {head && (
+          <thead className="bg-[var(--paper-soft)]">
+            <tr>
+              {head.map((h) => (
+                <th key={h} className={`${pad} border-b border-[var(--hairline)] text-[12px] font-semibold text-[var(--ink-2)]`}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+        )}
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-[var(--hairline)] first:border-t-0">
+              {r.map((cell, j) => (
+                <td
+                  key={j}
+                  className={`${pad} align-top leading-[1.5] ${
+                    j === 0 && !head ? `${compact ? 'w-[46%]' : 'w-[38%]'} text-[var(--ink-3)]` : j === 0 ? 'w-[38%] text-[var(--ink)]' : 'text-[var(--ink)]'
+                  }`}
+                >
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
 
-function FlagBlock({
-  label,
-  color,
-  children,
-}: {
-  label: string;
-  color?: 'alert';
-  children: React.ReactNode;
-}) {
-  const isAlert = color === 'alert';
+function Fold({ label, className, children }: { label: string; className?: string; children: React.ReactNode }) {
   return (
-    <div
-      className={`mb-4 pl-4 ${
-        isAlert ? 'border-l-[3px] border-[var(--ink)]' : 'border-l border-[var(--hairline-strong)]'
+    <details className={`group mt-3 ${className ?? ''}`}>
+      <summary className="cursor-pointer list-none text-[13px] font-medium text-[var(--ink-2)] hover:text-[var(--ink)]">
+        <span className="group-open:hidden">{label} ▸</span>
+        <span className="hidden group-open:inline">Hide ▾</span>
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
+function Pill({ strong, children }: { strong?: boolean; children: React.ReactNode }) {
+  return (
+    <span
+      className={`rounded-full px-3 py-1 ${
+        strong
+          ? 'bg-[var(--ink)] font-semibold text-[var(--paper)]'
+          : 'border border-[var(--hairline-strong)] text-[var(--ink-2)]'
       }`}
     >
-      <div
-        className={`font-mono text-[10px] uppercase tracking-[0.18em] ${
-          isAlert ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-3)]'
-        }`}
-      >
-        {label}
-      </div>
-      <div className="mt-2">{children}</div>
+      {children}
+    </span>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="text-[14px] text-[var(--ink-3)]">{children}</p>;
+}
+
+function FlagList({ label, items, alert }: { label: string; items: string[]; alert?: boolean }) {
+  return (
+    <div className={alert ? 'border-l-[3px] border-[var(--ink)] pl-3' : ''}>
+      <div className={`text-[12px] ${alert ? 'font-semibold text-[var(--ink)]' : 'text-[var(--ink-3)]'}`}>{label}</div>
+      <ul className="mt-1 list-disc space-y-0.5 pl-5 text-[14px] text-[var(--ink)]">
+        {items.map((it) => (
+          <li key={it}>{it}</li>
+        ))}
+      </ul>
     </div>
   );
 }
