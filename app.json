@@ -8,8 +8,8 @@
     "icon": "./assets/images/icon.png",
     "scheme": "lilsteps",
     "userInterfaceStyle": "light",
-    "backgroundColor": "#F6F7F2",
-    "primaryColor": "#0E4A35",
+    "backgroundColor": "#fdfeff",
+    "primaryColor": "#49378f",
     "ios": {
       "bundleIdentifier": "com.pediapulse.lilsteps",
       "buildNumber": "1",
@@ -109,7 +109,7 @@
       "package": "com.pediapulse.lilsteps",
       "versionCode": 1,
       "adaptiveIcon": {
-        "backgroundColor": "#0E4A35",
+        "backgroundColor": "#49378f",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -142,7 +142,7 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 160,
           "resizeMode": "contain",
-          "backgroundColor": "#F6F7F2"
+          "backgroundColor": "#fdfeff"
         }
       ],
       "@react-native-community/datetimepicker",
@@ -164,7 +164,7 @@
         "expo-notifications",
         {
           "icon": "./assets/images/notification-icon.png",
-          "color": "#0E4A35"
+          "color": "#49378f"
         }
       ],
       "expo-document-picker",

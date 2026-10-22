@@ -24,7 +24,7 @@ interface OutlineMarqueeProps {
 }
 
 /**
- * Stroked (outline-only) mint text scrolling sideways — the healthnivaran.in
+ * Stroked (outline-only) accent-purple text scrolling sideways — the healthnivaran.in
  * marquee motif. Purely decorative: hidden from screen readers, and static
  * when the OS "reduce motion" setting is on.
  */

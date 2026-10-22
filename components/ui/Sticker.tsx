@@ -11,7 +11,7 @@ type StickerTone = 'sunshine' | 'mint' | 'peach' | 'sky';
 
 const TONES: Record<StickerTone, string> = {
   sunshine: AppColors.sunshine,
-  mint: AppColors.mint,
+  mint: AppColors.lavender, // lavender fill so the primary icon reads (accent purple would be 1.5:1)
   peach: AppColors.peach,
   sky: AppColors.sky,
 };

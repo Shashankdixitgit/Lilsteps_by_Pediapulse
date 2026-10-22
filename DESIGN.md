@@ -1,58 +1,68 @@
-# LilSteps Design System: "Nivaran Soft Clay"
+# LilSteps Design System
 
 LilSteps helps parents look after a young child's health. The look has two layers:
 
-1. **Base (trust):** the flat healthnivaran.in style. Deep forest green, a mint highlight on forest, white cards, sage-grey text, Inter, 10 px control radius, a forest pill CTA with a white arrow circle, light-green glass hero cards (deep green is for actions).
-2. **Kid layer (warmth):** a seedling mascot called Sprout, small celebrations, reward stickers, pastel accents and soft spring motion. This layer frames health information. It never replaces it.
+1. **Base (trust):** the LilSteps purple palette (since 22 Oct 2026). Deep purple for actions, an accent purple for highlights, lavender surfaces, white cards, navy-tinted grey text, Inter, 10 px control radius, a purple pill CTA with a white arrow circle, lavender glass hero cards (deep purple is for actions).
+2. **Kid layer (warmth):** a seedling mascot called Sprout, small celebrations, reward stickers, pastel accents and soft spring motion. This layer frames health information. It never replaces it. Sprout keeps its own green character colours (as on the app icon) on the purple UI.
 
-The source of truth for every value is `constants/theme.ts` (`AppColors`, `Radius`, `Spacing`, `Shadow`, `Motion`, `CanvasFade`, `ChildColors`, `ForestRamp`). `global.css` mirrors the colours 1:1 for HeroUI / uniwind. Typography presets live in `styles/global.ts`.
+The source of truth for every value is `constants/theme.ts` (`AppColors`, `Radius`, `Spacing`, `Shadow`, `Motion`, `CanvasFade`, `ChildColors`, `ForestRamp`). `global.css` mirrors the colours 1:1 for HeroUI / uniwind. Typography presets live in `styles/global.ts`. Token names (`forest`, `mint`, `mintSurface`, `greenWash`, `ForestRamp`, `heroFill`…) are kept from the earlier forest-green theme so call sites did not change; their values are now purple and lavender. Where this file still says forest, mint or light green below, read deep purple, accent purple and lavender.
 
-The app is **light-only**: `app.json` sets `userInterfaceStyle: "light"`, `app/_layout.tsx` calls `Uniwind.setTheme('light')`, and the `@variant dark` block in `global.css` mirrors light. A dark palette is parked (canvas #0B1A13, card #14241C, text #E9F1EA, muted #A9B5AD, accent mint).
+The app is **light-only**: `app.json` sets `userInterfaceStyle: "light"`, `app/_layout.tsx` calls `Uniwind.setTheme('light')`, and the `@variant dark` block in `global.css` mirrors light.
 
 ---
 
 ## 1. Colour
 
-### Why the neutrals are sage
+### Brand palette
 
-Forest and secondary are blue-greens. Next to hue-less cold greys (#fafafa, #f5f5f5) and alpha tints they looked pasted on. Every neutral is now tinted toward the brand hue, every alpha tint is replaced with a solid ramp, and cards stay pure white. Proportions per screen: about 70% neutrals, 20% greens, at most 10% friendly accents.
+| Colour | Role |
+|---|---|
+| #49378f deep purple | Primary: actions and small solid fills |
+| #6052bc purple | Accent: highlights, accent words, links, progress on light |
+| #ebe9ff lavender | Light surfaces and tints |
+| #0b1632 midnight navy | Ink: text, dark sections |
+| #fdfeff near-white | Background |
 
-### Greens
+Green is used only where it means success or status (vaccine "Given", "Normal", success banners) and for Sprout's own drawing. Proportions per screen: about 70% neutrals, 20% purples, at most 10% friendly accents.
+
+### Purples
 
 | Token | Hex | Use |
 |---|---|---|
-| `primary` / `forest` | #0E4A35 | Actions and small solid fills: primary buttons, selected chips, step dots, chat bubbles, active tab, AI tab button, FAB, logo tile, avatars. **Not** big cards (see Light-green glass heroes). Lighter than the original #042618 (user request); white on it 10.2:1, mint on it 4.8:1 |
-| `forestDeep` | #042618 | Small heading text only (display / heading presets), where max contrast matters |
-| `primaryDim` | #093A29 | Pressed forest |
-| `secondary` | #0a4d3a | Green text and links, focus border, chart line, progress fill on light |
-| `mint` / `primaryContainer` | #71c286 | Highlights **on forest only**. Never text or a progress fill on light (1.8:1 on a light hero); decorative shapes only |
-| `mintBorder` | #C6E8CF | Green-tinted borders, selected chip outline |
-| `mintSurface` / `secondaryContainer` | #E4F4E8 | Selected chip, icon wells, focus ring |
-| `greenWash` | #F0F8F2 | Faint green fills (upload card, notes, empty-state blob) |
+| `primary` / `forest` / `gradientEnd` | #49378f | Actions and small solid fills: primary buttons, selected chips, step dots, chat bubbles, active tab, AI tab button, FAB, logo tile, avatars. **Not** big cards. White on it 9.4:1 |
+| `primaryDim` | #3b2c78 | Pressed primary |
+| `forestDeep` | #0b1632 | Heading text (display / heading presets), where max contrast matters |
+| `secondary` / `mint` / `primaryContainer` / `forestSecondary` | #6052bc | Accent text and links, focus border, chart line, progress fill on light (6.1:1 on white, 5.1:1 on lavender). **Never on primary** (1.5:1) |
+| `lavender` | #ebe9ff | Highlights ON primary (7.9:1), e.g. the logo dot and AI sparkle |
+| `mintBorder` | #d9d4ff | Lavender borders, selected chip outline |
+| `mintSurface` / `secondaryContainer` / `heroFill` | #ebe9ff | Selected chip, icon wells, focus ring, hero fill start |
+| `greenWash` / `heroFillEnd` | #f5f4ff | Faint lavender fills (upload card, notes, empty-state blob), hero fill end |
 
-### Sage neutrals
+`ForestRamp` (splash steps, decorative): #49378f, #54439f, #6052bc, #7e72cf, #a299e2.
+
+### Neutrals (tinted toward the brand hue)
 
 | Token | Hex | Rule |
 |---|---|---|
-| `background`, `surface` | #F6F7F2 | Canvas |
+| `background`, `surface` | #fdfeff | Canvas |
 | `card`, `surfaceContainerLowest` | #FFFFFF | Cards, inputs, tab bar |
-| `surfaceContainerLow` | #F9FAF6 | Done rows, pressed-light |
-| `surfaceContainer` | #EFF2EB | Segmented / chip tracks |
-| `surfaceContainerHigh` | #E7EBE3 | Progress track, disabled button bg |
-| `surfaceContainerHighest`, `surfaceDim` | #DDE3D8 | Strong track, dividers on canvas |
-| `border` | #E2E6DD | Decorative hairlines |
-| `borderStrong` | #CDD4C8 | Outline button, unearned sticker slots |
-| `fieldBorder` | #7D8A82 | TextInput and unselected checkbox edge (3.6:1 on white, WCAG 1.4.11) |
-| `onSurface` | #13201A | Primary text (15.6:1) |
-| `onSurfaceVariant` | #4A5750 | Secondary text (7.0:1) |
-| `muted` = `placeholder` | #5F6B64 | Captions, meta, placeholders, disabled labels (>= 4.6:1 on every light surface) |
-| `outline` | #6B7770 | Icons only. As text only on pure white |
-| `outlineVariant` | #A9B4AC | Decorative / disabled icons only |
-| `ink` | #0a0a0a | Black circle in the white pill CTA |
-| `overlay` | rgba(4,38,24,0.45) | Modal scrim |
-| `onDarkMuted` / `onDarkSubtle` / `onDarkBorder` / `onDarkTrack` / `onDarkHairline` | white at 78% / 10% / 22% / 14% / 12% | Text, glassy pills, tracks and hero hairlines on forest |
-| `glassLight` / `glassBorder` | white 80% / forest 14% | Subtle glass on light surfaces (tab bar) |
-| `heroFill` → `heroFillEnd` | #D4EEDC → #E8F5EC | Light-green hero fill, 2-stop gradient top-left to bottom-right |
+| `surfaceContainerLow` | #f8f8fd | Done rows, pressed-light |
+| `surfaceContainer` | #f1f0f9 | Segmented / chip tracks |
+| `surfaceContainerHigh` | #e8e7f3 | Progress track, disabled button bg |
+| `surfaceContainerHighest`, `surfaceDim` | #dddbeb | Strong track, dividers on canvas |
+| `border` | #e5e4f0 | Decorative hairlines |
+| `borderStrong` | #cfcde0 | Outline button, unearned sticker slots |
+| `fieldBorder` | #7c8098 | TextInput and unselected checkbox edge (>= 3:1 on white, WCAG 1.4.11) |
+| `onSurface` | #0b1632 | Primary text (17.9:1) |
+| `onSurfaceVariant` | #474d66 | Secondary text |
+| `muted` = `placeholder` | #5a6079 | Captions, meta, placeholders, disabled labels (>= 5.1:1 on every light surface) |
+| `outline` | #686e86 | Icons only. As text only on pure white |
+| `outlineVariant` | #aaaec2 | Decorative / disabled icons only |
+| `ink` | #0b1632 | Navy circle in the white pill CTA |
+| `overlay` | rgba(11,22,50,0.45) | Modal scrim |
+| `onDarkMuted` / `onDarkSubtle` / `onDarkBorder` / `onDarkTrack` / `onDarkHairline` | white at 78% / 10% / 22% / 14% / 12% | Text, glassy pills, tracks and hero hairlines on primary |
+| `glassLight` / `glassBorder` | white 80% / primary 14% | Subtle glass on light surfaces (tab bar) |
+| `heroFill` → `heroFillEnd` | #ebe9ff → #f5f4ff | Lavender hero fill, 2-stop gradient top-left to bottom-right |
 | `heroSheen` → `heroSheenEnd` | white 50% → 0% | White top highlight over the top 45% of a hero |
 | `heroBorder` | white 85% | 1 px glass edge on light heroes |
 | `heroPill` / `heroTrack` | white 70% | Badges, stat tiles and progress tracks on light heroes (pills add a `mintBorder` hairline) |
@@ -83,9 +93,9 @@ Forest and secondary are blue-greens. Next to hue-less cold greys (#fafafa, #f5f
 
 ---
 
-### Light-green glass heroes (big cards are light green; deep green is for actions)
+### Lavender glass heroes (big cards are lavender; deep purple is for actions)
 
-Every big feature card (splash hero, home check-in card, vaccine progress, consult AI hero, profile header, record "Next steps") is a **light mint card with a touch of glass**, built with `components/ui/HeroCard` (`HeroCard`, or `HeroBackdrop` + `heroCardStyle` when the card itself is pressable; `GlassCard tone="forest"` renders the same thing). Recipe: `heroFill`→`heroFillEnd` gradient, `heroSheen` top highlight, 1 px `heroBorder`, `Shadow.card`, `Radius.xl`. No blur (a blur over the flat canvas adds nothing).
+Every big feature card (splash hero, home check-in card, vaccine progress, consult AI hero, profile header, record "Next steps") is a **light lavender card with a touch of glass**, built with `components/ui/HeroCard` (`HeroCard`, or `HeroBackdrop` + `heroCardStyle` when the card itself is pressable; `GlassCard tone="forest"` renders the same thing). Recipe: `heroFill`→`heroFillEnd` gradient, `heroSheen` top highlight, 1 px `heroBorder`, `Shadow.card`, `Radius.xl`. No blur (a blur over the flat canvas adds nothing).
 
 Content on a hero:
 
@@ -98,7 +108,7 @@ Content on a hero:
 | Display-size highlight (>= 24 px bold) | `success` | 4.3:1 (large text, AA needs 3:1) |
 | Badge / pill | `HeroBadge`: `heroPill` + `mintBorder`, `secondary` text | |
 | Progress | `heroTrack` track, `primary` fill, sunshine thumb | |
-| CTA | `GradientButton` default (`dark`): forest pill, white label 10.2:1, white circle with forest ↗ | |
+| CTA | `GradientButton` default (`dark`): purple pill, white label 9.4:1, white circle with purple ↗ | |
 
 Never `mint` text and never the white-pill/black-circle (`light`) CTA on a light hero.
 

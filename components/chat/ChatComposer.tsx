@@ -21,9 +21,9 @@ export interface ChatComposerProps {
 
 /**
  * Shared chat composer (check-in + doctor chat): one 44-high growing field,
- * `surfaceContainer` fill, no border, with a 36 forest send circle inside it.
+ * `surfaceContainer` fill, no border, with a 36 primary-purple send circle inside it.
  * Disabled send = `surfaceContainerHigh` fill + `outlineVariant` icon (no
- * faded forest). Web: no browser outline, no resize handle.
+ * faded primary). Web: no browser outline, no resize handle.
  */
 export function ChatComposer({
   value,

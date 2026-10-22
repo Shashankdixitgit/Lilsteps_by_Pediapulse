@@ -12,7 +12,7 @@ interface PrimaryCtaCardProps {
   title: string;
   subtitle: string;
   onPress: () => void;
-  /** Label of the deep-green pill (default "Start check-in"). */
+  /** Label of the deep-purple pill (default "Start check-in"). */
   ctaLabel?: string;
   /** Optional hero badge. Off by default (the subtitle already says it). */
   badge?: string;
@@ -22,8 +22,8 @@ interface PrimaryCtaCardProps {
 }
 
 /**
- * Light-green glass hero card for the AI check-in: forestDeep title (17 Bold),
- * short subtitle, static Sprout (care, 56) and a deep-green pill CTA. The
+ * Lavender glass hero card for the AI check-in: forestDeep title (17 Bold),
+ * short subtitle, static Sprout (care, 56) and a deep-purple pill CTA. The
  * pressable area is the card body (no nested buttons); the optional ghost
  * link sits beside it as its own button, inside the same hero.
  */

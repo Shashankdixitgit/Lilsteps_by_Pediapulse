@@ -17,7 +17,7 @@ import {
 } from './whoData';
 import { formatWeightValue } from './format';
 
-// Two colours only: the child's line is forest green, everything WHO is blue.
+// Two colours only: the child's line is deep purple, everything WHO is blue.
 const CHILD = AppColors.primary;
 const WHO = AppColors.info;
 const WHO_FILL = AppColors.infoSurface;
@@ -259,7 +259,7 @@ export function GrowthChart({ tab, measurements, dob, timeFilter, width, childNa
         </SvgText>
       ))}
 
-      {/* Child: one solid green line */}
+      {/* Child: one solid purple line */}
       {points.length > 1 ? (
         <Path d={childPath} stroke={CHILD} strokeWidth={3} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       ) : null}

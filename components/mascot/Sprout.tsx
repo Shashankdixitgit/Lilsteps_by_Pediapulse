@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle, Ellipse, G, Path, Text as SvgText } from 'react-native-svg';
 
-import { AppColors, ForestRamp, Motion } from '@/constants/theme';
+import { AppColors, Motion } from '@/constants/theme';
 import { useMotion } from '@/components/ui/useMotion';
 
 export type SproutMood = 'happy' | 'cheer' | 'think' | 'sleepy' | 'care' | 'wave';
@@ -29,9 +29,13 @@ interface SproutProps {
   style?: StyleProp<ViewStyle>;
 }
 
-// Leaves stay visible on both the light canvas and the forest hero.
-const LEAF_DARK = AppColors.success;
-const LEAF_LIGHT = ForestRamp[3];
+// Sprout keeps its own green character colours (the original seedling, as on the
+// app icon) while the UI around it uses the purple palette.
+const LEAF_DARK = '#1E7A4C';
+const LEAF_LIGHT = '#4E9A62';
+const BODY = '#71c286';
+const BELLY = '#E4F4E8';
+const FACE = '#0E4A35';
 
 /**
  * Sprout: LilSteps' seedling mascot. A round mint body with two leaves.
@@ -110,8 +114,8 @@ export const SproutArt = memo(function SproutArt({ mood, size }: { mood: SproutM
       </G>
 
       {/* Body */}
-      <Ellipse cx={32} cy={41} rx={19} ry={17} fill={AppColors.mint} />
-      <Ellipse cx={32} cy={46} rx={11} ry={8} fill={AppColors.mintSurface} />
+      <Ellipse cx={32} cy={41} rx={19} ry={17} fill={BODY} />
+      <Ellipse cx={32} cy={46} rx={11} ry={8} fill={BELLY} />
 
       {/* Cheeks */}
       <Circle cx={20} cy={44} r={3} fill={AppColors.peach} opacity={0.7} />
@@ -123,7 +127,7 @@ export const SproutArt = memo(function SproutArt({ mood, size }: { mood: SproutM
 });
 
 function Face({ mood }: { mood: SproutMood }) {
-  const forest = AppColors.primary;
+  const forest = FACE;
 
   if (mood === 'sleepy') {
     return (

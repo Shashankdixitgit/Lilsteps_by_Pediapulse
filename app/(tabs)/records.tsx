@@ -44,7 +44,7 @@ const ADD_OPTIONS = [
   { key: 'lab_test', label: 'Lab Test', icon: 'flask-outline', color: AppColors.warningAmber },
   { key: 'visit_history', label: 'Visit Record', icon: 'time-outline', color: AppColors.accentBlue },
   { key: 'discharge_summary', label: 'Discharge Summary', icon: 'bed-outline', color: AppColors.accentBlue },
-  { key: 'vaccination', label: 'Vaccination Certificate', icon: 'medical-outline', color: AppColors.success },
+  { key: 'vaccination', label: 'Vaccination Certificate', icon: 'medical-outline', color: AppColors.primaryDim },
   { key: 'other', label: 'Other Document', icon: 'folder-outline', color: AppColors.onSurfaceVariant },
 ] as const;
 

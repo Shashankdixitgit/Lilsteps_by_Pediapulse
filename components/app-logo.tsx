@@ -5,7 +5,7 @@ import { AppColors } from '@/constants/theme';
 import { typography } from '@/styles/global';
 
 /**
- * The LittleSteps brand logo — forest-green tile with dot pattern + brand name.
+ * The LittleSteps brand logo — deep-purple tile with dot pattern + brand name.
  * Reusable on splash, onboarding, auth, and about screens.
  */
 export function AppLogo() {
@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   dotLarge: {
     width: 14,
     height: 14,
-    backgroundColor: AppColors.mint,
+    backgroundColor: AppColors.lavender,
   },
   dotSmall: {
     width: 10,

@@ -79,7 +79,7 @@ function tabMetrics(windowWidth: number) {
 
 type TabLayout = { x: number; width: number };
 
-/** Mint pill that slides (translateX) behind the active tab icon. Own memoised child. */
+/** Lavender pill that slides (translateX) behind the active tab icon. Own memoised child. */
 const ActivePill = memo(function ActivePill({ layout, width }: { layout: TabLayout | undefined; width: number }) {
   const { reduceMotion } = useMotion();
   const x = useSharedValue(-1);
@@ -254,7 +254,7 @@ function CustomTabBar({ state, navigation }: BottomTabBarProps) {
           style={styles.aiButtonOuter}
         >
           <View style={styles.aiButton}>
-            <Ionicons name="sparkles" size={22} color={AppColors.mint} />
+            <Ionicons name="sparkles" size={22} color={AppColors.lavender} />
           </View>
         </PressableScale>
       </View>

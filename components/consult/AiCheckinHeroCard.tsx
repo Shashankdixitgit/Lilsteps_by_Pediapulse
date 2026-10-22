@@ -11,7 +11,7 @@ export interface AiCheckinHeroCardProps {
 }
 
 /**
- * Light-green glass hero: h1 headline (22, one secondary-green phrase),
+ * Lavender glass hero: h1 headline (22, one accent-purple phrase),
  * up to 3-line body (says what the check-in really does: warning signs +
  * a doctor summary, not a diagnosis), Sprout (care, 56) and the screen's single primary CTA.
  */

@@ -10,7 +10,7 @@ interface HeroBackdropProps {
 }
 
 /**
- * The light-green glass layers of a hero card: a gentle mint gradient plus a
+ * The lavender glass layers of a hero card: a gentle lavender gradient plus a
  * white sheen over the top ~45%. Absolutely positioned and non-interactive, so
  * it can sit as the first child of any container (View, PressableScale) that
  * uses `heroCardStyle`. Clips itself to the radius, so the container does not
@@ -37,15 +37,15 @@ export function HeroBackdrop({ radius = Radius.xl }: HeroBackdropProps) {
 }
 
 interface HeroCardProps extends ViewProps {
-  /** Soft forest-tinted shadow (default true). Pass false if the card clips (overflow:'hidden'). */
+  /** Soft navy-tinted shadow (default true). Pass false if the card clips (overflow:'hidden'). */
   elevated?: boolean;
 }
 
 /**
- * Big feature card: light mint with a touch of glass (very subtle, not
- * frosted). Content rules: titles forestDeep, body onSurfaceVariant,
- * highlights secondary, pills `heroPill` + mintBorder, CTA = default
- * GradientButton (deep-green pill). Never put `mint` text on it.
+ * Big feature card: light lavender with a touch of glass (very subtle, not
+ * frosted). Content rules: titles forestDeep (navy), body onSurfaceVariant,
+ * highlights secondary (accent purple), pills `heroPill` + mintBorder, CTA = default
+ * GradientButton (deep-purple pill).
  */
 export function HeroCard({ children, style, elevated = true, ...props }: HeroCardProps) {
   return (
@@ -73,7 +73,7 @@ export const heroCardStyle = StyleSheet.create({
 
 interface HeroBadgeProps {
   label: string;
-  /** Leading icon; defaults to a small green dot. */
+  /** Leading icon; defaults to a small accent-purple dot. */
   icon?: ReactNode;
   /** Kept for call-site compatibility; badges always render at `sm` now. */
   size?: 'sm' | 'md';
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
     width: 6,
     height: 6,
     borderRadius: 3,
-    backgroundColor: AppColors.success,
+    backgroundColor: AppColors.mint,
   },
   badgeText: {
     fontFamily: FontFamily.medium,
