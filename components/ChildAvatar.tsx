@@ -25,7 +25,7 @@ function hashIndex(id?: string) {
 }
 
 /**
- * Child avatar with a colour ring in the child's own colour (mint, sunshine,
+ * Child avatar with a colour ring in the child's own colour (accent purple, sunshine,
  * peach, sky by sibling order) and a white gap. Without a photo the child is
  * shown as Sprout, the app mascot, on the soft surface.
  */

@@ -6,78 +6,78 @@
 @source './node_modules/heroui-native/lib';
 
 /*
- * HeroUI Native theme overrides: "Nivaran Soft Clay" (see DESIGN.md).
- * Sage-tinted neutrals; light-only. Mirrors constants/theme.ts (AppColors) 1:1.
+ * HeroUI Native theme overrides: LilSteps purple palette (see DESIGN.md).
+ * Cool lavender-tinted neutrals, deep purple accent, navy ink; light-only. Mirrors constants/theme.ts (AppColors) 1:1.
  * The dark variant intentionally mirrors light: the app is locked to light
  * (app.json userInterfaceStyle + Uniwind.setTheme('light') in app/_layout.tsx).
  */
 @theme {
   --radius: 0.625rem; /* 10px controls; cards use rounded-2xl (16px) */
-  --eclipse: #0a0a0a;
+  --eclipse: #0b1632;
 }
 
 @layer theme {
   :root {
     @variant light {
-      --background: #F6F7F2;
-      --foreground: #13201A;
+      --background: #fdfeff;
+      --foreground: #0b1632;
 
       --surface: #FFFFFF;
-      --surface-secondary: #EFF2EB;
-      --surface-tertiary: #E7EBE3;
+      --surface-secondary: #f1f0f9;
+      --surface-tertiary: #e8e7f3;
       --overlay: #FFFFFF;
 
-      --muted: #5F6B64;
-      --default: #EFF2EB;
-      --default-foreground: #13201A;
+      --muted: #5a6079;
+      --default: #f1f0f9;
+      --default-foreground: #0b1632;
 
-      --accent: #0E4A35;
+      --accent: #49378f;
       --accent-foreground: #FFFFFF;
 
       --field-background: #FFFFFF;
-      --field-foreground: #13201A;
+      --field-foreground: #0b1632;
 
       --success: #1E7A4C;
       --warning: #9A5B00;
       --danger: #B42318;
 
       --segment: #FFFFFF;
-      --segment-foreground: #13201A;
+      --segment-foreground: #0b1632;
 
-      --border: #E2E6DD;
-      --separator: #E2E6DD;
-      --focus: #0a4d3a;
+      --border: #e5e4f0;
+      --separator: #e5e4f0;
+      --focus: #6052bc;
     }
 
     @variant dark {
-      --background: #F6F7F2;
-      --foreground: #13201A;
+      --background: #fdfeff;
+      --foreground: #0b1632;
 
       --surface: #FFFFFF;
-      --surface-secondary: #EFF2EB;
-      --surface-tertiary: #E7EBE3;
+      --surface-secondary: #f1f0f9;
+      --surface-tertiary: #e8e7f3;
       --overlay: #FFFFFF;
 
-      --muted: #5F6B64;
-      --default: #EFF2EB;
-      --default-foreground: #13201A;
+      --muted: #5a6079;
+      --default: #f1f0f9;
+      --default-foreground: #0b1632;
 
-      --accent: #0E4A35;
+      --accent: #49378f;
       --accent-foreground: #FFFFFF;
 
       --field-background: #FFFFFF;
-      --field-foreground: #13201A;
+      --field-foreground: #0b1632;
 
       --success: #1E7A4C;
       --warning: #9A5B00;
       --danger: #B42318;
 
       --segment: #FFFFFF;
-      --segment-foreground: #13201A;
+      --segment-foreground: #0b1632;
 
-      --border: #E2E6DD;
-      --separator: #E2E6DD;
-      --focus: #0a4d3a;
+      --border: #e5e4f0;
+      --separator: #e5e4f0;
+      --focus: #6052bc;
     }
   }
 }

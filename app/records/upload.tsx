@@ -30,6 +30,7 @@ import {
 } from '@/hooks/useDocuments';
 import { istTodayDateOnly } from '@/hooks/useGrowth';
 import { typography } from '@/styles/global';
+import { WEB_DEMO } from '@/lib/webDemo';
 
 type DocCategory = DocumentRow['category'];
 
@@ -75,7 +76,7 @@ export default function UploadDocumentScreen() {
   const today = istTodayDateOnly();
   // The date on the report (documents.document_date); today unless changed.
   const [documentDate, setDocumentDate] = useState(today);
-  const [doctorName, setDoctorName] = useState('');
+  const [doctorName, setDoctorName] = useState(WEB_DEMO ? 'Dr. Madhav' : '');
   const [notes, setNotes] = useState('');
   const [fileName, setFileName] = useState('');
   const [fileUri, setFileUri] = useState('');

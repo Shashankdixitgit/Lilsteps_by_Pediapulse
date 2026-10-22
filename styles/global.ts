@@ -8,8 +8,8 @@ import { AppColors, FontFamily } from '@/constants/theme';
  * Vary weight and colour rather than adding sizes. Always fontFamily names,
  * never fontWeight (Android ignores weight on custom families). Nothing below 12.
  *
- * "Accent" is a colour modifier, not a preset: mint on forest, secondary on
- * light (see `accent` / `accentOnDark`).
+ * "Accent" is a colour modifier, not a preset: lavender on primary, secondary
+ * (accent purple) on light (see `accent` / `accentOnDark`).
  */
 /** Splash and onboarding-complete only. */
 const display: TextStyle = {
@@ -109,7 +109,7 @@ export const typography = StyleSheet.create({
   sectionLabel: { ...bodySM, fontFamily: FontFamily.semibold, color: AppColors.onSurface },
   /** Colour modifiers. */
   accent: { color: AppColors.secondary },
-  accentOnDark: { color: AppColors.mint },
+  accentOnDark: { color: AppColors.lavender },
 
   // Legacy names, mapped onto the presets (kept for call sites).
   displayXL: display,

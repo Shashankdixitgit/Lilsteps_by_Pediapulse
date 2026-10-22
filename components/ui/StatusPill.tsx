@@ -3,13 +3,15 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 
-export type StatusTone = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
+export type StatusTone = 'success' | 'warning' | 'danger' | 'info' | 'brand' | 'neutral';
 
 const TONES: Record<StatusTone, { fg: string; bg: string; border: string; icon: keyof typeof Ionicons.glyphMap }> = {
   success: { fg: AppColors.success, bg: AppColors.successSurface, border: AppColors.successBorder, icon: 'checkmark-circle' },
   warning: { fg: AppColors.warning, bg: AppColors.warningSurface, border: AppColors.warningBorder, icon: 'time' },
   danger: { fg: AppColors.danger, bg: AppColors.dangerSurface, border: AppColors.dangerBorder, icon: 'alert-circle' },
   info: { fg: AppColors.info, bg: AppColors.infoSurface, border: AppColors.infoBorder, icon: 'information-circle' },
+  // Non-semantic emphasis (e.g. "New"): palette purple, never success green.
+  brand: { fg: AppColors.primary, bg: AppColors.lavender, border: AppColors.mintBorder, icon: 'sparkles' },
   neutral: { fg: AppColors.onSurfaceVariant, bg: AppColors.surfaceContainer, border: AppColors.border, icon: 'ellipse-outline' },
 };
 

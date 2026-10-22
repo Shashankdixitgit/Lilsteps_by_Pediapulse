@@ -11,7 +11,7 @@ interface QuickActionsProps {
   onRecords?: () => void;
 }
 
-// Pastel wells (friendly accents) with forest icons: contrast 8-10:1.
+// Pastel wells (friendly accents) with primary-purple icons: contrast 8-10:1.
 const ACTIONS = [
   { key: 'book', label: 'Book', icon: 'calendar-outline', well: AppColors.mintSurface, wellPressed: AppColors.mintBorder },
   { key: 'growth', label: 'Growth', icon: 'trending-up-outline', well: AppColors.skySurface, wellPressed: AppColors.infoBorder },

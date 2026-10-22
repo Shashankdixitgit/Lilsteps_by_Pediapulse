@@ -10,7 +10,7 @@ interface GradientBackgroundProps {
 
 /**
  * Full-screen page background (name kept for call-site compatibility): the
- * flat sage canvas, optionally with two soft static blobs. Rendered absolutely
+ * flat near-white canvas, optionally with two soft static blobs. Rendered absolutely
  * behind content, never inside a ScrollView.
  */
 export function GradientBackground({ variant = 'flat' }: GradientBackgroundProps) {

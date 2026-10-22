@@ -9,11 +9,11 @@ interface GradientButtonProps {
   onPress: () => void;
   style?: StyleProp<ViewStyle>;
   /**
-   * `dark` (default): forest pill, white label, white circle with a forest arrow.
-   *          This is also THE CTA on light-green glass heroes (HeroCard).
+   * `dark` (default): deep-purple pill, white label, white circle with a purple arrow.
+   *          This is also THE CTA on lavender glass heroes (HeroCard).
    * `light`: white pill, ink label, black circle with a white arrow. Only on a
-   *          solid forest surface (rare now: heroes are light green).
-   * `outline`: white pill, 1px borderStrong, forest label, no arrow.
+   *          solid primary surface (rare now: heroes are lavender).
+   * `outline`: white pill, 1px borderStrong, primary label, no arrow.
    * `ghost`: text-only secondary action. No fill, no border, `secondary`
    *          label, 44 hit area. Use for every non-primary action.
    * `danger`: text-only destructive action (Sign out): `danger` label.
@@ -37,7 +37,7 @@ interface GradientButtonProps {
  * Primary action button (name kept for call-site compatibility; there is no
  * gradient). Pill + arrow circle echo healthnivaran.in. Squishy press via
  * PressableScale, light haptic. Disabled never uses opacity: it switches to
- * a sage fill with a muted label (AA).
+ * a cool-grey fill with a muted label (AA).
  */
 export function GradientButton({
   label,

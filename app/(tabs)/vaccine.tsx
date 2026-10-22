@@ -202,7 +202,7 @@ export default function VaccineScreen() {
           </View>
         ) : null}
 
-        {/* Light-green glass hero */}
+        {/* Lavender glass hero */}
         <HeroCard style={styles.hero}>
           <View style={styles.heroTop}>
             <View style={styles.heroTitleCol}>

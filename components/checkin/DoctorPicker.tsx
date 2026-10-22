@@ -67,7 +67,7 @@ export interface DoctorPickerProps {
 
 /**
  * Doctor choice as rows inside one hairline card (no card per doctor).
- * Selected row: greenWash fill + forest check. Avatar 36, name 15, spec 13.
+ * Selected row: greenWash (lavender) fill + primary check. Avatar 36, name 15, spec 13.
  * Each row shows qualifications, the next free time and, when the doctor
  * has no video link yet, that the consult is chat only for now (R2-04/R2-18).
  */

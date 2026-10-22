@@ -19,7 +19,7 @@ interface TextInputFieldProps extends TextInputProps {
 /**
  * Text input per DESIGN.md: white field, always-present 1.5px `fieldBorder`
  * (3.6:1, WCAG 1.4.11), 10px radius. Focus swaps the border to secondary and
- * adds a mint focus ring via box-shadow (no layout shift).
+ * adds a lavender focus ring via box-shadow (no layout shift).
  */
 export function TextInputField({ label, hint, hintInline, error, leading, style, ...props }: TextInputFieldProps) {
   const [focused, setFocused] = useState(false);

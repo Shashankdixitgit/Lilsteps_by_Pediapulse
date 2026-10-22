@@ -14,9 +14,10 @@ import { HeroBackdrop, HeroBadge, heroCardStyle } from '@/components/ui/HeroCard
 import { AppColors, FontFamily, ForestRamp, Radius } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { dbg } from '@/lib/debug';
+import { WEB_DEMO } from '@/lib/webDemo';
 import { typography } from '@/styles/global';
 
-// Stepping stones: precomputed solid greens rising from forest to mint.
+// Stepping stones: precomputed solid purples rising from deep purple to soft purple.
 const STONES = [40, 68, 100, 136, 176].map((h, i) => ({ h, color: ForestRamp[i] }));
 
 export default function SplashScreen() {
@@ -56,7 +57,7 @@ export default function SplashScreen() {
         <Text style={styles.wordmark}>LilSteps</Text>
       </Animated.View>
 
-      {/* Hero card: light-green glass, the one bold element */}
+      {/* Hero card: lavender glass, the one bold element */}
       <Animated.View
         entering={FadeIn.delay(100).duration(600)}
         style={[heroCardStyle.card, heroCardStyle.elevated, styles.hero]}
@@ -106,6 +107,12 @@ export default function SplashScreen() {
           label="I already have an account"
           onPress={() => router.push('/(auth)/login')}
         />
+        {WEB_DEMO ? (
+          <Text style={styles.demoNote}>
+            Demo: every form is filled in, and no SMS code is needed.{'\n'}
+            Get started = a new family. I already have an account = a sample family with visits and records.
+          </Text>
+        ) : null}
       </Animated.View>
     </ScrollView>
   );
@@ -147,7 +154,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: AppColors.mint,
+    backgroundColor: AppColors.lavender,
   },
   markDotRow: {
     flexDirection: 'row',
@@ -209,10 +216,10 @@ const styles = StyleSheet.create({
     maxWidth: 300,
     flexShrink: 1,
   },
-  // Display-size highlight: success (4.3:1, large text) reads as green next to forestDeep, like the home greeting.
+  // Display-size highlight: accent purple (6.1:1) next to the navy headline, like the home greeting.
   headlineAccent: {
     fontFamily: FontFamily.bold,
-    color: AppColors.success,
+    color: AppColors.mint,
   },
   subhead: {
     maxWidth: 320,
@@ -220,6 +227,12 @@ const styles = StyleSheet.create({
   heroCta: {
     alignSelf: 'flex-start',
     marginTop: 8,
+  },
+  demoNote: {
+    ...typography.caption,
+    textAlign: 'center',
+    marginTop: 12,
+    paddingHorizontal: 8,
   },
   bottomSection: {
     alignItems: 'center',

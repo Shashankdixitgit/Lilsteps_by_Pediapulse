@@ -17,6 +17,7 @@ import { AppColors, CanvasFade, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useResumableCheckin } from '@/hooks/useCheckin';
 import { typography } from '@/styles/global';
+import { WEB_DEMO } from '@/lib/webDemo';
 
 export default function CheckinEntryScreen() {
   const insets = useSafeAreaInsets();
@@ -34,8 +35,9 @@ export default function CheckinEntryScreen() {
   const moodCardY = useRef<number | null>(null);
 
   const tiles = getTiles(bracket, child?.sex);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [tempStr, setTempStr] = useState('');
+  // Web demo: fever already picked, with a reading.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(WEB_DEMO ? ['Fever'] : []));
+  const [tempStr, setTempStr] = useState(WEB_DEMO ? '100.4' : '');
   // C6: most Indian home thermometers read °F; a value over 45 typed in °C
   // is read as °F (see FeverInput).
   const [tempUnit, setTempUnit] = useState<TempUnit>('F');

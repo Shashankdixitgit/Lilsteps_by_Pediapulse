@@ -23,7 +23,7 @@ interface EmptyStateProps {
 }
 
 /**
- * Friendly empty state: static Sprout + one prop on a soft green blob, a title,
+ * Friendly empty state: static Sprout + one prop on a soft lavender blob, a title,
  * up to two lines of body and an optional action. Replaces the old icon-only
  * empty cards.
  */

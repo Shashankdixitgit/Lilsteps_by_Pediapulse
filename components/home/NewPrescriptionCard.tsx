@@ -39,7 +39,7 @@ export function NewPrescriptionCard({ doctorName, issuedAt, moreCount = 0, onPre
         </View>
       )}
       <View style={styles.text}>
-        <StatusPill dot tone="success" label="New" />
+        <StatusPill dot tone="brand" label="New" />
         <Text style={styles.title}>New prescription from {doctorName}</Text>
         <Text style={styles.meta}>{meta}</Text>
       </View>

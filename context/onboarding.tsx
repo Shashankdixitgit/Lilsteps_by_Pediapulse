@@ -15,6 +15,7 @@ import { useAuth } from '@/context/auth';
 import { getAgeParts, type OnboardingPath } from '@/lib/age';
 import { parseDateOnly, toDateOnlyString } from '@/lib/date';
 import { dbg } from '@/lib/debug';
+import { WEB_DEMO } from '@/lib/webDemo';
 
 /**
  * Every onboarding answer lives here, in memory, for the whole flow.
@@ -241,6 +242,46 @@ const EMPTY_ALLERGIES: AllergyAnswers = {
   food: { selected: [], other: '' },
   environmental: { selected: [], other: '' },
 };
+
+// Hosted web demo (lib/webDemo): every screen starts with sample answers so
+// the client can tap straight through. Answers for all three age paths are
+// set, so a different date of birth still finds its screens filled.
+const DEMO_SECTIONS: OnboardingSections = {
+  parent: { name: '', city: 'Bengaluru', cityOther: '', language: 'English' },
+  conditionsAnswers: { selected: ['None'], other: '', takingMeds: 'No', medications: [EMPTY_MEDICATION] },
+  aBirthHistory: { term: 'Full term', weeks: '', delivery: 'Normal vaginal', birthWeight: '3.1', complications: ['None'] },
+  aFeeding: { feeding: ['Breastfed', 'Solid foods started'], difficulties: ['None'] },
+  aMilestones: { achieved: [] },
+  aSleep: { hours: '12–14 hrs', concerns: ['None'] },
+  bDevelopment: { devConditions: ['None'], devOther: '', school: 'Yes', schoolConcerns: ['None'] },
+  bDietActivity: { diet: 'Vegetarian', picky: 'No', pickyDetails: '', activity: 'Very active', screenTime: '1–2 hrs' },
+  bSleepDental: { hours: '10–11 hrs', sleepConcerns: ['None'], dentalVisit: 'Within 6 months', dentalConcerns: ['None'] },
+  cAcademic: { grade: 'Grade 6', stress: 'Moderate', sports: 'Badminton', frequency: '3–4x per week', screenTime: '2–4 hrs' },
+  cDiet: { diet: 'Vegetarian', caffeine: 'No', bodyImage: 'No' },
+  cPuberty: { menstruation: 'No', regular: '', pain: '', painDetails: '', growthConcerns: 'No', acne: 'No' },
+  cMentalHealth: { moodChanges: 'No', moodDetails: '', anxietyHistory: 'No' },
+  cSleep: { hours: '9–10 hrs', concerns: ['None'] },
+};
+const DEMO_ALLERGIES: AllergyAnswers = {
+  medication: { selected: [ALLERGY_NONE], other: '' },
+  food: { selected: ['Nuts'], other: '' },
+  environmental: { selected: ['Dust'], other: '' },
+};
+/** Every vaccine question answered 'Given' (only the ones shown are saved). */
+const DEMO_VACCINES: Record<string, VaccineAnswer | undefined> = Object.fromEntries(
+  Object.values(VACCINE_QUESTIONS_BY_PATH).flat().map((q) => [q.id, 'Given' as VaccineAnswer]),
+);
+/** Sample child: about 18 months old (path A). */
+function demoDob(): Date {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setMonth(d.getMonth() - 18);
+  return d;
+}
+
+const START_SECTIONS = WEB_DEMO ? DEMO_SECTIONS : EMPTY_SECTIONS;
+const START_ALLERGIES = WEB_DEMO ? DEMO_ALLERGIES : EMPTY_ALLERGIES;
+const START_VACCINES: Record<string, VaccineAnswer | undefined> = WEB_DEMO ? DEMO_VACCINES : {};
 
 // ─── Pure derivations (exported for confirm and tests) ───────────────────────
 
@@ -699,18 +740,18 @@ interface OnboardingState extends OnboardingSections {
 const OnboardingContext = createContext<OnboardingState | null>(null);
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const [childName, setChildName] = useState('');
-  const [bracket, setBracket] = useState<AgeBracket>(null);
-  const [childSex, setChildSex] = useState<ChildSex>(null);
-  const [dob, setDob] = useState<Date | null>(null);
-  const [relationship, setRelationship] = useState('');
-  const [weight, setWeight] = useState('');
-  const [height, setHeight] = useState('');
-  const [bloodGroup, setBloodGroup] = useState('');
-  const [allergyAnswers, setAllergyAnswers] = useState<AllergyAnswers>(EMPTY_ALLERGIES);
-  const [vaccineAnswers, setVaccineAnswers] = useState<Record<string, VaccineAnswer | undefined>>({});
-  const [babyVaccines, setBabyVaccines] = useState<BabyVaccineAnswer | ''>('');
-  const [sections, setSections] = useState<OnboardingSections>(EMPTY_SECTIONS);
+  const [childName, setChildName] = useState(WEB_DEMO ? 'Myra' : '');
+  const [bracket, setBracket] = useState<AgeBracket>(WEB_DEMO ? 'A' : null);
+  const [childSex, setChildSex] = useState<ChildSex>(WEB_DEMO ? 'female' : null);
+  const [dob, setDob] = useState<Date | null>(() => (WEB_DEMO ? demoDob() : null));
+  const [relationship, setRelationship] = useState(WEB_DEMO ? 'Mother' : '');
+  const [weight, setWeight] = useState(WEB_DEMO ? '10.8' : '');
+  const [height, setHeight] = useState(WEB_DEMO ? '81' : '');
+  const [bloodGroup, setBloodGroup] = useState(WEB_DEMO ? 'O+' : '');
+  const [allergyAnswers, setAllergyAnswers] = useState<AllergyAnswers>(START_ALLERGIES);
+  const [vaccineAnswers, setVaccineAnswers] = useState<Record<string, VaccineAnswer | undefined>>(START_VACCINES);
+  const [babyVaccines, setBabyVaccines] = useState<BabyVaccineAnswer | ''>(WEB_DEMO ? 'Yes' : '');
+  const [sections, setSections] = useState<OnboardingSections>(START_SECTIONS);
   const { user } = useAuth();
   const userId = user?.id ?? null;
   /** User whose saved draft (if any) has been restored. */
@@ -735,18 +776,18 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   );
 
   const reset = useCallback(() => {
-    setChildName('');
-    setBracket(null);
-    setChildSex(null);
-    setDob(null);
-    setRelationship('');
-    setWeight('');
-    setHeight('');
-    setBloodGroup('');
-    setAllergyAnswers(EMPTY_ALLERGIES);
-    setVaccineAnswers({});
-    setBabyVaccines('');
-    setSections((prev) => ({ ...EMPTY_SECTIONS, parent: prev.parent }));
+    setChildName(WEB_DEMO ? 'Myra' : '');
+    setBracket(WEB_DEMO ? 'A' : null);
+    setChildSex(WEB_DEMO ? 'female' : null);
+    setDob(WEB_DEMO ? demoDob() : null);
+    setRelationship(WEB_DEMO ? 'Mother' : '');
+    setWeight(WEB_DEMO ? '10.8' : '');
+    setHeight(WEB_DEMO ? '81' : '');
+    setBloodGroup(WEB_DEMO ? 'O+' : '');
+    setAllergyAnswers(START_ALLERGIES);
+    setVaccineAnswers(START_VACCINES);
+    setBabyVaccines(WEB_DEMO ? 'Yes' : '');
+    setSections((prev) => ({ ...START_SECTIONS, parent: prev.parent }));
     draftCleared.current = false;
   }, []);
 
@@ -761,7 +802,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
     dbg.db('Onboarding draft: cleared on sign-out');
     void draftStore.remove(draftKey(prev));
     reset();
-    setSections(EMPTY_SECTIONS);
+    setSections(START_SECTIONS);
   }, [userId, reset]);
 
   // Restore the draft for this user once, when onboarding opens.

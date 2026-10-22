@@ -32,11 +32,11 @@ npm run reset-project  # Moves app/ to app-example/
 - `app/(tabs)/` - Tab navigator group (future main app)
 - `app/_layout.tsx` - Root layout wrapper (font loading, navigation stack)
 
-**Theming**: "Nivaran Soft Clay" (forest green + sage neutrals + a kid-friendly layer). Tokens in `constants/theme.ts`, rules in `DESIGN.md`:
-- `AppColors` — colour tokens (Material-style names, forest/sage values). Also `Radius`, `Spacing`, `Shadow`, `Motion`, `CanvasFade`, `ChildColors`, `ForestRamp`, `softSurface()`
+**Theming**: LilSteps purple palette (since 22 Oct 2026): #49378f primary, #6052bc accent, #ebe9ff lavender surface, #0b1632 ink, #fdfeff background. Token names (`forest`, `mint`, `ForestRamp`…) are kept from the old forest-green theme but now hold purple values. Tokens in `constants/theme.ts`, rules in `DESIGN.md` (its colour tables still describe the old greens):
+- `AppColors` — colour tokens (Material-style names; purple/lavender values under the old names). Also `Radius`, `Spacing`, `Shadow`, `Motion`, `CanvasFade`, `ChildColors`, `ForestRamp`, `softSurface()`
 - `global.css` — HeroUI / uniwind variables, mirrored 1:1 from `AppColors`
 - `styles/global.ts` — shared typography (Inter only, 7-size scale: 32/22/17/15/13/12 + 22 numbers) and layout presets
-- The app is light-only (`app.json` + `Uniwind.setTheme('light')`). No purple; no `${AppColors.x}NN` alpha tints
+- The app is light-only (`app.json` + `Uniwind.setTheme('light')`). Green only for success/status meaning; no `${AppColors.x}NN` alpha tints
 
 **Platform-specific code**: Uses file extensions for platform variants:
 - `.ios.tsx` - iOS-specific implementation
