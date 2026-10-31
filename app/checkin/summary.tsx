@@ -25,7 +25,7 @@ import { useChild } from '@/context/child';
 import { linkConversationToAppointment, useAppointments } from '@/hooks/useAppointments';
 import { useCheckinSession } from '@/hooks/useCheckin';
 import { useConsultCheckout } from '@/hooks/useConsultCheckout';
-import { CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
+import { CONSULT_PRICE_LABEL, findOwnHoldForCheckin } from '@/lib/consultPayment';
 import { useConversations } from '@/hooks/useConversations';
 import { doctorHasVideoLink, type DoctorRow, useDoctors, useTimeSlots } from '@/hooks/useDoctors';
 import { fetchFreeSlotsOn, useNextFreeSlots } from '@/hooks/useEarliestSlots';
@@ -127,7 +127,13 @@ export default function CheckinSummaryScreen() {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [bookedId, setBookedId] = useState<string | null>(null);
   const confirmed = bookedId !== null;
-  const { checkout, paying: booking, notice: payNotice, awaitingPayment } = useConsultCheckout();
+  const { checkout, adoptHold, releaseHold, paying: booking, notice: payNotice, awaitingPayment } =
+    useConsultCheckout();
+  // A booking from this check-in left waiting for payment (the screen was
+  // closed mid-payment): offered as "Finish paying" until it expires.
+  const [resumed, setResumed] = useState<{ doctorId: string; date: string; time: string } | null>(null);
+  // The consult that got paid, for the success message.
+  const [paidFor, setPaidFor] = useState<{ doctorId: string; date: string; time: string } | null>(null);
   // First day with a free slot for the selected doctor (-1: none this week).
   const [firstFreeDay, setFirstFreeDay] = useState<number | null>(null);
 
@@ -269,10 +275,69 @@ export default function CheckinSummaryScreen() {
     setSelectedDoctorId(id);
   }
 
+  const resumeChildId = child?.id;
+  useEffect(() => {
+    if (!resumeChildId || !sessionId) return;
+    let cancelled = false;
+    (async () => {
+      const hold = await findOwnHoldForCheckin(resumeChildId, sessionId).catch(() => null);
+      if (cancelled || !hold) return;
+      const target = { childId: resumeChildId, doctorId: hold.doctor_id, date: hold.date, time: hold.time };
+      adoptHold(hold.id, target, hold.hold_expires_at);
+      setResumed({ doctorId: hold.doctor_id, date: hold.date, time: hold.time });
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // Once per check-in; adoptHold is a fresh function each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeChildId, sessionId]);
+
+  async function finishResumed() {
+    if (!resumed || !child) return;
+    setBookingError(null);
+    try {
+      const target = { childId: child.id, ...resumed };
+      // The hold is adopted, so checkout never books again for this target.
+      const paidId = await checkout(() => Promise.reject(new Error('This slot no longer exists.')), target);
+      if (paidId) {
+        setPaidFor(resumed);
+        // "Message the doctor" on the success screen uses the selected doctor.
+        setSelectedDoctorId(resumed.doctorId);
+        setBookedId(paidId);
+      } else if (!awaitingPayment) {
+        setResumed(null);
+      }
+    } catch (e) {
+      const msg = e instanceof Error && e.message ? e.message : 'Payment failed.';
+      setBookingError(`Couldn't finish the payment: ${msg}`);
+    }
+  }
+
+  async function cancelResumed() {
+    setBookingError(null);
+    try {
+      await releaseHold();
+      setResumed(null);
+      refetchSlots();
+      nextFreeSlots.refetch();
+      setFreeVersion((v) => v + 1);
+    } catch {
+      setBookingError("Couldn't cancel the booking. Please try again.");
+    }
+  }
+
   async function handleConfirm() {
     if (!selectedSlot || !selectedDoctor || !child || !sessionId || !summary) return;
     setBookingError(null);
+    setResumed(null);
     try {
+      const target = {
+        childId: child.id,
+        doctorId: selectedDoctor.id,
+        date: days[selectedDay].isoDate,
+        time: selectedSlot.time,
+      };
       const paidId = await checkout(
         () =>
           bookAppointment({
@@ -284,9 +349,13 @@ export default function CheckinSummaryScreen() {
             ai_summary_id: sessionId,
             concern: summary.chiefComplaint,
           }),
-        selectedSlot.id,
+        target,
+        `${selectedDoctor.name}, ${whenPhrase(target.date, target.time)}`,
       );
-      if (paidId) setBookedId(paidId);
+      if (paidId) {
+        setPaidFor({ doctorId: target.doctorId, date: target.date, time: target.time });
+        setBookedId(paidId);
+      }
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'Booking failed.';
       setBookingError(`Couldn't book: ${msg} Please pick another time.`);
@@ -322,7 +391,12 @@ export default function CheckinSummaryScreen() {
   }
 
   if (confirmed) {
-    const when = selectedSlot ? whenPhrase(days[selectedDay].isoDate, selectedSlot.time) : days[selectedDay].fullLabel;
+    const when = paidFor
+      ? whenPhrase(paidFor.date, paidFor.time)
+      : selectedSlot
+        ? whenPhrase(days[selectedDay].isoDate, selectedSlot.time)
+        : days[selectedDay].fullLabel;
+    const paidDoctor = (paidFor && doctors.find((d) => d.id === paidFor.doctorId)) || selectedDoctor;
     return (
       <View style={[styles.screen, styles.successScreen, { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 16 }]}>
         <View style={styles.successBody}>
@@ -331,11 +405,11 @@ export default function CheckinSummaryScreen() {
           </View>
           <Text style={[typography.heading, styles.centerText]}>You&apos;re booked</Text>
           <Text style={[typography.body, styles.centerText]}>
-            {childName}&apos;s summary is with {selectedDoctor?.name ?? 'the doctor'}. See you {when}.
+            {childName}&apos;s summary is with {paidDoctor?.name ?? 'the doctor'}. See you {when}.
           </Text>
           <Text style={[typography.meta, styles.centerText]}>
-            {consultKindLabel(doctorHasVideoLink(selectedDoctor))}.{' '}
-            {doctorHasVideoLink(selectedDoctor)
+            {consultKindLabel(doctorHasVideoLink(paidDoctor))}.{' '}
+            {doctorHasVideoLink(paidDoctor)
               ? 'Your video link appears in Upcoming consultations before the consult.'
               : 'You can message the doctor before the consult.'}
           </Text>
@@ -367,7 +441,7 @@ export default function CheckinSummaryScreen() {
           <GradientButton label="Go to home" onPress={() => router.replace('/(tabs)')} />
           <GradientButton
             variant="ghost"
-            label={`Message ${doctorShortName(selectedDoctor?.name)}`}
+            label={`Message ${doctorShortName(paidDoctor?.name)}`}
             onPress={handleStartChat}
             loading={openingChat}
             style={styles.selfCenter}
@@ -598,6 +672,19 @@ export default function CheckinSummaryScreen() {
               {payNotice}
             </Text>
           ) : null}
+          {resumed && !selectedSlot ? (
+            <>
+              <GradientButton
+                label={`Finish paying ${CONSULT_PRICE_LABEL} · ${doctorShortName(
+                  doctors.find((d) => d.id === resumed.doctorId)?.name,
+                )}, ${whenPhrase(resumed.date, resumed.time)}`}
+                disabled={booking}
+                loading={booking}
+                onPress={finishResumed}
+              />
+              <TextButton label="Cancel this booking" onPress={cancelResumed} />
+            </>
+          ) : (
           <GradientButton
             label={
               selectedSlot && selectedDoctor
@@ -608,6 +695,7 @@ export default function CheckinSummaryScreen() {
             loading={booking}
             onPress={handleConfirm}
           />
+          )}
         </View>
       </View>
       )}

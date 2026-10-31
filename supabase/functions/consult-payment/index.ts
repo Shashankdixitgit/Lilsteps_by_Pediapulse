@@ -6,16 +6,21 @@
 //
 //   POST {action:"start",  appointmentId, returnUrl}
 //        → {url, expiresAt}   a Razorpay Payment Link to open in the browser.
-//          Reuses the booking's open link; makes a new one (max 3) only when
-//          the last one expired. Each new link extends the hold to cover it.
+//          Reuses the booking's open link while it has 2+ minutes left;
+//          otherwise cancels it and makes a new one (max 3 per booking).
+//          payments_one_open_link_uidx (0045) keeps it to one open link even
+//          if two starts race. Each new link extends the hold to cover it.
 //   POST {action:"status", appointmentId, callback?}
-//        → {state: 'paid' | 'pending' | 'expired' | 'cancelled'}
+//        → {state: 'paid' | 'pending' | 'expired' | 'cancelled',
+//           refunded?, refundFailed?, holdExpiresAt?}
+//          Also retries any refund this booking still owes (refund_due /
+//          refund_failed) — with the webhook, the retry path for refunds.
 //          `callback` is the query Razorpay put on the return URL. Its
 //          signature is verified with the key secret, but we still only mark
 //          a booking paid from Razorpay's own record of the link (fetched
 //          here) or from the webhook — never from what the app says.
 //   POST {action:"cancel", appointmentId}
-//        → {refund: 'started' | 'none' | 'not_paid', late?: true}
+//        → {refund: 'started' | 'failed' | 'none' | 'not_paid', late?: true}
 //          Unpaid hold: dropped, link cancelled. Paid consult: cancelled;
 //          refunded in full when it is 2 h or more before the start, or when
 //          the doctor cancels. Less than 2 h before (parent): no refund.
@@ -43,6 +48,7 @@ import {
   RazorpayError,
   REFUND_CUTOFF_MS,
   refundPaymentRow,
+  retryOwedRefunds,
   verifyLinkCallbackSignature,
 } from '../_shared/razorpay.ts';
 import { isAllowedReturnUrl } from '../razorpay-return/allow.ts';
@@ -174,15 +180,25 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
     .order('created_at', { ascending: false });
   const links = (rows ?? []) as PaymentRow[];
 
-  // An open link with at least 2 minutes left: send the family back to it.
-  const open = links.find(
-    (p) =>
-      p.status === 'created' &&
-      p.razorpay_link_url &&
-      p.link_expires_at &&
-      new Date(p.link_expires_at).getTime() - now > 2 * MINUTE,
-  );
-  if (open) return jsonResponse({ url: open.razorpay_link_url, expiresAt: open.link_expires_at });
+  // The open link, if any. With at least 2 minutes left, send the family
+  // back to it; otherwise cancel it so it can't take money for a link we
+  // are about to replace.
+  const open = links.find((p) => p.status === 'created');
+  if (
+    open?.razorpay_link_url &&
+    open.link_expires_at &&
+    new Date(open.link_expires_at).getTime() - now > 2 * MINUTE
+  ) {
+    return jsonResponse({ url: open.razorpay_link_url, expiresAt: open.link_expires_at });
+  }
+  if (open) {
+    if (open.razorpay_link_id) await cancelPaymentLink(open.razorpay_link_id);
+    await admin
+      .from('payments')
+      .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+      .eq('id', open.id)
+      .eq('status', 'created');
+  }
 
   if (links.length >= MAX_LINKS_PER_APPOINTMENT) {
     return jsonResponse({ state: 'expired' });
@@ -199,6 +215,10 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
     })
     .select('id')
     .single();
+  if (error?.code === '23505') {
+    // Another start for this booking is making a link right now.
+    return jsonResponse({ error: 'Opening the payment page already. Please try again in a moment.' }, 409);
+  }
   if (error || !row) throw new Error(`payments insert: ${error?.message}`);
 
   const callbackUrl =
@@ -218,10 +238,17 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
     throw e;
   }
 
-  await admin
+  const { error: saveErr } = await admin
     .from('payments')
     .update({ razorpay_link_id: link.id, razorpay_link_url: link.short_url, updated_at: new Date().toISOString() })
     .eq('id', row.id);
+  if (saveErr) {
+    // A link we can't find again must not take money.
+    console.error(`[consult-payment] could not save link ${link.id} on row ${row.id}: ${saveErr.message}`);
+    await cancelPaymentLink(link.id);
+    await admin.from('payments').update({ status: 'cancelled' }).eq('id', row.id);
+    return jsonResponse({ error: "Couldn't open the payment page. Please try again." }, 502);
+  }
 
   // The hold covers the whole life of the link, plus a little for the webhook.
   const holdUntil = new Date(expireBy.getTime() + HOLD_GRACE_MINUTES * MINUTE);
@@ -239,6 +266,9 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
 // ── status ──────────────────────────────────────────────────────────────────
 
 async function status(admin: any, appt: Appointment, cb: LinkCallback | null): Promise<Response> {
+  // Money this booking still owes back: try again now.
+  const retried = await retryOwedRefunds(admin, appt.id);
+
   if (appt.status === 'upcoming' || appt.status === 'completed' || appt.status === 'no_show') {
     return jsonResponse({ state: 'paid' });
   }
@@ -252,7 +282,8 @@ async function status(admin: any, appt: Appointment, cb: LinkCallback | null): P
   let links = (rows ?? []) as PaymentRow[];
 
   // A signed callback tells us which link to check first. A bad signature is
-  // ignored (logged), not trusted.
+  // ignored (logged), not trusted. Either way only Razorpay's own record of
+  // the link, fetched below, can mark anything paid.
   if (cb) {
     const ok = await verifyLinkCallbackSignature(cb, Deno.env.get('RAZORPAY_KEY_SECRET') ?? '');
     if (!ok) {
@@ -263,9 +294,12 @@ async function status(admin: any, appt: Appointment, cb: LinkCallback | null): P
     }
   }
 
+  let refundStarted = retried === 'refunded' || retried === 'refund_pending';
+  let refundFailed = retried === 'refund_failed';
+
   // Ask Razorpay about every link that might have been paid.
   for (const p of links) {
-    if (p.status !== 'created' && p.status !== 'expired') continue;
+    if (p.status !== 'created' && p.status !== 'expired' && p.status !== 'cancelled') continue;
     const link = await fetchPaymentLink(p.razorpay_link_id!);
     if (link.reference_id && link.reference_id !== p.id) continue;
     if (link.status === 'paid') {
@@ -276,21 +310,27 @@ async function status(admin: any, appt: Appointment, cb: LinkCallback | null): P
         const { data: fresh } = await admin.from('appointments').select('status').eq('id', appt.id).maybeSingle();
         if (fresh?.status === 'upcoming') return jsonResponse({ state: 'paid' });
       }
-      if (outcome === 'refunded') return jsonResponse({ state: 'expired', refunded: true });
+      if (outcome === 'refund_started') refundStarted = true;
+      if (outcome === 'refund_failed') refundFailed = true;
     } else if (link.status === 'expired' || link.status === 'cancelled') {
       if (p.status === 'created') {
-        await admin.from('payments').update({ status: 'expired', updated_at: new Date().toISOString() }).eq('id', p.id).eq('status', 'created');
+        await admin
+          .from('payments')
+          .update({ status: link.status, updated_at: new Date().toISOString() })
+          .eq('id', p.id)
+          .eq('status', 'created');
       }
     }
   }
 
+  const refund = { refunded: refundStarted || undefined, refundFailed: refundFailed || undefined };
   if (appt.status === 'cancelled') {
-    return jsonResponse({ state: appt.cancel_reason === 'payment_expired' ? 'expired' : 'cancelled' });
+    return jsonResponse({ state: appt.cancel_reason === 'payment_expired' ? 'expired' : 'cancelled', ...refund });
   }
   if (!appt.hold_expires_at || new Date(appt.hold_expires_at).getTime() <= Date.now()) {
-    return jsonResponse({ state: 'expired' });
+    return jsonResponse({ state: 'expired', ...refund });
   }
-  return jsonResponse({ state: 'pending', holdExpiresAt: appt.hold_expires_at });
+  return jsonResponse({ state: 'pending', holdExpiresAt: appt.hold_expires_at, ...refund });
 }
 
 // ── cancel ──────────────────────────────────────────────────────────────────
@@ -316,11 +356,17 @@ async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): P
     .eq('appointment_id', appt.id);
   const payments = (rows ?? []) as PaymentRow[];
 
-  // Stop any open link from taking money for a cancelled booking.
+  // Stop any open link from taking money for a cancelled booking. (If one
+  // was paid a moment ago, the webhook finds the booking cancelled and
+  // refunds it.)
   for (const p of payments) {
     if (p.status === 'created' && p.razorpay_link_id) {
       await cancelPaymentLink(p.razorpay_link_id);
-      await admin.from('payments').update({ status: 'cancelled', updated_at: new Date().toISOString() }).eq('id', p.id).eq('status', 'created');
+      await admin
+        .from('payments')
+        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
+        .eq('id', p.id)
+        .eq('status', 'created');
     }
   }
 
@@ -331,5 +377,6 @@ async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): P
   if (by === 'parent' && !early) return jsonResponse({ refund: 'none', late: true });
 
   const result = await refundPaymentRow(admin, paid.id, by === 'doctor' ? 'doctor_cancelled' : 'parent_cancelled');
-  return jsonResponse({ refund: result === 'not_paid' ? 'not_paid' : 'started' });
+  if (result === 'not_paid') return jsonResponse({ refund: 'not_paid' });
+  return jsonResponse({ refund: result === 'refund_failed' ? 'failed' : 'started' });
 }

@@ -12,6 +12,8 @@
 
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
+import { createMeetForAppointment, type MeetAppointment } from './meet.ts';
+import { dispatch } from './notify.ts';
 
 /** ₹449 per consult. The only place the price is set; the app never sends it. */
 export const CONSULT_PRICE_PAISE = 44900;
@@ -179,11 +181,24 @@ export async function verifyLinkCallbackSignature(
 
 // ── Recording a paid link ──────────────────────────────────────────────────
 
-export type FinalizeOutcome = 'confirmed' | 'already' | 'refunded' | 'unknown';
+export type RefundResult = 'refund_pending' | 'refunded' | 'refund_failed' | 'not_paid';
+
+export type FinalizeOutcome =
+  | 'confirmed'
+  | 'already'
+  | 'refund_started'
+  | 'refund_failed'
+  | 'unknown';
 
 /**
  * Record a captured payment for one of our payments rows and settle the
- * booking. Safe to call more than once for the same payment.
+ * booking. Safe to call more than once for the same payment: a payment that
+ * could not be applied stays 'refund_due' / 'refund_failed' in the database
+ * (0045 sets that in the same transaction), and every later call — webhook
+ * retry, the app's status check — drives the refund again.
+ *
+ * On the first 'confirmed' the family gets the confirmation SMS and the
+ * consult a Meet link, here on the server, whichever path got here first.
  */
 export async function finalizePaidLink(
   admin: SupabaseClient,
@@ -199,29 +214,99 @@ export async function finalizePaidLink(
   if (error) throw new Error(`confirm_consult_payment: ${error.message}`);
 
   if (data === 'refund_needed') {
-    await refundPaymentRow(admin, paymentRowId, 'no_consult_for_payment');
-    return 'refunded';
+    const r = await refundPaymentRow(admin, paymentRowId, 'no_consult_for_payment');
+    return r === 'refund_failed' ? 'refund_failed' : 'refund_started';
+  }
+  if (data === 'confirmed') {
+    const { data: pay } = await admin.from('payments').select('appointment_id').eq('id', paymentRowId).maybeSingle();
+    if (pay?.appointment_id) await afterConsultConfirmed(admin, pay.appointment_id);
   }
   return data as FinalizeOutcome;
 }
 
 /**
- * Refund a paid payments row in full and record it. The row is marked
- * refund_pending BEFORE calling Razorpay so a retry never refunds twice;
- * a Razorpay failure leaves refund_failed for someone to follow up.
+ * Confirmation SMS (once per consult: skipped when notification_log already
+ * has a sent or queued one) and the per-consult Meet link (idempotent: an
+ * existing link is reused). Best effort — the consult is booked either way.
+ */
+export async function afterConsultConfirmed(admin: SupabaseClient, appointmentId: string): Promise<void> {
+  try {
+    const { data: appt } = await admin
+      .from('appointments')
+      .select('id, date, time, status, doctor_id, parent_id, child_id, meet_link, doctors(name), parents(phone)')
+      .eq('id', appointmentId)
+      .maybeSingle();
+    if (!appt || appt.status !== 'upcoming') return;
+
+    const { count } = await admin
+      .from('notification_log')
+      .select('id', { count: 'exact', head: true })
+      .eq('appointment_id', appointmentId)
+      .eq('template', 'appointment_confirmation')
+      .in('status', ['sent', 'queued', 'skipped']);
+    const phone = (appt as any).parents?.phone as string | undefined;
+    if ((count ?? 0) === 0 && phone) {
+      const params = {
+        doctor: (appt as any).doctors?.name ?? 'your doctor',
+        date: appt.date,
+        time: String(appt.time).slice(0, 5),
+      };
+      const { data: queued } = await admin
+        .from('notification_log')
+        .insert({
+          channel: 'sms',
+          template: 'appointment_confirmation',
+          recipient: phone,
+          parent_id: appt.parent_id,
+          child_id: appt.child_id,
+          appointment_id: appt.id,
+          status: 'queued',
+          payload: { template: 'appointment_confirmation', params },
+        })
+        .select('id')
+        .single();
+      const r = await dispatch({ channel: 'sms', template: 'appointment_confirmation', params, recipient: { phone } });
+      if (queued?.id) {
+        await admin
+          .from('notification_log')
+          .update({
+            status: r.ok ? 'sent' : r.notConfigured ? 'skipped' : 'failed',
+            provider_id: r.providerId ?? null,
+            error: r.error ?? null,
+            sent_at: r.ok ? new Date().toISOString() : null,
+          })
+          .eq('id', queued.id);
+      }
+    }
+
+    await createMeetForAppointment(admin, appt as unknown as MeetAppointment);
+  } catch (e) {
+    console.error(`[razorpay] after-confirm for ${appointmentId}: ${(e as Error).message}`);
+  }
+}
+
+/**
+ * Refund a payments row in full and record it. The row is claimed
+ * (paid / refund_due / refund_failed → refund_pending) BEFORE calling
+ * Razorpay so two callers never both refund; a Razorpay failure leaves
+ * refund_failed, which the next status check or webhook retries.
  */
 export async function refundPaymentRow(
   admin: SupabaseClient,
   paymentRowId: string,
   reason: string,
-): Promise<'refund_pending' | 'refunded' | 'refund_failed' | 'not_paid'> {
-  const { data: claimed } = await admin
+): Promise<RefundResult> {
+  const { data: claimed, error: claimErr } = await admin
     .from('payments')
     .update({ status: 'refund_pending', refund_reason: reason, updated_at: new Date().toISOString() })
     .eq('id', paymentRowId)
-    .eq('status', 'paid')
+    .in('status', ['paid', 'refund_due', 'refund_failed'])
     .select('id, razorpay_payment_id, amount_paise')
     .maybeSingle();
+  if (claimErr) {
+    console.error(`[razorpay] refund claim failed for payment row ${paymentRowId}: ${claimErr.message}`);
+    return 'refund_failed';
+  }
   if (!claimed?.razorpay_payment_id) return 'not_paid';
 
   try {
@@ -238,11 +323,25 @@ export async function refundPaymentRow(
       .eq('id', paymentRowId);
     return done ? 'refunded' : 'refund_pending';
   } catch (e) {
-    console.error(`[razorpay] refund failed for payment row ${paymentRowId}: ${(e as Error).message}`);
+    console.error(`[razorpay] REFUND FAILED for payment row ${paymentRowId}: ${(e as Error).message}`);
     await admin
       .from('payments')
       .update({ status: 'refund_failed', updated_at: new Date().toISOString() })
       .eq('id', paymentRowId);
     return 'refund_failed';
   }
+}
+
+/** Retry every refund this booking still owes (refund_due / refund_failed). */
+export async function retryOwedRefunds(admin: SupabaseClient, appointmentId: string): Promise<RefundResult | null> {
+  const { data: owed } = await admin
+    .from('payments')
+    .select('id, refund_reason')
+    .eq('appointment_id', appointmentId)
+    .in('status', ['refund_due', 'refund_failed']);
+  let last: RefundResult | null = null;
+  for (const p of owed ?? []) {
+    last = await refundPaymentRow(admin, p.id, p.refund_reason ?? 'retry');
+  }
+  return last;
 }

@@ -16,7 +16,7 @@ import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { confirmAsync } from '@/lib/confirm';
 
-import type { RefundOutcome } from '@/lib/consultPayment';
+import { REFUND_FAILED_TEXT, type RefundOutcome } from '@/lib/consultPayment';
 
 import { appointmentStart, doctorShortName, whenLabel } from './appointmentFormat';
 
@@ -74,7 +74,7 @@ export function useCancelAppointment(
         `${childName ? `${childName} with ` : ''}${a.doctorName} · ${when}. The slot will be released for other families. ` +
           (early
             ? 'If you paid, the full amount is refunded.'
-            : 'It starts in less than 2 hours, so a payment is not refunded.'),
+            : 'It starts in less than 2 hours. If you paid, it is not refunded.'),
       );
       if (!ok) return;
       setCancellingId(a.id);
@@ -85,7 +85,9 @@ export function useCancelAppointment(
         const refundLine =
           result?.refund === 'started'
             ? ' Your refund has started; it reaches your account in 5–7 working days.'
-            : result?.late
+            : result?.refund === 'failed'
+              ? ` ${REFUND_FAILED_TEXT}`
+              : result?.late
               ? ' It was less than 2 hours before the consult, so the payment is not refunded.'
               : '';
         setNotice({

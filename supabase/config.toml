@@ -1,0 +1,48 @@
+# Supabase CLI settings for this project. Only the Edge Function JWT check is
+# configured here; everything else keeps the CLI defaults.
+#
+# Every function is listed explicitly so `supabase functions deploy` never
+# changes one's JWT setting by accident. verify_jwt = false means the
+# gateway lets requests without a user token through; each such function
+# checks the caller itself:
+#   appointment-reminders, vaccine-reminders  cron only, isServerCaller()
+#   storyboard-feedback                       public storyboard page
+#   razorpay-webhook                          X-Razorpay-Signature (HMAC)
+#   razorpay-return                           redirect only, allow-listed target
+#
+# Deploy order for payments (0045): migration → functions + secrets → app.
+
+project_id = "lilsteps"
+
+[functions.ai-checkin]
+verify_jwt = true
+
+[functions.appointment-reminders]
+verify_jwt = false
+
+[functions.consult-payment]
+verify_jwt = true
+
+[functions.create-meet-event]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true
+
+[functions.notify]
+verify_jwt = true
+
+[functions.razorpay-return]
+verify_jwt = false
+
+[functions.razorpay-webhook]
+verify_jwt = false
+
+[functions.storyboard-feedback]
+verify_jwt = false
+
+[functions.vaccine-reminders]
+verify_jwt = false
+
+[functions.video-room]
+verify_jwt = true
