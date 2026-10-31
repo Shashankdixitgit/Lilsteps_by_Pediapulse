@@ -19,7 +19,7 @@ type AppointmentRow = {
   id: string;
   date: string;
   time: string;
-  status: 'upcoming' | 'completed' | 'cancelled' | 'no_show';
+  status: 'awaiting_payment' | 'upcoming' | 'completed' | 'cancelled' | 'no_show';
   ai_summary_id: string | null;
   meet_link: string | null;
   children: { id: string; name: string; dob: string; sex: string; weight: number | null; height: number | null; blood_group: string | null; onboarding_answers: OnboardingAnswers } | null;
@@ -98,6 +98,7 @@ const URGENCY_LABEL: Record<string, string> = {
 };
 
 const STATUS_LABEL: Record<AppointmentRow['status'], string> = {
+  awaiting_payment: 'Awaiting payment',
   upcoming: 'Upcoming',
   completed: 'Completed',
   cancelled: 'Cancelled',
@@ -126,7 +127,8 @@ export default async function ConsultationPage({
     .eq('id', id)
     .maybeSingle<AppointmentRow>();
 
-  if (!appointment || !appointment.children) notFound();
+  // An unpaid hold (0045) is not a consult yet.
+  if (!appointment || !appointment.children || appointment.status === 'awaiting_payment') notFound();
   const child = appointment.children;
   const stamp = { ...dateStamp(appointment.date), time: formatSlotTime(appointment.time) };
   const age = computeAge(child.dob);

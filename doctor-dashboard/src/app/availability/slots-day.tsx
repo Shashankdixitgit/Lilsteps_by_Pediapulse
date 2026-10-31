@@ -12,7 +12,7 @@ export interface DaySlots {
     time: string;
     is_available: boolean;
     /** Set when a live appointment holds this slot — no toggle or delete. */
-    booking: { appointmentId: string; childName: string } | null;
+    booking: { appointmentId: string; childName: string; held: boolean } | null;
   }[];
 }
 
@@ -67,7 +67,16 @@ export function SlotsDay({ day }: { day: DaySlots }) {
       <div>
         <div className="flex flex-wrap gap-2">
           {day.items.map((s) =>
-            s.booking ? (
+            s.booking?.held ? (
+              <span
+                key={s.id}
+                title="A family is paying for this slot. It opens again if they don't finish."
+                className="inline-flex items-center gap-2 border border-[var(--hairline-strong)] px-3 py-1.5 font-mono text-[12px] tracking-[-0.01em] text-[var(--ink-3)]"
+              >
+                {s.time.slice(0, 5)}
+                <span className="text-[10px] uppercase tracking-[0.12em]">Held · payment</span>
+              </span>
+            ) : s.booking ? (
               <Link
                 key={s.id}
                 href={`/consultations/${s.booking.appointmentId}`}

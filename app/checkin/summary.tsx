@@ -24,6 +24,8 @@ import { AppColors, CanvasFade, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { linkConversationToAppointment, useAppointments } from '@/hooks/useAppointments';
 import { useCheckinSession } from '@/hooks/useCheckin';
+import { useConsultCheckout } from '@/hooks/useConsultCheckout';
+import { CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 import { useConversations } from '@/hooks/useConversations';
 import { doctorHasVideoLink, type DoctorRow, useDoctors, useTimeSlots } from '@/hooks/useDoctors';
 import { fetchFreeSlotsOn, useNextFreeSlots } from '@/hooks/useEarliestSlots';
@@ -125,7 +127,7 @@ export default function CheckinSummaryScreen() {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [bookedId, setBookedId] = useState<string | null>(null);
   const confirmed = bookedId !== null;
-  const [booking, setBooking] = useState(false);
+  const { checkout, paying: booking, notice: payNotice, awaitingPayment } = useConsultCheckout();
   // First day with a free slot for the selected doctor (-1: none this week).
   const [firstFreeDay, setFirstFreeDay] = useState<number | null>(null);
 
@@ -269,19 +271,22 @@ export default function CheckinSummaryScreen() {
 
   async function handleConfirm() {
     if (!selectedSlot || !selectedDoctor || !child || !sessionId || !summary) return;
-    setBooking(true);
     setBookingError(null);
     try {
-      const appt = await bookAppointment({
-        child_id: child.id,
-        doctor_id: selectedDoctor.id,
-        date: days[selectedDay].isoDate,
-        time: selectedSlot.time,
-        slot_id: selectedSlot.id,
-        ai_summary_id: sessionId,
-        concern: summary.chiefComplaint,
-      });
-      setBookedId(appt.id);
+      const paidId = await checkout(
+        () =>
+          bookAppointment({
+            child_id: child.id,
+            doctor_id: selectedDoctor.id,
+            date: days[selectedDay].isoDate,
+            time: selectedSlot.time,
+            slot_id: selectedSlot.id,
+            ai_summary_id: sessionId,
+            concern: summary.chiefComplaint,
+          }),
+        selectedSlot.id,
+      );
+      if (paidId) setBookedId(paidId);
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'Booking failed.';
       setBookingError(`Couldn't book: ${msg} Please pick another time.`);
@@ -290,8 +295,6 @@ export default function CheckinSummaryScreen() {
       // R3-21: the doctor cards' "Next free" and who is free today change too.
       nextFreeSlots.refetch();
       setFreeVersion((v) => v + 1);
-    } finally {
-      setBooking(false);
     }
   }
 
@@ -590,12 +593,16 @@ export default function CheckinSummaryScreen() {
             <Text style={[typography.bodySM, styles.errorText, styles.footerError]} accessibilityRole="alert">
               {bookingError}
             </Text>
+          ) : payNotice ? (
+            <Text style={[typography.bodySM, styles.footerError]} accessibilityLiveRegion="polite" aria-live="polite">
+              {payNotice}
+            </Text>
           ) : null}
           <GradientButton
             label={
               selectedSlot && selectedDoctor
-                ? `Confirm · ${doctorShortName(selectedDoctor.name)}, ${whenPhrase(days[selectedDay].isoDate, selectedSlot.time)}`
-                : 'Confirm booking'
+                ? `${awaitingPayment ? 'Pay' : 'Pay and book'} ${CONSULT_PRICE_LABEL} · ${doctorShortName(selectedDoctor.name)}, ${whenPhrase(days[selectedDay].isoDate, selectedSlot.time)}`
+                : `Book · ${CONSULT_PRICE_LABEL}`
             }
             disabled={!selectedSlot || booking || !summary || !child}
             loading={booking}

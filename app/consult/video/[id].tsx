@@ -40,7 +40,7 @@ interface VideoAppointment {
   doctor_id: string;
   date: string;
   time: string;
-  status: 'upcoming' | 'completed' | 'cancelled' | 'no_show';
+  status: 'awaiting_payment' | 'upcoming' | 'completed' | 'cancelled' | 'no_show';
   doctors: { name: string } | null;
 }
 
@@ -201,6 +201,15 @@ export default function ParentVideoScreen() {
     }
 
     const when = whenLabel(appt.date, appt.time, now);
+
+    // An unpaid hold (0045): there is no consult to join yet.
+    if (appt.status === 'awaiting_payment') {
+      return (
+        <StatusBlock icon="card-outline" title="This booking isn't paid yet" body={when}>
+          <TextButton label="Back" onPress={() => router.back()} />
+        </StatusBlock>
+      );
+    }
 
     if (appt.status === 'cancelled') {
       return (

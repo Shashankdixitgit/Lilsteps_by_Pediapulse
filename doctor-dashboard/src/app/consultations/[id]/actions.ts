@@ -54,7 +54,7 @@ export async function saveVisitAction(params: {
     .eq('id', params.appointmentId)
     .eq('doctor_id', doctor.doctorId)
     .maybeSingle<AppointmentForClose>();
-  if (!appt) return { error: 'Appointment not found' };
+  if (!appt || appt.status === 'awaiting_payment') return { error: 'Appointment not found' };
   if (appt.status === 'cancelled') return { error: 'This appointment was cancelled by the parent' };
 
   const closed = appt.status === 'completed' || appt.status === 'no_show';
@@ -216,11 +216,11 @@ export async function openChatAction(appointmentId: string): Promise<{ error?: s
 
   const { data: appt } = await supabase
     .from('appointments')
-    .select('id, child_id, parent_id')
+    .select('id, child_id, parent_id, status')
     .eq('id', appointmentId)
     .eq('doctor_id', doctor.doctorId)
-    .maybeSingle<{ id: string; child_id: string; parent_id: string }>();
-  if (!appt) return { error: 'Appointment not found' };
+    .maybeSingle<{ id: string; child_id: string; parent_id: string; status: string }>();
+  if (!appt || appt.status === 'awaiting_payment') return { error: 'Appointment not found' };
 
   const { data: existing } = await supabase
     .from('conversations')
