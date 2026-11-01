@@ -75,7 +75,7 @@ Deno.test('cancellation wording follows who cancelled and the refund', () => {
 
 Deno.test('every notification template renders; params are HTML-escaped', () => {
   for (const key of ['appointment_confirmation', 'appointment_cancelled', 'appointment_rescheduled', 'appointment_reminder_24h',
-    'appointment_reminder_1h', 'prescription_issued', 'vaccine_due_soon', 'new_message', 'checkin_summary_ready', 'unknown_key']) {
+    'appointment_reminder_1h', 'prescription_issued', 'vaccine_due_soon', 'vaccine_overdue', 'new_message', 'checkin_summary_ready', 'unknown_key']) {
     const e = renderEmail(key, { child: '<b>Myra</b>', doctor: 'Dr. "X" & Co', date: '2026-11-03', time: '09:00', vaccine: 'MMR' });
     assert(e.subject.length > 0, key);
     assert(!e.html.includes('<b>Myra</b>'), `${key} html not escaped`);
@@ -86,7 +86,7 @@ Deno.test('every notification template renders; params are HTML-escaped', () => 
 // ── Review regressions ────────────────────────────────────────────────────────
 
 const ALL_KEYS = ['appointment_confirmation', 'appointment_cancelled', 'appointment_rescheduled', 'appointment_reminder_24h',
-  'appointment_reminder_1h', 'prescription_issued', 'vaccine_due_soon', 'new_message', 'checkin_summary_ready'];
+  'appointment_reminder_1h', 'prescription_issued', 'vaccine_due_soon', 'vaccine_overdue', 'new_message', 'checkin_summary_ready'];
 
 Deno.test('R1: CR/LF in a child name cannot add mail headers', async () => {
   const evil = 'Myra\r\nBcc: attacker@evil.example\r\n\u0000X';

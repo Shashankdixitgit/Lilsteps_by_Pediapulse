@@ -20,7 +20,8 @@
 //   payment_link.expired    → mark the link expired
 //   payment_link.cancelled  → mark the link cancelled
 //   refund.processed        → payment refunded
-//   refund.failed           → payment refund_failed (needs a person)
+//   refund.failed           → payment refund_failed (needs a person: the
+//                             team is emailed once, refundAlerts.ts)
 //
 // Deploy: supabase functions deploy razorpay-webhook --no-verify-jwt
 // Secrets: RAZORPAY_WEBHOOK_SECRET, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET.
@@ -28,6 +29,8 @@
 // deno-lint-ignore-file no-explicit-any
 import { createAdminClient } from '../_shared/supabase.ts';
 import { finalizePaidLink, verifyWebhookSignature } from '../_shared/razorpay.ts';
+import { inBackground } from '../_shared/parentNotify.ts';
+import { alertRefundProblem } from '../_shared/refundAlerts.ts';
 
 const ok = () => new Response('ok', { status: 200 });
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -153,7 +156,7 @@ async function handle(admin: any, event: string, payload: any): Promise<Applied>
     const refund = payload.refund?.entity;
     if (!refund?.payment_id) return {};
     const processed = event === 'refund.processed';
-    const { error } = await admin
+    const { data: rows, error } = await admin
       .from('payments')
       .update({
         status: processed ? 'refunded' : 'refund_failed',
@@ -162,9 +165,20 @@ async function handle(admin: any, event: string, payload: any): Promise<Applied>
         updated_at: now,
       })
       .eq('razorpay_payment_id', refund.payment_id)
-      .in('status', ['refund_pending', 'refund_failed', 'refund_due', 'paid']);
+      .in('status', ['refund_pending', 'refund_failed', 'refund_due', 'paid'])
+      .select('id');
     if (error) throw new Error(`refund update: ${error.message}`);
-    if (!processed) console.error(`[razorpay-webhook] refund ${refund.id} FAILED — retried on the next status check`);
+    if (!processed) {
+      console.error(`[razorpay-webhook] refund ${refund.id} FAILED — retried on the next status check`);
+      // Once per payment (refundAlerts.ts); in the background so Razorpay
+      // gets its answer at once.
+      for (const r of (rows ?? []) as Array<{ id: string }>) {
+        inBackground(
+          'refund alert',
+          alertRefundProblem(admin, r.id, 'refund_failed', { note: `Razorpay webhook refund.failed for refund ${refund.id}` }),
+        );
+      }
+    }
     return { paymentId: refund.payment_id, refundId: refund.id, amount: Number(refund.amount) || null };
   }
 

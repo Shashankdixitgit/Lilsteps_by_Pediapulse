@@ -56,9 +56,8 @@
 // deno-lint-ignore-file no-explicit-any
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
 import { createAdminClient, createUserClient, getCaller } from '../_shared/supabase.ts';
+import { cancelConsult } from '../_shared/consultCancel.ts';
 import {
-  consultStart,
-  doctorMovedRecently,
   emailPaymentReturnUrl,
   followupLinkExpiry,
   istParts,
@@ -76,8 +75,6 @@ import {
   type LinkCallback,
   MAX_LINKS_PER_APPOINTMENT,
   RazorpayError,
-  REFUND_CUTOFF_MS,
-  refundPaymentRow,
   retryOwedRefunds,
   verifyLinkCallbackSignature,
 } from '../_shared/razorpay.ts';
@@ -410,10 +407,6 @@ async function status(admin: any, appt: Appointment, cb: LinkCallback | null): P
 // ── cancel ──────────────────────────────────────────────────────────────────
 
 async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): Promise<Response> {
-  if (appt.status === 'cancelled') return jsonResponse({ refund: 'none' });
-  if (appt.status !== 'upcoming' && appt.status !== 'awaiting_payment') {
-    return jsonResponse({ error: 'This consult has already happened.' }, 409);
-  }
   // A family's unpaid hold is theirs alone: a doctor may only withdraw a
   // follow-up they booked themselves. (A doctor-cancelled hold must never
   // become a way into a stranger's chat or records.)
@@ -421,64 +414,21 @@ async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): P
     return jsonResponse({ error: 'Appointment not found' }, 404);
   }
 
-  const { data: updated } = await admin
-    .from('appointments')
-    .update({ status: 'cancelled', cancel_reason: by, hold_expires_at: null })
-    .eq('id', appt.id)
-    .eq('status', appt.status)
-    .select('id')
-    .maybeSingle();
-  if (!updated) return jsonResponse({ error: 'This consult changed. Please refresh.' }, 409);
-
-  const { data: rows } = await admin
-    .from('payments')
-    .select('id, status, razorpay_link_id')
-    .eq('appointment_id', appt.id);
-  const payments = (rows ?? []) as PaymentRow[];
-
-  // Stop any open link from taking money for a cancelled booking. (If one
-  // was paid a moment ago, the webhook finds the booking cancelled and
-  // refunds it.)
-  for (const p of payments) {
-    if (p.status === 'created' && p.razorpay_link_id) {
-      await cancelPaymentLink(p.razorpay_link_id);
-      await admin
-        .from('payments')
-        .update({ status: 'cancelled', updated_at: new Date().toISOString() })
-        .eq('id', p.id)
-        .eq('status', 'created');
-    }
+  // Shared with delete-account: cancel, stop open links, refund by the rules.
+  const result = await cancelConsult(admin, appt, { by });
+  if (!result.done) {
+    if (result.why === 'already_cancelled') return jsonResponse({ refund: 'none' });
+    if (result.why === 'not_cancellable') return jsonResponse({ error: 'This consult has already happened.' }, 409);
+    return jsonResponse({ error: 'This consult changed. Please refresh.' }, 409);
   }
+  const outcome = { refund: result.refund, ...(result.late ? { late: true as const } : {}) };
 
-  const outcome = await cancelRefund(admin, appt, payments, by);
   // A booked consult (not an unpaid hold) gets a cancellation email, sent in
   // the background: the cancel answer never waits for (or fails on) email.
   if (appt.status === 'upcoming') {
     inBackground('cancel email', emailCancellation(admin, appt, by, outcome.refund));
   }
   return jsonResponse(outcome);
-}
-
-/** The refund part of a cancel; the result is the response body. */
-async function cancelRefund(
-  admin: any,
-  appt: Appointment,
-  payments: PaymentRow[],
-  by: 'parent' | 'doctor',
-): Promise<{ refund: 'none' | 'not_paid' | 'started' | 'failed'; late?: true }> {
-  const paid = payments.find((p) => p.status === 'paid');
-  if (!paid) return { refund: 'not_paid' };
-
-  const early = consultStart(appt.date, appt.time).getTime() - Date.now() >= REFUND_CUTOFF_MS;
-  // Late, but the doctor moved this consult in the last 24 hours: the new
-  // time may not suit the family, so they still get their money back.
-  if (by === 'parent' && !early && !doctorMovedRecently(appt.last_rescheduled_by, appt.rescheduled_at)) {
-    return { refund: 'none', late: true };
-  }
-
-  const result = await refundPaymentRow(admin, paid.id, by === 'doctor' ? 'doctor_cancelled' : 'parent_cancelled');
-  if (result === 'not_paid') return { refund: 'not_paid' };
-  return { refund: result === 'refund_failed' ? 'failed' : 'started' };
 }
 
 /** Best effort: the cancel stands whether or not the email goes out. */

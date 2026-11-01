@@ -23,6 +23,7 @@ export type TemplateKey =
   | 'appointment_reminder_1h'
   | 'prescription_issued'
   | 'vaccine_due_soon'
+  | 'vaccine_overdue'
   | 'new_message'
   | 'checkin_summary_ready'
   | 'followup_payment_request';
@@ -58,9 +59,14 @@ const TEMPLATES: Record<TemplateKey, RenderedTemplate> = {
       'LilSteps: {{doctor}} has issued a new prescription. Open the app to view.',
   },
   vaccine_due_soon: {
-    subject: 'Vaccination due soon',
+    subject: 'Vaccine due soon',
     body:
-      'LilSteps: {{vaccine}} is due for {{child}} on {{date}}. Book a slot in the app.',
+      'LilSteps: {{vaccine}} due for {{child}} on {{date}}. Mark it as given in the app once done.',
+  },
+  vaccine_overdue: {
+    subject: 'Vaccine not marked as given',
+    body:
+      'LilSteps: {{vaccine}} for {{child}} was due on {{date}}. Given already? Mark it in the app. If not, ask your paediatrician.',
   },
   new_message: {
     subject: 'New message from {{doctor}}',
@@ -283,13 +289,32 @@ function emailParts(key: string, p: Record<string, string>): EmailParts | null {
         heading: 'A new prescription is ready',
         lines: [`${doctor} has issued a prescription for ${child}. Open the LilSteps app to view or download it.`],
       };
-    case 'vaccine_due_soon':
+    case 'vaccine_due_soon': {
+      const many = Number(p.count) > 1;
       return {
-        subject: 'A vaccine is due',
-        heading: 'A vaccine is due soon',
-        when: p.date ? `${formatEmailDate(p.date)}` : undefined,
-        lines: [`${p.vaccine || 'A vaccine'} is due for ${child}. You can book a slot or mark it as given in the LilSteps app.`],
+        subject: many ? 'Vaccines due soon' : 'A vaccine is due soon',
+        heading: many ? 'Vaccines due soon' : 'A vaccine is due soon',
+        when: p.date ? `Due ${formatEmailDate(p.date)}` : undefined,
+        lines: [
+          `${p.vaccine || (many ? 'Some vaccines' : 'A vaccine')} ${many ? 'are' : 'is'} due for ${child}.`,
+          'Vaccines are given in person: plan a visit to your paediatrician or vaccination centre around this date.',
+          `Once ${many ? 'they are' : 'it is'} given, mark ${many ? 'them' : 'it'} as given in the Vaccines tab of the LilSteps app so ${child}'s record stays up to date.`,
+        ],
       };
+    }
+    case 'vaccine_overdue': {
+      const many = Number(p.count) > 1;
+      return {
+        subject: many ? 'Vaccines not marked as given' : 'A vaccine is not marked as given',
+        heading: many ? 'Were these vaccines given?' : 'Was this vaccine given?',
+        when: p.date ? `Was due ${formatEmailDate(p.date)}` : undefined,
+        lines: [
+          `${p.vaccine || (many ? 'Some vaccines' : 'A vaccine')} for ${child} ${many ? 'were' : 'was'} due on this date and ${many ? 'are' : 'is'} not marked as given in LilSteps yet.`,
+          `If ${many ? 'they were' : 'it was'} given, mark ${many ? 'them' : 'it'} as given in the Vaccines tab of the app. We won't remind you about ${many ? 'these doses' : 'this dose'} again.`,
+          "If not, please ask your paediatrician about catching up.",
+        ],
+      };
+    }
     case 'new_message':
       return {
         subject: 'You have a new message',

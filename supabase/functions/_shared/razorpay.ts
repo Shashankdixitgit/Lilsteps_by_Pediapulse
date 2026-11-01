@@ -14,6 +14,7 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { createMeetForAppointment, type MeetAppointment } from './meet.ts';
 import { alreadyNotified, inBackground, notifyParent } from './parentNotify.ts';
+import { alertRefundProblem } from './refundAlerts.ts';
 
 /** ₹449 per consult. The only place the price is set; the app never sends it. */
 export const CONSULT_PRICE_PAISE = 44900;
@@ -42,13 +43,40 @@ function authHeader(): string {
   return `Basic ${btoa(`${id}:${secret}`)}`;
 }
 
+/** Every Razorpay call gives up after this long (RAZORPAY_TIMEOUT_MS overrides, for tests). */
+export const RAZORPAY_TIMEOUT_MS = 15_000;
+
+function timeoutMs(): number {
+  const v = Number(Deno.env.get('RAZORPAY_TIMEOUT_MS'));
+  return Number.isFinite(v) && v > 0 ? v : RAZORPAY_TIMEOUT_MS;
+}
+
 async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<any> {
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const text = await res.text();
+  // A stalled Razorpay must not hold up a cancel, a webhook or an account
+  // deletion. A refund that times out is treated as failed (refund_failed,
+  // team alerted); the alert says to check Razorpay before refunding by hand,
+  // as Razorpay may still have taken the request.
+  const ms = timeoutMs();
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(`${API}${path}`, {
+      method,
+      headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(ms),
+    });
+    text = await res.text();
+  } catch (e) {
+    if (e instanceof RazorpayError) throw e;
+    const name = (e as Error).name;
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      console.error(`[razorpay] ${method} ${path} timed out after ${ms} ms`);
+      throw new RazorpayError('Razorpay timeout', 504);
+    }
+    console.error(`[razorpay] ${method} ${path} network error: ${(e as Error).message}`);
+    throw new RazorpayError('Razorpay unreachable', 502);
+  }
   if (!res.ok) {
     // Razorpay error bodies are logged, never returned to the app.
     console.error(`[razorpay] ${method} ${path} → ${res.status}: ${text.slice(0, 500)}`);
@@ -270,16 +298,27 @@ export async function afterConsultConfirmed(admin: SupabaseClient, appointmentId
   }
 }
 
+export interface RefundOptions {
+  /**
+   * Wait for the team alert (refund_failed) instead of sending it in the
+   * background. delete-account needs this: the alert reads the consult
+   * time, which is gone once the account is deleted.
+   */
+  awaitAlert?: boolean;
+}
+
 /**
  * Refund a payments row in full and record it. The row is claimed
  * (paid / refund_due / refund_failed → refund_pending) BEFORE calling
  * Razorpay so two callers never both refund; a Razorpay failure leaves
- * refund_failed, which the next status check or webhook retries.
+ * refund_failed, which the next status check or webhook retries, and
+ * emails the team once (refundAlerts.ts).
  */
 export async function refundPaymentRow(
   admin: SupabaseClient,
   paymentRowId: string,
   reason: string,
+  opts: RefundOptions = {},
 ): Promise<RefundResult> {
   const { data: claimed, error: claimErr } = await admin
     .from('payments')
@@ -313,6 +352,12 @@ export async function refundPaymentRow(
       .from('payments')
       .update({ status: 'refund_failed', updated_at: new Date().toISOString() })
       .eq('id', paymentRowId);
+    // RazorpayError messages are our own ("Razorpay 400"); Razorpay's error
+    // body stays in the logs only.
+    const detail = e instanceof RazorpayError ? `${e.message}, refund reason ${reason}` : `No answer from Razorpay, refund reason ${reason}`;
+    const alert = alertRefundProblem(admin, paymentRowId, 'refund_failed', { note: detail });
+    if (opts.awaitAlert) await alert;
+    else inBackground('refund alert', alert);
     return 'refund_failed';
   }
 }
