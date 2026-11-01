@@ -69,7 +69,7 @@ test.describe('Tracking — vaccines auto-generate + growth measurements', () =>
     });
 
     await signInAsDoctor(page);
-    await page.goto(`/consultations/${apptId}`);
+    await page.goto(`./consultations/${apptId}`);
 
     await expect(page.getByRole('heading', { name: /immunisation/i })).toBeVisible();
     await expect(page.locator('text=/done/i')).toBeVisible();

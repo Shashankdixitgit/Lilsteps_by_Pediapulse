@@ -17,7 +17,9 @@ export default defineConfig({
   workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
   use: {
-    baseURL: 'http://localhost:3000',
+    // The app is built with basePath '/doctor'. Keep the trailing slash and
+    // write test paths as './login' so they resolve under it.
+    baseURL: 'http://localhost:3000/doctor/',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -30,7 +32,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:3000',
+    url: 'http://localhost:3000/doctor/login',
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
   },

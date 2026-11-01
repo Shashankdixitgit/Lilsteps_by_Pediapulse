@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { fetchAllergiesNotKnown, fetchConcerns, noAllergiesLabel } from '@/lib/appointments';
 import { parseVisitNotes, severityLabel } from '@/lib/consultations';
+import { withBasePath } from '@/lib/base-path';
 import { getCurrentDoctor, hasVideoLink } from '@/lib/doctor';
 import { computeAge, dateStamp, formatClock, formatDate, formatDateTime, formatDayShort, formatSlotTime, nowIstTime, todayIst } from '@/lib/format';
 import { parentContact } from '@/lib/parent';
@@ -594,7 +595,7 @@ export default async function ConsultationPage({
                       </div>
                       {d.notes ? <div className="text-[12px] text-[var(--ink-2)]">{d.notes}</div> : null}
                     </div>
-                    <a href={`/records/${d.id}`} target="_blank" rel="noreferrer" className="link-underline shrink-0 text-[13px] text-[var(--ink)]">
+                    <a href={withBasePath(`/records/${d.id}`)} target="_blank" rel="noreferrer" className="link-underline shrink-0 text-[13px] text-[var(--ink)]">
                       Open ↗
                     </a>
                   </li>

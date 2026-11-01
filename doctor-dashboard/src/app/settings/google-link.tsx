@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { withBasePath } from '@/lib/base-path';
 import { createSupabaseBrowserClient } from '@/lib/supabase/browser';
 import { disconnectGoogleAction, saveGoogleTokenAction } from './actions';
 
@@ -57,7 +58,7 @@ export function GoogleLink({ initialEmail }: Props) {
           access_type: 'offline',
           prompt: 'consent',
         },
-        redirectTo: `${window.location.origin}/settings`,
+        redirectTo: `${window.location.origin}${withBasePath('/settings')}`,
       },
     });
     if (error) setFeedback({ kind: 'err', msg: error.message });

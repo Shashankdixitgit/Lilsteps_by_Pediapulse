@@ -34,7 +34,7 @@ test.describe('Issue prescription', () => {
     });
 
     await signInAsDoctor(page);
-    await page.goto(`/prescriptions/new?child=${childId}`);
+    await page.goto(`./prescriptions/new?child=${childId}`);
 
     // First medicine prefilled fieldset
     await page.locator('input[placeholder*="Paracetamol"]').first().fill('Paracetamol');
@@ -51,7 +51,7 @@ test.describe('Issue prescription', () => {
     await page.getByRole('button', { name: /issue prescription/i }).click();
 
     // Redirected to / (queue) after success. Verify the row was created.
-    await page.waitForURL(/\/(\?|$)/, { timeout: 15_000 });
+    await page.waitForURL(/\/doctor\/?(\?|$)/, { timeout: 15_000 });
 
     const sb = admin();
     const { data: rx } = await sb

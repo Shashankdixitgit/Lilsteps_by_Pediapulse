@@ -5,7 +5,7 @@ import path from 'node:path';
 loadEnv({ path: path.resolve(__dirname, '.env') });
 
 async function signIn(page: import('@playwright/test').Page) {
-  await page.goto('/login');
+  await page.goto('./login');
   await page.getByLabel(/email/i).fill(process.env.DOCTOR_EMAIL!);
   await page.getByLabel(/password/i).fill(process.env.DOCTOR_PASSWORD!);
   await page.getByRole('button', { name: /enter/i }).click();
@@ -31,14 +31,14 @@ test.describe('Dashboard navigation', () => {
     );
 
     await page.getByRole('link', { name: /^queue$/i }).click();
-    await expect(page).toHaveURL(/\/(\?|$)/);
+    await expect(page).toHaveURL(/\/doctor\/?(\?|$)/);
   });
 
   test('unauthenticated visit to a protected route redirects to /login', async ({ browser }) => {
     // Fresh context — no cookies
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    await page.goto('/conversations');
+    await page.goto('./conversations');
     await expect(page).toHaveURL(/\/login/);
     await ctx.close();
   });

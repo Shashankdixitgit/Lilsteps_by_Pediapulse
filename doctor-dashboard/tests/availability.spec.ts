@@ -22,7 +22,7 @@ test.describe('Availability flow', () => {
 
   test('generate window creates slots and they show in the list', async ({ page }) => {
     await signInAsDoctor(page);
-    await page.goto('/availability');
+    await page.goto('./availability');
 
     // Fields don't have htmlFor/id, so position rather than label.
     const numbers = page.locator('input[type=number]');
