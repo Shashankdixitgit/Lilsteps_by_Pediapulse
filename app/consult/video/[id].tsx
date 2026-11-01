@@ -31,6 +31,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { AppColors } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useConversations } from '@/hooks/useConversations';
+import { MAX_RESCHEDULES, RESCHEDULE_CUTOFF_MINUTES } from '@/lib/consultPayment';
 import { supabase } from '@/lib/supabase';
 import { layout, typography } from '@/styles/global';
 
@@ -41,6 +42,7 @@ interface VideoAppointment {
   date: string;
   time: string;
   status: 'awaiting_payment' | 'upcoming' | 'completed' | 'cancelled' | 'no_show';
+  reschedule_count: number | null;
   doctors: { name: string } | null;
 }
 
@@ -94,7 +96,7 @@ export default function ParentVideoScreen() {
     const [{ data, error }, linkRes] = await Promise.all([
       supabase
         .from('appointments')
-        .select('id, child_id, doctor_id, date, time, status, doctors(name)')
+        .select('id, child_id, doctor_id, date, time, status, reschedule_count, doctors(name)')
         .eq('id', appointmentId)
         .maybeSingle<VideoAppointment>(),
       supabase.rpc('get_my_appointment_meet_link', { p_appointment_id: appointmentId }),
@@ -179,6 +181,14 @@ export default function ParentVideoScreen() {
     if (data) router.push({ pathname: '/consult/[id]', params: { id: data.id } });
     else setActionError("The visit summary isn't ready yet. Please check again in a few minutes.");
   }
+
+  // Reschedule (0051): a booked consult, 2 hours or more before it starts,
+  // moved fewer than MAX_RESCHEDULES times. The server checks again.
+  const canReschedule =
+    !!appt &&
+    appt.status === 'upcoming' &&
+    (appt.reschedule_count ?? 0) < MAX_RESCHEDULES &&
+    appointmentStart(appt.date, appt.time).getTime() - now.getTime() >= RESCHEDULE_CUTOFF_MINUTES * 60_000;
 
   const doctorName = appt?.doctors?.name ?? 'your doctor';
   const messageLabel = `Message ${doctorShortName(appt?.doctors?.name)}`;
@@ -311,6 +321,13 @@ export default function ParentVideoScreen() {
 
       <View style={styles.body}>
         {renderBody()}
+        {canReschedule && !loadError ? (
+          <TextButton
+            label="Reschedule"
+            onPress={() => router.push({ pathname: '/consult/reschedule/[id]', params: { id: appt!.id } })}
+            accessibilityLabel={`Move this consult with ${doctorName} to another time`}
+          />
+        ) : null}
         {actionError ? (
           <Text style={[typography.bodySM, styles.errorText]} accessibilityRole="alert">
             {actionError}

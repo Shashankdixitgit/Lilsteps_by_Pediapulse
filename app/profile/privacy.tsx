@@ -23,7 +23,9 @@ import { layout, typography } from '@/styles/global';
  *     Supabase encrypts data at rest (AES-256) and in transit (TLS).
  *   - AI check-in: Google Gemini via the ai-checkin edge function.
  *   - Video consults: a Google Meet link from the doctor.
- *   - Push notifications: Expo push service. SMS sign-in codes: SMS provider.
+ *   - Push notifications: Expo push service. Emails (sign-in codes, booking
+ *     updates): Google Workspace (Gmail), sent as dev@lilstepsclinics.com.
+ *     SMS is off until DLT; add the SMS provider back here when it is on.
  *   - No advertising or analytics SDKs are in the app today. Update this
  *     page before adding Sentry / PostHog (lib/observability.ts).
  * Do not add claims like "HIPAA compliant" or "end-to-end encrypted".
@@ -35,7 +37,7 @@ const SECTIONS: readonly LegalSection[] = [
   {
     heading: 'What we collect',
     bullets: [
-      'About you: your name, mobile number, city, preferred language and how you are related to the child.',
+      'About you: your name, email address, mobile number (if you give one), city, preferred language and how you are related to the child.',
       'About your child: name, date of birth, sex, blood group, weight and height, allergies, conditions, medicines and the answers you give during set-up (such as birth history, feeding, sleep, development, diet and mood).',
       'What you add over time: vaccines, growth entries, health-log notes and photos, uploaded reports and records.',
       'Consults: AI check-in conversations and summaries, bookings, chats with the doctor, consult notes and prescriptions.',
@@ -58,7 +60,7 @@ const SECTIONS: readonly LegalSection[] = [
     bullets: [
       'You. Only you can see your children’s information in the app.',
       'Doctors you book with. A doctor can see a child’s details only after you book a consult with them, so they can prepare.',
-      'Service providers who run parts of the app for us, only for that purpose: Supabase (secure database, sign-in and file storage), Google Gemini (prepares the AI check-in summary), Google Meet (video consults), Expo (push notifications) and an SMS provider (sign-in codes).',
+      'Service providers who run parts of the app for us, only for that purpose: Supabase (secure database, sign-in and file storage), Google Gemini (prepares the AI check-in summary), Google Meet (video consults), Expo (push notifications) and Google Workspace (Gmail), which sends our emails: sign-in codes and booking updates.',
       'Authorities, only if Indian law requires us to share it.',
     ],
   },

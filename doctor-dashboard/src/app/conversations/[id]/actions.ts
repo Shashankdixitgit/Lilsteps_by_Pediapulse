@@ -49,7 +49,7 @@ export async function sendMessageAction(
     supabase.functions
       .invoke('notify', {
         body: {
-          channel: 'sms',
+          channel: 'email',
           template: 'new_message',
           params: { doctor: convo.doctors?.name ?? 'your doctor' },
           recipient: { parent_id: convo.parent_id },

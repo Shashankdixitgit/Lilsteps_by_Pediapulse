@@ -1,6 +1,6 @@
-# Signup form: navigate to signup, fill the name + phone fields, tap Create.
-# Stops BEFORE OTP verification — that step requires an actual SMS and is
-# better verified manually or via a Twilio Verify test credential.
+# Signup form: navigate to signup, fill name + email + password, tap Create.
+# Stops BEFORE code verification — that step needs the real email (6-digit
+# code from Supabase Auth) and is verified manually.
 
 appId: host.exp.Exponent
 tags:
@@ -20,16 +20,15 @@ tags:
     commands:
       - tapOn: "Sign Up"
 - assertVisible: "Create"
-- tapOn:
-    id: "name"
+- tapOn: "e.g. Priya Sharma"
 - inputText: "Test Parent"
-- tapOn:
-    id: "phone"
-- eraseText
-- inputText: "+919876543210"
-- tapOn: "Create Account"
-# OTP screen should appear
+- tapOn: "you@example.com"
+- inputText: "maestro.test@example.com"
+- tapOn: "Choose a password"
+- inputText: "Maestro-Test1"
+- tapOn: "Create account"
+# Code screen should appear
 - assertVisible:
-    text: "Enter|Code"
+    text: "Check your email"
     timeout: 10000
-- assertVisible: "+919876543210"
+- assertVisible: ".*maestro.test@example.com.*"

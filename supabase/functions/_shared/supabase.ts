@@ -54,6 +54,24 @@ export function createAdminClient(): SupabaseClient {
   });
 }
 
+/** The project's publishable (or legacy anon) key, for user-scoped clients. */
+function publishableKey(): string {
+  const keys = parseKeyDictionary(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS'));
+  return keys.default ?? Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+}
+
+/**
+ * Client that acts AS the caller (their JWT from the request): RLS and
+ * auth.uid() apply, e.g. for RPCs that check who is calling
+ * (reschedule_appointment, book_followup).
+ */
+export function createUserClient(req: Request): SupabaseClient {
+  return createClient(Deno.env.get('SUPABASE_URL') ?? '', publishableKey(), {
+    global: { headers: { Authorization: req.headers.get('Authorization') ?? '' } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 /** Resolves the user behind `Authorization: Bearer <user JWT>`, or null. */
 export async function getCaller(
   req: Request,

@@ -9,10 +9,26 @@
 #   storyboard-feedback                       public storyboard page
 #   razorpay-webhook                          X-Razorpay-Signature (HMAC)
 #   razorpay-return                           redirect only, allow-listed target
+#   demo-signup                               signed-out caller; DEMO_SIGNUP_ENABLED + demo-only addresses
 #
 # Deploy order for payments (0045): migration → functions + secrets → app.
 
 project_id = "lilsteps"
+
+# ── Auth emails (email sign-in, 0046) ─────────────────────────────────────────
+# Parents sign up / sign in / reset passwords with 6-digit email codes; SMS is
+# off until DLT. The branded templates live in supabase/templates/ and are
+# set on the HOSTED project in Dashboard → Authentication → Emails (or the
+# Management API), NOT here: an [auth] section in this file would be pushed
+# by `supabase config push` together with CLI defaults for every other auth
+# setting (site URL, providers, rate limits …) and overwrite the live ones.
+#   Confirm signup          supabase/templates/confirmation.html      "Your LilSteps code: confirm your email"
+#   Magic link / OTP        supabase/templates/magic_link.html        "Your LilSteps sign-in code"
+#   Reset password          supabase/templates/recovery.html          "Your LilSteps password reset code"
+#   Change email address    supabase/templates/email_change.html      "Confirm your new LilSteps email"
+#   Reauthentication        supabase/templates/reauthentication.html  "Your LilSteps verification code"
+# Custom SMTP: smtp.gmail.com : 465, user dev@lilstepsclinics.com, Google app
+# password, sender "LilSteps" <dev@lilstepsclinics.com>.
 
 [functions.ai-checkin]
 verify_jwt = true
@@ -25,6 +41,9 @@ verify_jwt = true
 
 [functions.create-meet-event]
 verify_jwt = true
+
+[functions.demo-signup]
+verify_jwt = false
 
 [functions.delete-account]
 verify_jwt = true

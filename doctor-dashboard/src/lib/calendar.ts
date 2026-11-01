@@ -118,9 +118,11 @@ export function hourLabel(h: number): string {
  * What colour an event gets. Closed visits are muted; open ones are coded by
  * the AI check-in's urgency, and visits booked without a check-in get their own.
  */
-export type EventKind = 'urgent' | 'soon' | 'routine' | 'direct' | 'closed';
+export type EventKind = 'urgent' | 'soon' | 'routine' | 'direct' | 'closed' | 'followup';
 
 export function eventKind(status: string, urgency: Urgency | undefined, hasCheckin: boolean): EventKind {
+  // Only a doctor-booked follow-up hold (0051) reaches the calendar unpaid.
+  if (status === 'awaiting_payment') return 'followup';
   if (status !== 'upcoming') return 'closed';
   if (urgency === 'urgent') return 'urgent';
   if (urgency === 'soon') return 'soon';
@@ -133,6 +135,7 @@ export const KIND_LABEL: Record<EventKind, string> = {
   routine: 'AI check-in',
   direct: 'Booked directly',
   closed: 'Closed',
+  followup: 'Follow-up · waiting for payment',
 };
 
 /** Pastel fill, left border and text colour per kind. */
@@ -142,6 +145,7 @@ export const KIND_STYLE: Record<EventKind, { bg: string; bar: string; text: stri
   routine: { bg: '#ece8ff', bar: '#6052bc', text: '#2a1f63' },
   direct: { bg: '#e0f2ea', bar: '#1f8a6e', text: '#0d3d30' },
   closed: { bg: '#f1eee6', bar: '#b5b2bf', text: '#65687b' },
+  followup: { bg: '#f7f5ff', bar: '#a99ee6', text: '#3b2f7a' },
 };
 
 /**

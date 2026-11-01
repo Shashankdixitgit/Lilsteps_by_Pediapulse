@@ -139,3 +139,12 @@ export function computeAge(dob: string): string {
 export function nowIstTime(): string {
   return new Date().toLocaleTimeString('en-GB', { timeZone: CLINIC_TZ, hour12: false });
 }
+
+/** IST wall clock `minutes` from now, as a DB date ("2026-11-03") and time ("17:30:00"). */
+export function istNowPlus(minutes: number): { date: string; time: string } {
+  const at = new Date(Date.now() + minutes * 60_000);
+  return {
+    date: at.toLocaleDateString('en-CA', { timeZone: CLINIC_TZ }),
+    time: at.toLocaleTimeString('en-GB', { timeZone: CLINIC_TZ, hour12: false }),
+  };
+}

@@ -176,15 +176,16 @@ export default async function QueuePage({
       .select('appointment_id, created_at')
       .gte('created_at', closedSince)
       .returns<{ appointment_id: string; created_at: string }[]>(),
-    // Visits in the calendar's days. Open and closed ones only: an unpaid
-    // hold (awaiting_payment) is not a consult and a cancelled one is gone.
+    // Visits in the calendar's days. Open and closed ones, plus follow-ups
+    // the doctor booked that wait for the family to pay (0051). Any other
+    // unpaid hold is not a consult yet, and a cancelled one is gone.
     supabase
       .from('appointments')
       .select(QUEUE_SELECT)
       .eq('doctor_id', doctor.doctorId)
       .gte('date', days[0])
       .lte('date', days[days.length - 1])
-      .in('status', ['upcoming', 'completed', 'no_show'])
+      .or('status.in.(upcoming,completed,no_show),and(status.eq.awaiting_payment,followup_of.not.is.null)')
       .order('date', { ascending: true })
       .order('time', { ascending: true })
       .returns<QueueRow[]>(),

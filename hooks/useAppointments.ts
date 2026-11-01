@@ -23,6 +23,10 @@ export interface AppointmentRow {
   concern: string | null;
   meet_link: string | null;
   created_at: string;
+  /** Times this consult was moved with Reschedule (0051, max 3). */
+  reschedule_count?: number;
+  /** Set on a follow-up the doctor booked (0051): the earlier visit it comes from. */
+  followup_of?: string | null;
   // joined
   doctors?: {
     name: string;
@@ -56,6 +60,8 @@ export async function linkConversationToAppointment(conversationId: string, appo
 export function useAppointments(childId: string | null) {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
+  /** Follow-ups the doctor booked that wait for this family to pay (0051). */
+  const [followUpsDue, setFollowUpsDue] = useState<AppointmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,25 +69,41 @@ export function useAppointments(childId: string | null) {
     if (!childId || !user) {
       setLoading(false);
       setAppointments([]);
+      setFollowUpsDue([]);
       return;
     }
     setLoading(true);
     setError(null);
 
-    const { data, error: err } = await supabase
-      .from('appointments')
-      .select('*, doctors(name, specialisation, hospital, has_meet_link, has_google_calendar), checkin_sessions(ai_summary)')
-      .eq('child_id', childId)
-      // Unpaid holds, and holds that ran out unpaid, are not bookings yet.
-      .neq('status', 'awaiting_payment')
-      .or('cancel_reason.is.null,cancel_reason.neq.payment_expired')
-      .order('date', { ascending: true })
-      .order('time', { ascending: true });
+    const select = '*, doctors(name, specialisation, hospital, has_meet_link, has_google_calendar), checkin_sessions(ai_summary)';
+    const [{ data, error: err }, { data: due }] = await Promise.all([
+      supabase
+        .from('appointments')
+        .select(select)
+        .eq('child_id', childId)
+        // Unpaid holds, and holds that ran out unpaid, are not bookings yet.
+        .neq('status', 'awaiting_payment')
+        .or('cancel_reason.is.null,cancel_reason.neq.payment_expired')
+        .order('date', { ascending: true })
+        .order('time', { ascending: true }),
+      // A follow-up the doctor booked is an unpaid hold too, but the family
+      // sees it (with Pay) until it is paid or runs out.
+      supabase
+        .from('appointments')
+        .select(select)
+        .eq('child_id', childId)
+        .eq('status', 'awaiting_payment')
+        .not('followup_of', 'is', null)
+        .gt('hold_expires_at', new Date().toISOString())
+        .order('date', { ascending: true })
+        .order('time', { ascending: true }),
+    ]);
 
     if (err) {
       setError(err.message);
     } else {
       setAppointments(data ?? []);
+      setFollowUpsDue((due as AppointmentRow[] | null) ?? []);
     }
     setLoading(false);
   }, [childId, user]);
@@ -154,7 +176,7 @@ export function useAppointments(childId: string | null) {
     return appointments.filter(a => a.status === 'upcoming' && !appointmentEnded(a.date, a.time, now));
   }, [appointments]);
 
-  return { appointments, upcoming, loading, error, bookAppointment, cancelAppointment, refetch: fetch };
+  return { appointments, upcoming, followUpsDue, loading, error, bookAppointment, cancelAppointment, refetch: fetch };
 }
 
 /** Whether this consult has a video link (per-booking Meet link or the doctor's room). */

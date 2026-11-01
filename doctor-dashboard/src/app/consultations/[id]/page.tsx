@@ -13,6 +13,9 @@ import { LateBadge, UrgencyBadge } from '../../urgency-badge';
 import { VideoLinkBanner } from '../../video-link-banner';
 import { OnboardingAnswersList, onboardingAnswersEyebrow, type OnboardingAnswers } from './onboarding-answers';
 import { CancelConsultButton } from './cancel-consult-button';
+import { CancelFollowupButton } from './cancel-followup-button';
+import { SlotPicker } from './slot-picker';
+import { fetchOpenSlots } from '@/lib/open-slots';
 import { OpenChatButton } from './open-chat-button';
 import { VisitNotesForm } from './visit-notes';
 
@@ -23,6 +26,10 @@ type AppointmentRow = {
   status: 'awaiting_payment' | 'upcoming' | 'completed' | 'cancelled' | 'no_show';
   ai_summary_id: string | null;
   meet_link: string | null;
+  /** 0051: times this consult was moved (max 3), and the visit a follow-up comes from. */
+  reschedule_count: number;
+  followup_of: string | null;
+  hold_expires_at: string | null;
   children: { id: string; name: string; dob: string; sex: string; weight: number | null; height: number | null; blood_group: string | null; onboarding_answers: OnboardingAnswers } | null;
   parents: { name: string | null; phone: string | null } | null;
 };
@@ -111,25 +118,30 @@ export default async function ConsultationPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ issued?: string }>;
+  searchParams: Promise<{ issued?: string; followup?: string }>;
 }) {
   const { id } = await params;
-  const { issued } = await searchParams;
+  const { issued, followup } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const doctor = await getCurrentDoctor(supabase);
 
   const { data: appointment } = await supabase
     .from('appointments')
     .select(
-      'id, date, time, status, ai_summary_id, meet_link, ' +
+      'id, date, time, status, ai_summary_id, meet_link, reschedule_count, followup_of, hold_expires_at, ' +
         'children(id, name, dob, sex, weight, height, blood_group, onboarding_answers), ' +
         'parents(name, phone)',
     )
     .eq('id', id)
     .maybeSingle<AppointmentRow>();
 
-  // An unpaid hold (0045) is not a consult yet.
-  if (!appointment || !appointment.children || appointment.status === 'awaiting_payment') notFound();
+  if (!appointment || !appointment.children) notFound();
+  // An unpaid hold (0045) is not a consult yet. A follow-up the doctor booked
+  // (0051) gets a short page of its own until the family pays.
+  if (appointment.status === 'awaiting_payment') {
+    if (!appointment.followup_of) notFound();
+    return <FollowupHoldPage appointment={appointment} />;
+  }
   const child = appointment.children;
   const stamp = { ...dateStamp(appointment.date), time: formatSlotTime(appointment.time) };
   const age = computeAge(child.dob);
@@ -170,6 +182,28 @@ export default async function ConsultationPage({
     appointment.ai_summary_id
       ? supabase.from('checkin_messages').select('id, role, content, created_at').eq('session_id', appointment.ai_summary_id).order('created_at', { ascending: true }).returns<CheckinMessageRow[]>()
       : Promise.resolve({ data: [] as CheckinMessageRow[] }),
+  ]);
+  // Reschedule (upcoming) and Book follow-up (completed): the doctor's own
+  // open times, and any follow-up for this child still waiting for payment.
+  const canReschedule =
+    appointment.status === 'upcoming' && !isLate && appointment.date >= todayIst() && (appointment.reschedule_count ?? 0) < 3;
+  const canFollowUp = appointment.status === 'completed';
+  const [pickerSlots, { data: pendingFollowup }] = await Promise.all([
+    doctor && (canReschedule || canFollowUp)
+      ? fetchOpenSlots(supabase, doctor.doctorId, canFollowUp ? 120 : 0)
+      : Promise.resolve([]),
+    canFollowUp
+      ? supabase
+          .from('appointments')
+          .select('id, date, time, hold_expires_at')
+          .eq('child_id', child.id)
+          .eq('status', 'awaiting_payment')
+          .not('followup_of', 'is', null)
+          .gt('hold_expires_at', new Date().toISOString())
+          .order('date', { ascending: true })
+          .limit(1)
+          .maybeSingle<{ id: string; date: string; time: string; hold_expires_at: string }>()
+      : Promise.resolve({ data: null }),
   ]);
   const summary = checkin?.ai_summary ?? null;
   const urgency = summary?.suggestedUrgency ?? null;
@@ -221,6 +255,11 @@ export default async function ConsultationPage({
       {issued && (
         <Suspense>
           <FlashToast param="issued" message={`Prescription issued to ${firstName}'s parent`} />
+        </Suspense>
+      )}
+      {followup === 'cancelled' && (
+        <Suspense>
+          <FlashToast param="followup" message="Follow-up cancelled. The time is open for booking again." />
         </Suspense>
       )}
 
@@ -276,8 +315,25 @@ export default async function ConsultationPage({
           <Link href={`/prescriptions?child=${child.id}`} className="editorial-btn-ghost">
             Past prescriptions
           </Link>
+          {canFollowUp && !pendingFollowup && (
+            <SlotPicker mode="followup" appointmentId={appointment.id} childFirstName={firstName} slots={pickerSlots} />
+          )}
+          {pendingFollowup && (
+            <Link href={`/consultations/${pendingFollowup.id}`} className="text-[13px] text-[var(--ink-2)] underline">
+              Follow-up {formatDayShort(pendingFollowup.date)}, {formatSlotTime(pendingFollowup.time)} · waiting for payment
+            </Link>
+          )}
           {appointment.status === 'upcoming' && (
             <span className="flex flex-wrap items-center gap-3 sm:ml-auto">
+              {canReschedule && (
+                <SlotPicker
+                  mode="reschedule"
+                  appointmentId={appointment.id}
+                  childFirstName={firstName}
+                  currentWhen={`${formatDayShort(appointment.date)}, ${formatSlotTime(appointment.time)}`}
+                  slots={pickerSlots}
+                />
+              )}
               <CancelConsultButton
                 appointmentId={appointment.id}
                 childFirstName={firstName}
@@ -747,5 +803,49 @@ function FlagList({ label, items, alert }: { label: string; items: string[]; ale
         ))}
       </ul>
     </div>
+  );
+}
+
+/** A follow-up the doctor booked (0051) that the family has not paid for yet. */
+function FollowupHoldPage({ appointment }: { appointment: AppointmentRow }) {
+  const child = appointment.children!;
+  const when = `${formatDayShort(appointment.date)}, ${formatSlotTime(appointment.time)}`;
+  const heldUntil = appointment.hold_expires_at ? formatDateTime(appointment.hold_expires_at) : null;
+  return (
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-8">
+      <Link href="/" className="link-underline text-[13px] text-[var(--ink-3)]">
+        ← Back to queue
+      </Link>
+      <header className="mt-5 fade-up rounded-2xl border border-[var(--hairline)] bg-[var(--card)] p-6">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="min-w-0">
+            <h1 className="font-display text-[32px] leading-tight text-[var(--ink)]">{child.name}</h1>
+            <p className="mt-1 text-[14px] text-[var(--ink-3)]">Parent: {parentContact(appointment.parents)}</p>
+          </div>
+          <div className="text-right">
+            <div className="text-[15px] font-semibold text-[var(--ink)]">{when}</div>
+            <div className="mt-0.5 text-[13px] text-[var(--ink-3)]">Video consult · 30 min</div>
+            <span className="mt-3 inline-flex items-center rounded-full border border-dashed border-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">
+              Follow-up · waiting for payment
+            </span>
+          </div>
+        </div>
+        <p className="mt-5 max-w-2xl text-[14.5px] leading-[1.55] text-[var(--ink-2)]">
+          You booked this follow-up. The family has been sent a link to pay the consult fee and confirm it
+          {heldUntil ? `; the time is held for them until ${heldUntil}` : ''}. Once they pay, it becomes a normal
+          consult in your queue. If they don&apos;t, the time opens for booking again by itself.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[var(--hairline)] pt-5">
+          {appointment.followup_of && (
+            <Link href={`/consultations/${appointment.followup_of}`} className="editorial-btn-ghost">
+              Open the earlier visit
+            </Link>
+          )}
+          <span className="flex flex-wrap items-center gap-3 sm:ml-auto">
+            <CancelFollowupButton holdId={appointment.id} when={when} />
+          </span>
+        </div>
+      </header>
+    </main>
   );
 }

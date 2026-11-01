@@ -52,7 +52,7 @@ type Nav = { anchor: string; view: CalendarView; month: string };
 const HOUR_PX = 72;
 const DEFAULT_START_HOUR = 8;
 const DEFAULT_END_HOUR = 20;
-const ORDERED_KINDS: EventKind[] = ['urgent', 'soon', 'routine', 'direct', 'closed'];
+const ORDERED_KINDS: EventKind[] = ['urgent', 'soon', 'routine', 'direct', 'followup', 'closed'];
 
 /** Queue URL for a calendar position; defaults are left out to keep links short. */
 export function scheduleHref({ anchor, view, month }: Nav, today: string): string {
@@ -316,7 +316,7 @@ function DayColumn({
         const top = ((e.start - startHour * 60) / 60) * HOUR_PX;
         const height = (SLOT_MINUTES / 60) * HOUR_PX - 3;
         const timeRange = `${minutesToLabel(e.start)} – ${minutesToLabel(e.start + SLOT_MINUTES)}`;
-        const state = e.status === 'completed' ? 'Completed' : e.status === 'no_show' ? 'No-show' : e.needsClosing ? 'Not closed yet' : e.late ? 'Late' : null;
+        const state = e.status === 'completed' ? 'Completed' : e.status === 'no_show' ? 'No-show' : e.status === 'awaiting_payment' ? 'Waiting for payment' : e.needsClosing ? 'Not closed yet' : e.late ? 'Late' : null;
         return (
           <Link
             key={e.id}
@@ -331,6 +331,7 @@ function DayColumn({
               width: `calc(${100 / n}% - 6px)`,
               background: s.bg,
               borderLeftColor: s.bar,
+              borderLeftStyle: e.kind === 'followup' ? 'dashed' : undefined,
               color: s.text,
             }}
           >
@@ -378,7 +379,12 @@ function Agenda({ days, byDay, today }: { days: string[]; byDay: Map<string, Cal
                       <Link
                         href={`/consultations/${e.id}`}
                         className="flex items-start gap-3 rounded-lg border-l-[3px] px-3 py-2.5"
-                        style={{ background: s.bg, borderLeftColor: s.bar, color: s.text }}
+                        style={{
+                          background: s.bg,
+                          borderLeftColor: s.bar,
+                          borderLeftStyle: e.kind === 'followup' ? 'dashed' : undefined,
+                          color: s.text,
+                        }}
                       >
                         <span className="w-[4.25rem] shrink-0 pt-px font-mono text-[12px]">{minutesToLabel(e.start)}</span>
                         <span className="min-w-0">

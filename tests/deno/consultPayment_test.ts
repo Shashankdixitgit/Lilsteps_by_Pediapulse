@@ -15,6 +15,7 @@ import {
   clearPendingWebPayment,
   payForConsult,
   readPendingWebPayment,
+  rescheduleConsult,
 } from '../../lib/consultPayment.ts';
 
 const LINK = 'https://rzp.io/rzp/test123';
@@ -74,4 +75,16 @@ Deno.test('start is server-priced: the client never sends an amount', async () =
   setNextResult({ type: 'cancel' });
   await payForConsult('appt-3');
   for (const c of invoked) assertEquals('amount' in c.body || 'amount_paise' in c.body, false);
+});
+
+Deno.test('reschedule: asks the server with the booking and the new slot only, returns the new time', async () => {
+  invoked.length = 0;
+  setInvokeHandler((_name, body) =>
+    body.action === 'reschedule'
+      ? { appointment: { id: body.appointmentId, date: '2026-11-04', time: '09:00', reschedule_count: 1 } }
+      : {},
+  );
+  const moved = await rescheduleConsult('appt-4', 'slot-9');
+  assertEquals(invoked, [{ name: 'consult-payment', body: { action: 'reschedule', appointmentId: 'appt-4', slotId: 'slot-9' } }]);
+  assertEquals(moved, { id: 'appt-4', date: '2026-11-04', time: '09:00', reschedule_count: 1 });
 });

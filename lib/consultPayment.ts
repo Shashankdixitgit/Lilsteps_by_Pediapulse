@@ -168,6 +168,26 @@ export async function cancelConsult(appointmentId: string): Promise<{ refund: Re
   return call({ action: 'cancel', appointmentId }, "Couldn't cancel. Please check your connection and try again.");
 }
 
+/**
+ * Move a paid, upcoming consult to another open slot of the same doctor
+ * (free; 2 hours or more before the start). The server checks every rule
+ * (reschedule_appointment, 0051) and emails the new time.
+ */
+export async function rescheduleConsult(
+  appointmentId: string,
+  slotId: string,
+): Promise<{ id: string; date: string; time: string; reschedule_count: number }> {
+  const res = await call<{ appointment: { id: string; date: string; time: string; reschedule_count: number } }>(
+    { action: 'reschedule', appointmentId, slotId },
+    "Couldn't move the consult. Please check your connection and try again.",
+  );
+  return res.appointment;
+}
+
+/** How many times a consult can be moved, and how close to the start (same line as refunds). */
+export const MAX_RESCHEDULES = 3;
+export const RESCHEDULE_CUTOFF_MINUTES = 120;
+
 /** This parent's own unpaid hold on one slot, if the app lost track of it. */
 export async function findOwnHold(params: {
   childId: string;

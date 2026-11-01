@@ -343,3 +343,115 @@ export async function cancelConsultAction(appointmentId: string): Promise<{ erro
         : 'no payment to refund';
   redirect(`/?closed=${encodeURIComponent(`Consult with ${who} cancelled · ${note}`)}`);
 }
+
+/** The error text an edge function returned, or `fallback`. */
+async function functionError(error: unknown, fallback: string): Promise<string> {
+  const ctx = (error as { context?: unknown } | null)?.context;
+  if (ctx instanceof Response) {
+    try {
+      const body = (await ctx.json()) as { error?: string };
+      if (body?.error) return body.error;
+    } catch {
+      /* keep the fallback */
+    }
+  }
+  return fallback;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Doctor moves an upcoming, paid consult to another of their open slots
+ * (free). consult-payment `reschedule` runs reschedule_appointment (0051) as
+ * the doctor: the old slot re-opens, the payment and the video room stay,
+ * the family gets an email and a note in chat.
+ */
+export async function rescheduleConsultAction(
+  appointmentId: string,
+  slotId: string,
+): Promise<{ error?: string; when?: string }> {
+  if (!UUID_RE.test(appointmentId) || !UUID_RE.test(slotId)) return { error: 'Pick a time first.' };
+  const supabase = await createSupabaseServerClient();
+  const doctor = await getCurrentDoctor(supabase);
+  if (!doctor) return { error: 'Not signed in as a doctor' };
+
+  const { data, error } = await supabase.functions.invoke<{ appointment?: { date: string; time: string } }>(
+    'consult-payment',
+    { body: { action: 'reschedule', appointmentId, slotId } },
+  );
+  if (error || !data?.appointment) {
+    return refuse(appointmentId, await functionError(error, 'Could not move the consult. Please try again.'));
+  }
+  revalidatePath('/');
+  revalidatePath('/availability');
+  revalidatePath(`/consultations/${appointmentId}`);
+  return { when: `${formatDayShort(data.appointment.date)}, ${formatSlotTime(data.appointment.time)}` };
+}
+
+/**
+ * Doctor books a paid follow-up from a completed consult: consult-payment
+ * `followup` holds the slot for the family (book_followup, 0051), makes the
+ * ₹449 payment link and emails it to the parent. It shows on the calendar
+ * as "Follow-up · waiting for payment" until it is paid.
+ */
+export async function bookFollowupAction(
+  appointmentId: string,
+  slotId: string,
+): Promise<{ error?: string; when?: string; emailed?: boolean }> {
+  if (!UUID_RE.test(appointmentId) || !UUID_RE.test(slotId)) return { error: 'Pick a time first.' };
+  const supabase = await createSupabaseServerClient();
+  const doctor = await getCurrentDoctor(supabase);
+  if (!doctor) return { error: 'Not signed in as a doctor' };
+
+  const { data: slot } = await supabase
+    .from('time_slots')
+    .select('date, time')
+    .eq('id', slotId)
+    .maybeSingle<{ date: string; time: string }>();
+
+  const { data, error } = await supabase.functions.invoke<{ appointmentId?: string; emailed?: boolean }>(
+    'consult-payment',
+    { body: { action: 'followup', appointmentId, slotId } },
+  );
+  if (error || !data?.appointmentId) {
+    return refuse(appointmentId, await functionError(error, 'Could not book the follow-up. Please try again.'));
+  }
+  revalidatePath('/');
+  revalidatePath('/availability');
+  revalidatePath(`/consultations/${appointmentId}`);
+  return {
+    when: slot ? `${formatDayShort(slot.date)}, ${formatSlotTime(slot.time)}` : undefined,
+    emailed: data.emailed === true,
+  };
+}
+
+/**
+ * Doctor withdraws a follow-up the family has not paid for yet. Through
+ * consult-payment `cancel` so the payment link is cancelled too; the slot
+ * re-opens.
+ */
+export async function cancelFollowupAction(holdId: string): Promise<{ error?: string }> {
+  if (!UUID_RE.test(holdId)) return { error: 'Follow-up not found' };
+  const supabase = await createSupabaseServerClient();
+  const doctor = await getCurrentDoctor(supabase);
+  if (!doctor) return { error: 'Not signed in as a doctor' };
+
+  const { data: hold } = await supabase
+    .from('appointments')
+    .select('id, status, followup_of')
+    .eq('id', holdId)
+    .eq('doctor_id', doctor.doctorId)
+    .maybeSingle<{ id: string; status: string; followup_of: string | null }>();
+  if (!hold || !hold.followup_of) return { error: 'Follow-up not found' };
+  if (hold.status !== 'awaiting_payment') return refuse(hold.id, 'This follow-up is no longer waiting for payment.');
+
+  const { error } = await supabase.functions.invoke('consult-payment', {
+    body: { action: 'cancel', appointmentId: hold.id },
+  });
+  if (error) return refuse(hold.id, await functionError(error, 'Could not cancel the follow-up. Please try again.'));
+
+  revalidatePath('/');
+  revalidatePath('/availability');
+  revalidatePath(`/consultations/${hold.followup_of}`);
+  redirect(`/consultations/${hold.followup_of}?followup=cancelled`);
+}

@@ -1,8 +1,9 @@
 // Edge Function: consult-payment
 //
-// Pay-per-consult (₹449, CONSULT_PRICE_PAISE) for a booking that book_slot
-// (0045) created as 'awaiting_payment'. Called by the parent app with the
-// user's JWT; the doctor dashboard may call `cancel` for its own consults.
+// Pay-per-consult (₹449, CONSULT_PRICE_PAISE) for a booking that hold_slot
+// (0045) or book_followup (0051) created as 'awaiting_payment'. Called by the
+// parent app with the user's JWT; the doctor dashboard may call `cancel`,
+// `reschedule` and `followup` for its own consults.
 //
 //   POST {action:"start",  appointmentId, returnUrl}
 //        → {url, expiresAt}   a Razorpay Payment Link to open in the browser.
@@ -24,6 +25,22 @@
 //          Unpaid hold: dropped, link cancelled. Paid consult: cancelled;
 //          refunded in full when it is 2 h or more before the start, or when
 //          the doctor cancels. Less than 2 h before (parent): no refund.
+//   POST {action:"reschedule", appointmentId, slotId}            parent / doctor
+//        → {appointment: {id, date, time, reschedule_count}}
+//          Free: moves an upcoming PAID consult to another open slot of the
+//          same doctor (reschedule_appointment, 0051, run as the caller so
+//          it checks who they are; parent: 2 h or more before the start).
+//          The payment and the Meet room stay. The family gets the
+//          'appointment_rescheduled' email (once per new time).
+//   POST {action:"followup", appointmentId, slotId}              doctor only
+//        appointmentId = the COMPLETED consult the follow-up is for.
+//        → {appointmentId, holdExpiresAt, emailed}
+//          book_followup (0051) holds the slot for the family
+//          ('awaiting_payment', up to 24 h, released 1 h before the slot),
+//          a Payment Link is made for the whole hold, and the family is
+//          emailed it ('followup_payment_request'). Paying confirms it
+//          through the webhook like any booking. If no link can be made the
+//          hold is dropped again.
 //
 // The return URL is never handed to Razorpay as-is: callback_url points at
 // razorpay-return, which only redirects to the app's own scheme or an
@@ -34,7 +51,9 @@
 
 // deno-lint-ignore-file no-explicit-any
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
-import { createAdminClient, getCaller } from '../_shared/supabase.ts';
+import { createAdminClient, createUserClient, getCaller } from '../_shared/supabase.ts';
+import { consultStart, emailPaymentReturnUrl, followupLinkExpiry, istParts, startsAtKey } from '../_shared/schedule.ts';
+import { formatEmailDate, formatEmailTime } from '../_shared/templates.ts';
 import {
   cancelPaymentLink,
   CONSULT_PRICE_PAISE,
@@ -52,6 +71,7 @@ import {
   verifyLinkCallbackSignature,
 } from '../_shared/razorpay.ts';
 import { isAllowedReturnUrl } from '../razorpay-return/allow.ts';
+import { inBackground, notifyParent, parentContact } from '../_shared/parentNotify.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MINUTE = 60 * 1000;
@@ -65,8 +85,23 @@ interface Appointment {
   status: string;
   cancel_reason: string | null;
   hold_expires_at: string | null;
+  child_id: string;
+  followup_of?: string | null;
   doctors: { name: string } | null;
-  parents: { phone: string | null } | null;
+  children: { name: string } | null;
+}
+
+/** What reschedule_appointment / book_followup return (an appointments row). */
+interface AppointmentRow {
+  id: string;
+  parent_id: string;
+  doctor_id: string;
+  child_id: string;
+  date: string;
+  time: string;
+  status: string;
+  hold_expires_at: string | null;
+  reschedule_count: number;
 }
 
 interface PaymentRow {
@@ -76,11 +111,6 @@ interface PaymentRow {
   razorpay_link_url: string | null;
   link_expires_at: string | null;
   created_at: string;
-}
-
-/** Consult start as a Date: date + time are clinic (IST, +05:30) wall time. */
-function consultStart(date: string, time: string): Date {
-  return new Date(`${date}T${time.slice(0, 8)}+05:30`);
 }
 
 function callbackFrom(raw: any): LinkCallback | null {
@@ -122,7 +152,7 @@ Deno.serve(async (req) => {
 
   const { data: appt } = await admin
     .from('appointments')
-    .select('id, parent_id, doctor_id, date, time, status, cancel_reason, hold_expires_at, doctors(name), parents(phone)')
+    .select('id, parent_id, doctor_id, child_id, date, time, status, cancel_reason, hold_expires_at, doctors(name), children(name)')
     .eq('id', appointmentId)
     .maybeSingle<Appointment>();
   if (!appt) return jsonResponse({ error: 'Appointment not found' }, 404);
@@ -137,15 +167,23 @@ Deno.serve(async (req) => {
       .maybeSingle();
     isDoctor = doctorAuth?.doctor_id === appt.doctor_id;
   }
-  // Only cancel is open to the doctor.
-  if (!isParent && !(isDoctor && action === 'cancel')) {
+  // The doctor may cancel, move, or book a follow-up from their own consult.
+  // A follow-up is the doctor's alone; paying is the family's alone.
+  const doctorAction = action === 'cancel' || action === 'reschedule' || action === 'followup';
+  if (!(isParent && action !== 'followup') && !(isDoctor && doctorAction)) {
     return jsonResponse({ error: 'Appointment not found' }, 404);
+  }
+  const slotId = body?.slotId;
+  if ((action === 'reschedule' || action === 'followup') && (typeof slotId !== 'string' || !UUID_RE.test(slotId))) {
+    return jsonResponse({ error: 'Missing slotId' }, 400);
   }
 
   try {
     if (action === 'start') return await start(admin, appt, body?.returnUrl);
     if (action === 'status') return await status(admin, appt, callbackFrom(body?.callback));
     if (action === 'cancel') return await cancel(admin, appt, isDoctor ? 'doctor' : 'parent');
+    if (action === 'reschedule') return await reschedule(req, admin, appt, isDoctor ? 'doctor' : 'parent', slotId);
+    if (action === 'followup') return await followup(req, admin, appt, slotId);
     return jsonResponse({ error: 'Unknown action' }, 400);
   } catch (e) {
     const msg = (e as Error).message;
@@ -205,6 +243,34 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
   }
 
   const expireBy = new Date(now + LINK_MINUTES * MINUTE);
+  const made = await createLinkForHold(admin, appt, returnUrl, expireBy);
+  if ('error' in made) return made.error;
+
+  // The hold covers the whole life of the link, plus a little for the webhook.
+  const holdUntil = new Date(expireBy.getTime() + HOLD_GRACE_MINUTES * MINUTE);
+  if (new Date(appt.hold_expires_at).getTime() < holdUntil.getTime()) {
+    await admin
+      .from('appointments')
+      .update({ hold_expires_at: holdUntil.toISOString() })
+      .eq('id', appt.id)
+      .eq('status', 'awaiting_payment');
+  }
+
+  return jsonResponse({ url: made.url, expiresAt: expireBy.toISOString() });
+}
+
+/**
+ * A new Razorpay Payment Link for a held booking, recorded in payments
+ * (one open link per booking: payments_one_open_link_uidx). Shared by
+ * `start` (16-minute links the app opens) and `followup` (one link for the
+ * whole hold, emailed). The caller has already dealt with any open link.
+ */
+async function createLinkForHold(
+  admin: any,
+  appt: Pick<Appointment, 'id' | 'parent_id' | 'doctors'>,
+  returnUrl: string,
+  expireBy: Date,
+): Promise<{ url: string } | { error: Response }> {
   const { data: row, error } = await admin
     .from('payments')
     .insert({
@@ -217,12 +283,14 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
     .single();
   if (error?.code === '23505') {
     // Another start for this booking is making a link right now.
-    return jsonResponse({ error: 'Opening the payment page already. Please try again in a moment.' }, 409);
+    return { error: jsonResponse({ error: 'Opening the payment page already. Please try again in a moment.' }, 409) };
   }
   if (error || !row) throw new Error(`payments insert: ${error?.message}`);
 
   const callbackUrl =
     `${Deno.env.get('SUPABASE_URL')}/functions/v1/razorpay-return?to=${encodeURIComponent(returnUrl)}`;
+  // Prefill Razorpay's page with the parent's sign-in email (and phone, if any).
+  const contact = await parentContact(admin, appt.parent_id);
   let link;
   try {
     link = await createPaymentLink({
@@ -231,7 +299,8 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
       expireBy,
       description: `Video consult with ${appt.doctors?.name ?? 'your doctor'}`.slice(0, 2048),
       callbackUrl,
-      contact: appt.parents?.phone ?? null,
+      contact: contact.phone ?? null,
+      email: contact.email ?? null,
     });
   } catch (e) {
     await admin.from('payments').delete().eq('id', row.id);
@@ -247,20 +316,9 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
     console.error(`[consult-payment] could not save link ${link.id} on row ${row.id}: ${saveErr.message}`);
     await cancelPaymentLink(link.id);
     await admin.from('payments').update({ status: 'cancelled' }).eq('id', row.id);
-    return jsonResponse({ error: "Couldn't open the payment page. Please try again." }, 502);
+    return { error: jsonResponse({ error: "Couldn't open the payment page. Please try again." }, 502) };
   }
-
-  // The hold covers the whole life of the link, plus a little for the webhook.
-  const holdUntil = new Date(expireBy.getTime() + HOLD_GRACE_MINUTES * MINUTE);
-  if (new Date(appt.hold_expires_at).getTime() < holdUntil.getTime()) {
-    await admin
-      .from('appointments')
-      .update({ hold_expires_at: holdUntil.toISOString() })
-      .eq('id', appt.id)
-      .eq('status', 'awaiting_payment');
-  }
-
-  return jsonResponse({ url: link.short_url, expiresAt: expireBy.toISOString() });
+  return { url: link.short_url };
 }
 
 // ── status ──────────────────────────────────────────────────────────────────
@@ -370,13 +428,174 @@ async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): P
     }
   }
 
+  const outcome = await cancelRefund(admin, appt, payments, by);
+  // A booked consult (not an unpaid hold) gets a cancellation email, sent in
+  // the background: the cancel answer never waits for (or fails on) email.
+  if (appt.status === 'upcoming') {
+    inBackground('cancel email', emailCancellation(admin, appt, by, outcome.refund));
+  }
+  return jsonResponse(outcome);
+}
+
+/** The refund part of a cancel; the result is the response body. */
+async function cancelRefund(
+  admin: any,
+  appt: Appointment,
+  payments: PaymentRow[],
+  by: 'parent' | 'doctor',
+): Promise<{ refund: 'none' | 'not_paid' | 'started' | 'failed'; late?: true }> {
   const paid = payments.find((p) => p.status === 'paid');
-  if (!paid) return jsonResponse({ refund: 'not_paid' });
+  if (!paid) return { refund: 'not_paid' };
 
   const early = consultStart(appt.date, appt.time).getTime() - Date.now() >= REFUND_CUTOFF_MS;
-  if (by === 'parent' && !early) return jsonResponse({ refund: 'none', late: true });
+  if (by === 'parent' && !early) return { refund: 'none', late: true };
 
   const result = await refundPaymentRow(admin, paid.id, by === 'doctor' ? 'doctor_cancelled' : 'parent_cancelled');
-  if (result === 'not_paid') return jsonResponse({ refund: 'not_paid' });
-  return jsonResponse({ refund: result === 'refund_failed' ? 'failed' : 'started' });
+  if (result === 'not_paid') return { refund: 'not_paid' };
+  return { refund: result === 'refund_failed' ? 'failed' : 'started' };
+}
+
+/** Best effort: the cancel stands whether or not the email goes out. */
+async function emailCancellation(
+  admin: any,
+  appt: Appointment,
+  by: 'parent' | 'doctor',
+  refund: 'none' | 'not_paid' | 'started' | 'failed',
+): Promise<void> {
+  try {
+    await notifyParent(admin, {
+      parentId: appt.parent_id,
+      childId: appt.child_id,
+      appointmentId: appt.id,
+      template: 'appointment_cancelled',
+      params: {
+        doctor: appt.doctors?.name ?? 'your doctor',
+        child: appt.children?.name ?? '',
+        date: appt.date,
+        time: String(appt.time).slice(0, 5),
+        by,
+        refund: refund === 'none' ? 'late' : refund,
+      },
+    });
+  } catch (e) {
+    console.error(`[consult-payment] cancel email ${appt.id}: ${(e as Error).message}`);
+  }
+}
+
+// ── reschedule ──────────────────────────────────────────────────────────────
+
+/** A refusal from our own RPCs (P0001 / P0002 / 42501) is written for people. */
+function rpcRefusal(error: { code?: string; message?: string } | null): Response | null {
+  if (!error) return null;
+  if (error.code === 'P0001' || error.code === 'P0002' || error.code === '42501' || error.code === '28000') {
+    return jsonResponse({ error: error.message ?? 'This could not be done.' }, 409);
+  }
+  return null;
+}
+
+async function reschedule(
+  req: Request,
+  admin: any,
+  appt: Appointment,
+  by: 'parent' | 'doctor',
+  slotId: string,
+): Promise<Response> {
+  // As the caller: the RPC itself checks who they are and every rule.
+  const user = createUserClient(req);
+  const { data, error } = await user
+    .rpc('reschedule_appointment', { p_appointment_id: appt.id, p_new_slot_id: slotId })
+    .single();
+  const refused = rpcRefusal(error);
+  if (refused) return refused;
+  if (error || !data) throw new Error(`reschedule_appointment: ${error?.message}`);
+  const moved = data as AppointmentRow;
+
+  inBackground('reschedule email', emailReschedule(admin, appt, moved, by));
+  return jsonResponse({
+    appointment: { id: moved.id, date: moved.date, time: String(moved.time).slice(0, 5), reschedule_count: moved.reschedule_count },
+  });
+}
+
+/** Once per new consult time (0051 index on payload.starts_at). */
+async function emailReschedule(admin: any, appt: Appointment, moved: AppointmentRow, by: 'parent' | 'doctor'): Promise<void> {
+  try {
+    await notifyParent(admin, {
+      parentId: appt.parent_id,
+      childId: appt.child_id,
+      appointmentId: appt.id,
+      template: 'appointment_rescheduled',
+      params: {
+        doctor: appt.doctors?.name ?? 'your doctor',
+        child: appt.children?.name ?? '',
+        date: moved.date,
+        time: String(moved.time).slice(0, 5),
+        by,
+      },
+      payload: { starts_at: startsAtKey(moved.date, String(moved.time)) },
+    });
+  } catch (e) {
+    console.error(`[consult-payment] reschedule email ${appt.id}: ${(e as Error).message}`);
+  }
+}
+
+// ── followup ────────────────────────────────────────────────────────────────
+
+async function followup(req: Request, admin: any, from: Appointment, slotId: string): Promise<Response> {
+  const user = createUserClient(req);
+  const { data, error } = await user
+    .rpc('book_followup', { p_from_appointment_id: from.id, p_slot_id: slotId })
+    .single();
+  const refused = rpcRefusal(error);
+  if (refused) return refused;
+  if (error || !data) throw new Error(`book_followup: ${error?.message}`);
+  const hold = data as AppointmentRow;
+
+  const expireBy = followupLinkExpiry(hold.hold_expires_at!, HOLD_GRACE_MINUTES);
+  let made: { url: string } | { error: Response };
+  try {
+    made = await createLinkForHold(
+      admin,
+      { id: hold.id, parent_id: hold.parent_id, doctors: from.doctors },
+      emailPaymentReturnUrl(Deno.env.get('PAYMENT_RETURN_ORIGINS')),
+      expireBy,
+    );
+  } catch (e) {
+    made = { error: jsonResponse({ error: 'The payment service did not answer. Please try again.' }, 502) };
+    console.error(`[consult-payment] followup link ${hold.id}: ${(e as Error).message}`);
+  }
+  if ('error' in made) {
+    // No link, no follow-up: give the slot back (release_appointment_slot).
+    await admin
+      .from('appointments')
+      .update({ status: 'cancelled', cancel_reason: 'doctor', hold_expires_at: null })
+      .eq('id', hold.id)
+      .eq('status', 'awaiting_payment');
+    return made.error;
+  }
+
+  const until = istParts(new Date(hold.hold_expires_at!));
+  let emailed = false;
+  try {
+    const sent = await notifyParent(admin, {
+      parentId: hold.parent_id,
+      childId: hold.child_id,
+      appointmentId: hold.id,
+      template: 'followup_payment_request',
+      params: {
+        doctor: from.doctors?.name ?? 'your doctor',
+        child: from.children?.name ?? '',
+        date: hold.date,
+        time: String(hold.time).slice(0, 5),
+        link: made.url,
+        price: '₹449',
+        until: `${formatEmailDate(until.date)} at ${formatEmailTime(until.time)}`,
+      },
+      channels: ['email', 'push'],
+    });
+    emailed = sent.some((r) => r.channel === 'email' && r.ok);
+  } catch (e) {
+    console.error(`[consult-payment] followup email ${hold.id}: ${(e as Error).message}`);
+  }
+
+  return jsonResponse({ appointmentId: hold.id, holdExpiresAt: hold.hold_expires_at, emailed });
 }
