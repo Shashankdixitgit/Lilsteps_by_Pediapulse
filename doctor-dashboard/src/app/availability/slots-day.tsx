@@ -115,15 +115,18 @@ export function SlotsDay({ day, title, isToday }: { day: DaySlots; title: string
           >
             {open.map((s) => (
               <Row key={s.id} time={s.time} tone="open" status="Open">
-                <button
-                  type="button"
-                  onClick={() => run(() => toggleSlotAction(s.id, false))}
-                  disabled={pending}
-                  aria-label={`Close the ${formatSlotTime(s.time)} slot`}
-                  className="editorial-btn-ghost btn-sm"
-                >
-                  Close
-                </button>
+                <span className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => run(() => toggleSlotAction(s.id, false))}
+                    disabled={pending}
+                    aria-label={`Close the ${formatSlotTime(s.time)} slot`}
+                    className="editorial-btn-ghost btn-sm"
+                  >
+                    Close
+                  </button>
+                  <RemoveButton slot={s} pending={pending} onRemove={deleteSlot} />
+                </span>
               </Row>
             ))}
           </SlotGroup>
@@ -171,16 +174,7 @@ export function SlotsDay({ day, title, isToday }: { day: DaySlots; title: string
                     >
                       Reopen
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => deleteSlot(s)}
-                      disabled={pending}
-                      aria-label={`Remove the ${formatSlotTime(s.time)} slot`}
-                      title="Remove this slot"
-                      className="grid h-8 w-8 place-items-center rounded-lg text-[14px] text-[var(--ink-3)] hover:bg-[var(--paper-soft)] hover:text-[var(--alert)] disabled:opacity-50"
-                    >
-                      ✕
-                    </button>
+                    <RemoveButton slot={s} pending={pending} onRemove={deleteSlot} />
                   </span>
                 </Row>
               ),
@@ -189,6 +183,21 @@ export function SlotsDay({ day, title, isToday }: { day: DaySlots; title: string
         </div>
       )}
     </div>
+  );
+}
+
+function RemoveButton({ slot, pending, onRemove }: { slot: Slot; pending: boolean; onRemove: (s: Slot) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onRemove(slot)}
+      disabled={pending}
+      aria-label={`Remove the ${formatSlotTime(slot.time)} slot`}
+      title="Remove this slot"
+      className="grid h-8 w-8 place-items-center rounded-lg text-[14px] text-[var(--ink-3)] hover:bg-[var(--paper-soft)] hover:text-[var(--alert)] disabled:opacity-50"
+    >
+      ✕
+    </button>
   );
 }
 

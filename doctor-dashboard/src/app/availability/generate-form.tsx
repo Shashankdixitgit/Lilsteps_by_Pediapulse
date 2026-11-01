@@ -8,7 +8,14 @@ function todayIso() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
-export function GenerateForm({ defaultStartDate }: { defaultStartDate?: string }) {
+export function GenerateForm({
+  defaultStartDate,
+  onGenerated,
+}: {
+  defaultStartDate?: string;
+  /** Called after a successful run, with the start date and the success message. */
+  onGenerated?: (startDate: string, message: string) => void;
+}) {
   const [startDate, setStartDate] = useState(() => {
     const today = todayIso();
     return defaultStartDate && defaultStartDate > today ? defaultStartDate : today;
@@ -26,16 +33,26 @@ export function GenerateForm({ defaultStartDate }: { defaultStartDate?: string }
   function submit() {
     setFeedback(null);
     startTransition(async () => {
-      const res = await generateSlotsAction({
-        startDate,
-        days,
-        startHour,
-        endHour,
-        intervalMinutes: interval,
-        skipSundays,
-      });
-      if (res.error) setFeedback({ kind: 'err', msg: res.error });
-      else setFeedback({ kind: 'ok', msg: `Generated ${res.inserted ?? 0} new slot${res.inserted === 1 ? '' : 's'}` });
+      let res: { error?: string; inserted?: number };
+      try {
+        res = await generateSlotsAction({
+          startDate,
+          days,
+          startHour,
+          endHour,
+          intervalMinutes: interval,
+          skipSundays,
+        });
+      } catch {
+        res = { error: "Couldn't reach the server. Check your connection and try again." };
+      }
+      if (res.error) {
+        setFeedback({ kind: 'err', msg: res.error });
+        return;
+      }
+      const msg = `Generated ${res.inserted ?? 0} new slot${res.inserted === 1 ? '' : 's'}`;
+      if (onGenerated) onGenerated(startDate, msg);
+      else setFeedback({ kind: 'ok', msg });
     });
   }
 

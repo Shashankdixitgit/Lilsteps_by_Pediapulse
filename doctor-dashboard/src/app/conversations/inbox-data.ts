@@ -27,6 +27,8 @@ export type InboxThread = {
   preview: string;
   lastFromDoctor: boolean;
   hasMessages: boolean;
+  /** Timestamp of the last message: tells a thread read on screen from one with news since. */
+  lastAt: string;
   /** Compact time of the last message: "5:25 pm", "Yesterday", "Thu", "15 Oct". */
   when: string;
   /** Full timestamp for the tooltip. */
@@ -56,9 +58,17 @@ function compactWhen(ts: string): string {
   });
 }
 
+/** Most recent threads the list shows. */
+const THREAD_LIMIT = 100;
+/** Recent messages fetched in one go to find each thread's latest. */
+const RECENT_MESSAGES = 400;
+/** Cap on unread rows counted (the badge shows 99+ beyond that anyway). */
+const UNREAD_LIMIT = 2000;
+
 /**
  * The doctor's threads for the inbox list: last message, unread count
- * (parent messages the doctor hasn't opened) and the urgent flag. Urgent
+ * (parent messages the doctor hasn't opened) and the urgent flag, for the
+ * THREAD_LIMIT most recent threads. Urgent
  * threads still waiting on the doctor go first (R2-11): the child has an
  * open visit the AI check-in marked urgent and the parent spoke last. The
  * rest stay most recent first.
@@ -72,32 +82,68 @@ export async function loadInbox(
     .select('id, last_message_at, children(id, name, dob), parents(name, phone)')
     .eq('doctor_id', doctorId)
     .order('last_message_at', { ascending: false })
+    .limit(THREAD_LIMIT)
     .returns<ConversationRow[]>();
   if (error) return { threads: [], error: error.message };
 
   const rows = data ?? [];
   const ids = rows.map((c) => c.id);
   const childIds = [...new Set(rows.map((c) => c.children?.id).filter((x): x is string => !!x))];
-  const [{ data: msgs }, urgentChildren] = await Promise.all([
+  const none = Promise.resolve({ data: [] as MessageLite[] });
+  const [{ data: recent }, { data: unreadRows }, urgentChildren] = await Promise.all([
+    // The latest messages across these threads, newest first: the first
+    // one seen per thread is its last message.
     ids.length
       ? supabase
           .from('messages')
           .select('conversation_id, sender, content, read_at, created_at')
           .in('conversation_id', ids)
           .order('created_at', { ascending: false })
+          .limit(RECENT_MESSAGES)
           .returns<MessageLite[]>()
-      : Promise.resolve({ data: [] as MessageLite[] }),
+      : none,
+    // Unread = parent messages the doctor hasn't opened; only the thread id
+    // is fetched.
+    ids.length
+      ? supabase
+          .from('messages')
+          .select('conversation_id')
+          .in('conversation_id', ids)
+          .eq('sender', 'parent')
+          .is('read_at', null)
+          .limit(UNREAD_LIMIT)
+          .returns<{ conversation_id: string }[]>()
+      : Promise.resolve({ data: [] as { conversation_id: string }[] }),
     // Threads whose child has an open visit the AI check-in marked urgent.
     fetchUrgentChildIds(supabase, doctorId, childIds, todayIst()),
   ]);
   const lastByConvo = new Map<string, MessageLite>();
-  const unreadByConvo = new Map<string, number>();
-  (msgs ?? []).forEach((m) => {
+  (recent ?? []).forEach((m) => {
     if (!lastByConvo.has(m.conversation_id)) lastByConvo.set(m.conversation_id, m);
-    if (m.sender === 'parent' && !m.read_at) {
-      unreadByConvo.set(m.conversation_id, (unreadByConvo.get(m.conversation_id) ?? 0) + 1);
-    }
   });
+  // Older, quiet threads can fall outside that window: one newest-message
+  // lookup each (rare, and bounded by THREAD_LIMIT).
+  const missing = ids.filter((id) => !lastByConvo.has(id));
+  if (missing.length && (recent ?? []).length >= RECENT_MESSAGES) {
+    const extra = await Promise.all(
+      missing.map((id) =>
+        supabase
+          .from('messages')
+          .select('conversation_id, sender, content, read_at, created_at')
+          .eq('conversation_id', id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle<MessageLite>(),
+      ),
+    );
+    extra.forEach(({ data: m }) => {
+      if (m) lastByConvo.set(m.conversation_id, m);
+    });
+  }
+  const unreadByConvo = new Map<string, number>();
+  (unreadRows ?? []).forEach((m) =>
+    unreadByConvo.set(m.conversation_id, (unreadByConvo.get(m.conversation_id) ?? 0) + 1),
+  );
 
   const threads = rows.map<InboxThread>((c) => {
     const last = lastByConvo.get(c.id);
@@ -112,6 +158,7 @@ export async function loadInbox(
       preview: last ? last.content.replace(/\s+/g, ' ').slice(0, 160) : 'No messages yet',
       lastFromDoctor: last?.sender === 'doctor',
       hasMessages: !!last,
+      lastAt: ts,
       when: compactWhen(ts),
       whenTitle: new Date(ts).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: CLINIC_TZ }),
       unread: unreadByConvo.get(c.id) ?? 0,

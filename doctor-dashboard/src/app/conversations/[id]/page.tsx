@@ -130,6 +130,8 @@ export default async function ConversationPage({
 
   return (
     <>
+      {/* Phone: the list (and its h1) is hidden while a thread is open. */}
+      <h1 className="sr-only md:hidden">Messages with {child?.name ?? 'Unknown'}&apos;s parent</h1>
       {/* Thread header: who, safety flags, quick actions */}
       <header className="shrink-0 border-b border-[var(--hairline)] bg-[var(--card)] px-4 py-3 sm:px-5">
         <div className="flex items-start gap-2">

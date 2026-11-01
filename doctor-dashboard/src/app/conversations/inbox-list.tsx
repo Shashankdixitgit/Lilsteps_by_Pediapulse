@@ -17,6 +17,16 @@ export function InboxList({ threads, error }: { threads: InboxThread[]; error: s
   const pathname = usePathname();
   const selectedId = pathname?.match(/^\/conversations\/([^/]+)/)?.[1] ?? null;
   const [query, setQuery] = useState('');
+  // Threads opened in this visit, with the last message seen there. The
+  // list (a layout) doesn't re-render when the doctor moves to another
+  // thread, so its server counts can still include messages the thread page
+  // has since marked read. A thread is shown read while its last message is
+  // the one seen; a newer message brings the badge back.
+  const [seen, setSeen] = useState<Record<string, string>>({});
+  const current = threads.find((t) => t.id === selectedId);
+  if (current && seen[current.id] !== current.lastAt) {
+    setSeen({ ...seen, [current.id]: current.lastAt });
+  }
 
   const q = query.trim().toLowerCase();
   const shown = q
@@ -64,7 +74,7 @@ export function InboxList({ threads, error }: { threads: InboxThread[]; error: s
             {shown.map((t) => {
               const selected = t.id === selectedId;
               // The open thread is read as it renders; don't show it as unread.
-              const unread = selected ? 0 : t.unread;
+              const unread = selected || seen[t.id] === t.lastAt ? 0 : t.unread;
               return (
                 <li key={t.id}>
                   <Link
@@ -113,11 +123,9 @@ export function InboxList({ threads, error }: { threads: InboxThread[]; error: s
                           {t.preview}
                         </span>
                         {unread > 0 && (
-                          <span
-                            aria-label={`${unread} unread`}
-                            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 text-[11px] font-semibold leading-none text-white"
-                          >
-                            {unread > 99 ? '99+' : unread}
+                          <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-[var(--accent)] px-1.5 text-[11px] font-semibold leading-none text-white">
+                            <span aria-hidden>{unread > 99 ? '99+' : unread}</span>
+                            <span className="sr-only">, {unread} unread</span>
                           </span>
                         )}
                       </span>
