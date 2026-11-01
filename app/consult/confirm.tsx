@@ -2,9 +2,10 @@
  * Booking Confirmation — Step 3 (final)
  *
  * Shows the summary, holds the slot via useAppointments.bookAppointment,
- * takes the ₹449 payment (useConsultCheckout → Razorpay), then renders a
- * success state in-place. The consult is only booked once the server says
- * the payment went through.
+ * takes the ₹449 payment (useConsultCheckout → Razorpay) — or, with a Care
+ * Plan consult left this month, books it with the plan instead (no payment
+ * page; the server checks the plan, 0053) — then renders a success state
+ * in-place. The consult is only booked once the server says so.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -28,7 +29,9 @@ import { useChild } from '@/context/child';
 import { supabase } from '@/lib/supabase';
 import { getBookingConcern, setSlotsNotice } from '@/lib/bookingDraft';
 import { linkConversationToAppointment, useAppointments } from '@/hooks/useAppointments';
+import { useCarePlan } from '@/hooks/useCarePlan';
 import { useConsultCheckout } from '@/hooks/useConsultCheckout';
+import { CARE_PLAN_CONSULTS, creditsLeft, viewOf } from '@/lib/carePlan';
 import { CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 import { useConversations } from '@/hooks/useConversations';
 import { isPlaceholderQualification } from '@/hooks/useDoctors';
@@ -87,8 +90,15 @@ export default function ConfirmScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [doctor, setDoctor] = useState<DoctorInfo | null>(null);
-  const { checkout, resumeFor, releaseHold, paying: booking, notice: payNotice, awaitingPayment } =
+  const { checkout, checkoutWithPlan, resumeFor, releaseHold, paying: booking, notice: payNotice, awaitingPayment } =
     useConsultCheckout();
+  // Care Plan consults left this month (0 without a plan): offered before ₹449.
+  const { plan, reload: reloadPlan } = useCarePlan();
+  const planLeft = creditsLeft(plan);
+  const planView = viewOf(plan);
+  const planUsedUp =
+    planLeft === 0 && (planView.kind === 'active' || planView.kind === 'ending' || planView.kind === 'ended');
+  const [bookedWithPlan, setBookedWithPlan] = useState(false);
   // The booked appointment's id (set on success); the chat is linked to it.
   const [bookedId, setBookedId] = useState<string | null>(null);
   const confirmed = bookedId !== null;
@@ -142,6 +152,34 @@ export default function ConfirmScreen() {
     }
   }
 
+  async function bookWithPlan() {
+    if (!child || !doctorId || !dateIso || !time) return;
+    setError(null);
+    try {
+      const planBookedId = await checkoutWithPlan(
+        () =>
+          bookAppointment({
+            child_id: child.id,
+            doctor_id: doctorId,
+            date: dateIso,
+            time,
+            slot_id: slotId || undefined,
+            concern: issueText || undefined,
+          }),
+        { childId: child.id, doctorId, date: dateIso, time },
+      );
+      if (planBookedId) {
+        setBookedWithPlan(true);
+        setBookedId(planBookedId);
+      } else {
+        // Used up a moment ago (another booking): show the new count.
+        void reloadPlan();
+      }
+    } catch (e) {
+      setError(bookingErrorText(e));
+    }
+  }
+
   async function cancelHold() {
     setError(null);
     try {
@@ -191,6 +229,9 @@ export default function ConfirmScreen() {
             {childName} will see {doctor?.name ?? 'the doctor'}
             {when ? ` ${when}` : ''}.
           </Text>
+          {bookedWithPlan ? (
+            <Text style={[typography.bodySM, styles.centerText]}>Booked with your Care Plan. Nothing to pay.</Text>
+          ) : null}
           <Text style={[typography.meta, styles.centerText]}>
             {doctor && !doctor.has_meet_link && !doctor.has_google_calendar
               ? `Video · ${CONSULT_MINUTES} min. ${doctorShortName(doctor.name)} hasn't set a video link yet. Message them to agree how you'll connect.`
@@ -263,14 +304,15 @@ export default function ConfirmScreen() {
           <DetailRow label="Time" value={time ? formatTime(time) : ''} />
           <DetailRow label="Mode" value={`Video · ${CONSULT_MINUTES} min`} />
           {issueText.length > 0 && <DetailRow label="Concern" value={issueText} />}
-          <DetailRow label="Fee" value={CONSULT_PRICE_LABEL} />
+          <DetailRow label="Fee" value={planLeft > 0 ? `Care Plan, or ${CONSULT_PRICE_LABEL}` : CONSULT_PRICE_LABEL} />
         </View>
 
         <View style={styles.policyNote}>
           <Ionicons name="shield-checkmark-outline" size={Size.iconMeta} color={AppColors.secondary} />
           <Text style={[typography.caption, styles.flex]}>
-            Paid securely through Razorpay. Cancel 2 hours or more before the consult for a full refund. If
-            the doctor cancels, you get a full refund.
+            {planLeft > 0
+              ? `A plan consult cancelled 2 hours or more before it starts, or cancelled by the doctor, goes back to your plan. If you pay ${CONSULT_PRICE_LABEL}, the usual full-refund rules apply.`
+              : 'Paid securely through Razorpay. Cancel 2 hours or more before the consult for a full refund. If the doctor cancels, you get a full refund.'}
           </Text>
         </View>
 
@@ -288,11 +330,32 @@ export default function ConfirmScreen() {
       </ScrollView>
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
+        {planUsedUp ? (
+          <Text style={[typography.caption, styles.planNote]}>
+            You’ve used this month’s {CARE_PLAN_CONSULTS} plan consults, so this one is {CONSULT_PRICE_LABEL}.
+          </Text>
+        ) : null}
+        {planLeft > 0 ? (
+          <GradientButton
+            label={`Use 1 of your plan consults (${planLeft} left)`}
+            onPress={bookWithPlan}
+            loading={booking}
+            disabled={booking}
+          />
+        ) : null}
         <GradientButton
-          label={awaitingPayment ? `Finish paying ${CONSULT_PRICE_LABEL}` : `Pay ${CONSULT_PRICE_LABEL} and book`}
+          variant={planLeft > 0 ? 'outline' : 'dark'}
+          label={
+            awaitingPayment
+              ? `Finish paying ${CONSULT_PRICE_LABEL}`
+              : planLeft > 0
+                ? `Pay ${CONSULT_PRICE_LABEL} instead`
+                : `Pay ${CONSULT_PRICE_LABEL} and book`
+          }
           onPress={confirmBooking}
-          loading={booking}
+          loading={booking && planLeft === 0}
           disabled={booking}
+          style={planLeft > 0 ? styles.secondAction : undefined}
         />
         {awaitingPayment ? (
           <GradientButton
@@ -363,6 +426,8 @@ const styles = StyleSheet.create({
   policyNote: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 },
   flex: { flex: 1 },
   noticeText: { color: AppColors.onSurfaceVariant, textAlign: 'center' },
+  planNote: { textAlign: 'center', marginBottom: 8 },
+  secondAction: { marginTop: 8 },
 
   bottomBar: {
     paddingHorizontal: 20,

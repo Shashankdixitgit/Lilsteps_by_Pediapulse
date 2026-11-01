@@ -26,6 +26,8 @@ import { linkConversationToAppointment, useAppointments } from '@/hooks/useAppoi
 import { useCheckinSession } from '@/hooks/useCheckin';
 import { SLOT_NOT_KEPT_TEXT, useConsultCheckout } from '@/hooks/useConsultCheckout';
 import { CONSULT_PRICE_LABEL, findOwnHoldForCheckin } from '@/lib/consultPayment';
+import { creditsLeft } from '@/lib/carePlan';
+import { useCarePlan } from '@/hooks/useCarePlan';
 import { useConversations } from '@/hooks/useConversations';
 import { doctorHasVideoLink, type DoctorRow, useDoctors, useTimeSlots } from '@/hooks/useDoctors';
 import { fetchFreeSlotsOn, useNextFreeSlots } from '@/hooks/useEarliestSlots';
@@ -127,8 +129,11 @@ export default function CheckinSummaryScreen() {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [bookedId, setBookedId] = useState<string | null>(null);
   const confirmed = bookedId !== null;
-  const { checkout, adoptHold, releaseHold, paying: booking, notice: payNotice, awaitingPayment } =
+  const { checkout, checkoutWithPlan, adoptHold, releaseHold, paying: booking, notice: payNotice, awaitingPayment } =
     useConsultCheckout();
+  // Care Plan consults left this month (0 without a plan), offered before ₹449 (0053).
+  const { plan: carePlan, reload: reloadCarePlan } = useCarePlan();
+  const planLeft = creditsLeft(carePlan);
   // A booking from this check-in left waiting for payment (the screen was
   // closed mid-payment): offered as "Finish paying" until it expires.
   const [resumed, setResumed] = useState<{ doctorId: string; date: string; time: string } | null>(null);
@@ -333,7 +338,7 @@ export default function CheckinSummaryScreen() {
     }
   }
 
-  async function handleConfirm() {
+  async function handleConfirm(withPlan = false) {
     if (!selectedSlot || !selectedDoctor || !child || !sessionId || !summary) return;
     setBookingError(null);
     setResumed(null);
@@ -344,20 +349,20 @@ export default function CheckinSummaryScreen() {
         date: days[selectedDay].isoDate,
         time: selectedSlot.time,
       };
-      const paidId = await checkout(
-        () =>
-          bookAppointment({
-            child_id: child.id,
-            doctor_id: selectedDoctor.id,
-            date: days[selectedDay].isoDate,
-            time: selectedSlot.time,
-            slot_id: selectedSlot.id,
-            ai_summary_id: sessionId,
-            concern: summary.chiefComplaint,
-          }),
-        target,
-        `${selectedDoctor.name}, ${whenPhrase(target.date, target.time)}`,
-      );
+      const book = () =>
+        bookAppointment({
+          child_id: child.id,
+          doctor_id: selectedDoctor.id,
+          date: days[selectedDay].isoDate,
+          time: selectedSlot.time,
+          slot_id: selectedSlot.id,
+          ai_summary_id: sessionId,
+          concern: summary.chiefComplaint,
+        });
+      const paidId = withPlan
+        ? await checkoutWithPlan(book, target)
+        : await checkout(book, target, `${selectedDoctor.name}, ${whenPhrase(target.date, target.time)}`);
+      if (!paidId && withPlan) void reloadCarePlan();
       if (paidId) {
         setPaidFor({ doctorId: target.doctorId, date: target.date, time: target.time });
         setBookedId(paidId);
@@ -691,16 +696,32 @@ export default function CheckinSummaryScreen() {
               <TextButton label="Cancel this booking" onPress={cancelResumed} />
             </>
           ) : (
+          <>
+          {planLeft > 0 && selectedSlot && selectedDoctor ? (
+            <GradientButton
+              label={`Use 1 of your plan consults (${planLeft} left) · ${doctorShortName(selectedDoctor.name)}, ${whenPhrase(days[selectedDay].isoDate, selectedSlot.time)}`}
+              disabled={booking || !summary || !child}
+              loading={booking}
+              onPress={() => void handleConfirm(true)}
+              style={styles.planAction}
+            />
+          ) : null}
           <GradientButton
+            variant={planLeft > 0 && selectedSlot ? 'outline' : 'dark'}
             label={
               selectedSlot && selectedDoctor
-                ? `${awaitingPayment ? 'Pay' : 'Pay and book'} ${CONSULT_PRICE_LABEL} · ${doctorShortName(selectedDoctor.name)}, ${whenPhrase(days[selectedDay].isoDate, selectedSlot.time)}`
-                : `Book · ${CONSULT_PRICE_LABEL}`
+                ? planLeft > 0
+                  ? `Pay ${CONSULT_PRICE_LABEL} instead`
+                  : `${awaitingPayment ? 'Pay' : 'Pay and book'} ${CONSULT_PRICE_LABEL} · ${doctorShortName(selectedDoctor.name)}, ${whenPhrase(days[selectedDay].isoDate, selectedSlot.time)}`
+                : planLeft > 0
+                  ? `Book with your Care Plan or ${CONSULT_PRICE_LABEL}`
+                  : `Book · ${CONSULT_PRICE_LABEL}`
             }
             disabled={!selectedSlot || booking || !summary || !child}
-            loading={booking}
-            onPress={handleConfirm}
+            loading={booking && planLeft === 0}
+            onPress={() => void handleConfirm(false)}
           />
+          </>
           )}
         </View>
       </View>
@@ -710,6 +731,7 @@ export default function CheckinSummaryScreen() {
 }
 
 const styles = StyleSheet.create({
+  planAction: { marginBottom: 8 },
   screen: { flex: 1, backgroundColor: AppColors.surface },
 
   scroll: { paddingHorizontal: 20, gap: 24 },

@@ -36,6 +36,18 @@
 //          the new time 2 h or more from now for everyone).
 //          The payment and the Meet room stay. The family gets the
 //          'appointment_rescheduled' email (once per new time).
+//   POST {action:"use_plan", appointmentId}                       parent only
+//        → {state: 'paid', plan: true} | {state: 'no_credit' | 'no_plan' | 'expired'}
+//          Confirms a held booking with one of this month's Care Plan
+//          consults instead of ₹449 (confirm_consult_with_plan, 0053: the
+//          plan month row is locked, so two bookings can't both take the
+//          last one). Open Payment Links of the booking are cancelled; the
+//          Meet room and the confirmation email follow exactly as after a
+//          payment (afterConsultConfirmed). 'no_credit' / 'no_plan': the
+//          hold stays, so the family can still pay ₹449 for it.
+//        Cancelling a plan consult (action cancel) answers
+//        {refund: 'not_paid', plan: 'returned' | 'rebook_owed' | 'expired'} or
+//        {refund: 'none', late: true, plan: 'used'} (_shared/consultCancel.ts).
 //   POST {action:"followup", appointmentId, slotId}              doctor only
 //        appointmentId = the COMPLETED consult the follow-up is for.
 //        → {appointmentId, holdExpiresAt, emailed}
@@ -65,6 +77,7 @@ import {
 } from '../_shared/schedule.ts';
 import { formatEmailDate, formatEmailTime } from '../_shared/templates.ts';
 import {
+  afterConsultConfirmed,
   cancelPaymentLink,
   CONSULT_PRICE_PAISE,
   createPaymentLink,
@@ -194,6 +207,7 @@ Deno.serve(async (req) => {
   try {
     if (action === 'start') return await start(admin, appt, body?.returnUrl);
     if (action === 'status') return await status(admin, appt, callbackFrom(body?.callback));
+    if (action === 'use_plan') return await usePlan(admin, appt);
     if (action === 'cancel') return await cancel(admin, appt, isDoctor ? 'doctor' : 'parent');
     if (action === 'reschedule') return await reschedule(req, admin, appt, isDoctor ? 'doctor' : 'parent', slotId);
     if (action === 'followup') return await followup(req, admin, appt, slotId);
@@ -421,12 +435,23 @@ async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): P
     if (result.why === 'not_cancellable') return jsonResponse({ error: 'This consult has already happened.' }, 409);
     return jsonResponse({ error: 'This consult changed. Please refresh.' }, 409);
   }
-  const outcome = { refund: result.refund, ...(result.late ? { late: true as const } : {}) };
+  const outcome = {
+    refund: result.refund,
+    ...(result.late ? { late: true as const } : {}),
+    ...(result.plan ? { plan: result.plan } : {}),
+  };
 
   // A booked consult (not an unpaid hold) gets a cancellation email, sent in
   // the background: the cancel answer never waits for (or fails on) email.
   if (appt.status === 'upcoming') {
-    inBackground('cancel email', emailCancellation(admin, appt, by, outcome.refund));
+    const line =
+      result.plan === 'returned' ? 'plan_returned'
+      : result.plan === 'used' ? 'plan_used'
+      : result.plan === 'rebook_owed' ? 'plan_rebook'
+      : result.plan === 'expired' ? 'plan_expired'
+      : outcome.refund === 'none' ? 'late'
+      : outcome.refund;
+    inBackground('cancel email', emailCancellation(admin, appt, by, line));
   }
   return jsonResponse(outcome);
 }
@@ -436,7 +461,8 @@ async function emailCancellation(
   admin: any,
   appt: Appointment,
   by: 'parent' | 'doctor',
-  refund: 'none' | 'not_paid' | 'started' | 'failed',
+  /** templates.ts REFUND_LINES key. */
+  refundLine: string,
 ): Promise<void> {
   try {
     await notifyParent(admin, {
@@ -450,12 +476,48 @@ async function emailCancellation(
         date: appt.date,
         time: String(appt.time).slice(0, 5),
         by,
-        refund: refund === 'none' ? 'late' : refund,
+        refund: refundLine,
       },
     });
   } catch (e) {
     console.error(`[consult-payment] cancel email ${appt.id}: ${(e as Error).message}`);
   }
+}
+
+// ── use_plan ────────────────────────────────────────────────────────────────
+
+async function usePlan(admin: any, appt: Appointment): Promise<Response> {
+  if (appt.status === 'upcoming') {
+    const { data } = await admin.from('appointments').select('paid_with_plan').eq('id', appt.id).maybeSingle();
+    return jsonResponse(data?.paid_with_plan ? { state: 'paid', plan: true } : { state: 'paid' });
+  }
+  const { data, error } = await admin.rpc('confirm_consult_with_plan', {
+    p_appointment_id: appt.id,
+    p_parent_id: appt.parent_id,
+  });
+  if (error) throw new Error(`confirm_consult_with_plan: ${error.message}`);
+  const outcome = data as string;
+  if (outcome === 'confirmed' || outcome === 'already') {
+    if (outcome === 'confirmed') {
+      // The booking's links were marked cancelled in the same transaction;
+      // stop them at Razorpay too. A link paid a moment ago is refunded by
+      // confirm_consult_payment (the consult is already booked).
+      const { data: links } = await admin
+        .from('payments')
+        .select('razorpay_link_id')
+        .eq('appointment_id', appt.id)
+        .eq('status', 'cancelled')
+        .not('razorpay_link_id', 'is', null);
+      for (const l of (links ?? []) as Array<{ razorpay_link_id: string | null }>) {
+        if (l.razorpay_link_id) await cancelPaymentLink(l.razorpay_link_id);
+      }
+      await afterConsultConfirmed(admin, appt.id);
+    }
+    return jsonResponse({ state: 'paid', plan: true });
+  }
+  if (outcome === 'no_credit' || outcome === 'no_plan') return jsonResponse({ state: outcome });
+  if (outcome === 'unknown') return jsonResponse({ error: 'Appointment not found' }, 404);
+  return jsonResponse({ state: 'expired' });
 }
 
 // ── reschedule ──────────────────────────────────────────────────────────────

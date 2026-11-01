@@ -12,7 +12,9 @@ import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { DEMO_EMAIL_DOMAIN, useAuth } from '@/context/auth';
 import { useChild } from '@/context/child';
 import { clearOnboardingDraft } from '@/context/onboarding';
+import { useCarePlan } from '@/hooks/useCarePlan';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
+import { CARE_PLAN_PRICE_LABEL, viewOf } from '@/lib/carePlan';
 import { confirmAsync } from '@/lib/confirm';
 import { EMPTY_PARENT_EXTRAS, fetchParentExtras, relationshipLabel } from '@/lib/parentProfile';
 import { formatPhone } from '@/lib/phone';
@@ -30,6 +32,17 @@ export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const { child, children, age, parentName, selectChild } = useChild();
   const notifications = useNotificationPermission();
+  const carePlan = viewOf(useCarePlan().plan);
+  const carePlanValue =
+    carePlan.kind === 'active' || carePlan.kind === 'ending' || carePlan.kind === 'ended'
+      ? `${carePlan.left} of ${carePlan.total} left`
+      : carePlan.kind === 'starting'
+        ? 'Starting'
+        : carePlan.kind === 'retrying'
+          ? 'Payment pending'
+          : carePlan.kind === 'paused'
+            ? 'Paused'
+            : `${CARE_PLAN_PRICE_LABEL} / month`;
   // City, language and relationship (R2-13). Reloaded on focus so edits
   // made on Profile > Your details show straight away.
   const [extras, setExtras] = useState(EMPTY_PARENT_EXTRAS);
@@ -215,6 +228,20 @@ export default function ProfileScreen() {
             </SettingsCard>
           </View>
         ) : null}
+
+        <View style={layout.section}>
+          <Text style={styles.sectionLabel}>Care Plan</Text>
+          <SettingsCard>
+            <Row
+              icon="ribbon-outline"
+              title="Care Plan"
+              detail="3 video consults every month"
+              value={carePlanValue}
+              chevron
+              onPress={() => router.push('/profile/care-plan')}
+            />
+          </SettingsCard>
+        </View>
 
         <View style={layout.section}>
           <Text style={styles.sectionLabel}>Quick links</Text>

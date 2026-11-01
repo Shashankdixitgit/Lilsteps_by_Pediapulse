@@ -34,6 +34,19 @@ export type PaymentState = 'paid' | 'pending' | 'expired' | 'cancelled';
 
 export type RefundOutcome = 'started' | 'failed' | 'none' | 'not_paid';
 
+/**
+ * A Care Plan consult that was cancelled (0053): back to the plan; used
+ * (under 2 h); expired (the parent cancelled after its plan month ended);
+ * or a free one owed (the doctor cancelled after the month ended).
+ */
+export type PlanCreditOutcome = 'returned' | 'used' | 'expired' | 'rebook_owed';
+
+export interface CancelOutcome {
+  refund: RefundOutcome;
+  late?: boolean;
+  plan?: PlanCreditOutcome;
+}
+
 export interface PaymentStatus {
   state: PaymentState | 'redirecting';
   /** Paid after the slot was gone: the money is on its way back. */
@@ -184,8 +197,19 @@ export async function payForConsult(appointmentId: string, label?: string): Prom
   return last;
 }
 
+/**
+ * Book a held slot with one of this month's Care Plan consults instead of
+ * paying. 'no_credit' / 'no_plan': the hold stays, so the family can pay
+ * ₹449 for it instead. The server checks the plan (0053); the app only asks.
+ */
+export async function bookWithCarePlan(
+  appointmentId: string,
+): Promise<{ state: 'paid' | 'no_credit' | 'no_plan' | 'expired'; plan?: boolean }> {
+  return call({ action: 'use_plan', appointmentId }, "Couldn't book with your plan. Please check your connection and try again.");
+}
+
 /** Cancel a consult (or drop an unpaid hold). The server decides any refund. */
-export async function cancelConsult(appointmentId: string): Promise<{ refund: RefundOutcome; late?: boolean }> {
+export async function cancelConsult(appointmentId: string): Promise<CancelOutcome> {
   return call({ action: 'cancel', appointmentId }, "Couldn't cancel. Please check your connection and try again.");
 }
 

@@ -124,7 +124,7 @@ export default function ConsultScreen() {
           </View>
         ) : upcoming.length > 0 ? (
           upcoming.map((a) => {
-            const item = { id: a.id, date: a.date, time: a.time, doctorName: a.doctors?.name ?? 'Doctor' };
+            const item = { id: a.id, date: a.date, time: a.time, doctorName: a.doctors?.name ?? 'Doctor', paidWithPlan: a.paid_with_plan === true };
             const summaryId = a.ai_summary_id;
             return (
               <AppointmentCard

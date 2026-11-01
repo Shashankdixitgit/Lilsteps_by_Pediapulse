@@ -13,10 +13,21 @@
 //     doctor cancels, or when the doctor moved it in the last 24 h;
 //     otherwise none for a late parent cancel. There is deliberately no
 //     "always refund" switch: account deletion uses the same rules.
+//   • A consult booked with a Care Plan credit (0053) follows the same
+//     lines, with the plan consult instead of money: it goes back to the
+//     plan (return_plan_credit) when cancelled 2 h or more before, by the
+//     doctor, or after a doctor's move in the last 24 h; otherwise it is
+//     used. After that billing month has ended a credit can't go back to
+//     it: a DOCTOR cancel then means 'rebook_owed' (the team is emailed to
+//     book a free consult, refund policy); a PARENT cancel (incl. account
+//     deletion) means 'expired' — the month is over and nothing is owed, so
+//     booking at a month's end and cancelling in the next one gains nothing.
 //
 // Who may cancel what is the caller's job; this only does it.
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
+import { alertRebookOwed, type PlanCreditOutcome, returnPlanCredit } from './carePlan.ts';
+import { inBackground } from './parentNotify.ts';
 import { cancelPaymentLink, REFUND_CUTOFF_MS, refundPaymentRow } from './razorpay.ts';
 import { consultStart, doctorMovedRecently } from './schedule.ts';
 
@@ -32,7 +43,7 @@ export interface CancellableConsult {
 export type CancelRefund = 'none' | 'not_paid' | 'started' | 'failed';
 
 export type CancelResult =
-  | { done: true; refund: CancelRefund; late?: true }
+  | { done: true; refund: CancelRefund; late?: true; plan?: PlanCreditOutcome }
   | { done: false; why: 'already_cancelled' | 'not_cancellable' | 'changed' };
 
 export interface CancelOptions {
@@ -78,15 +89,33 @@ export async function cancelConsult(
     }
   }
 
-  const paid = payments.find((p) => p.status === 'paid');
-  if (!paid) return { done: true, refund: 'not_paid' };
-
   const early = consultStart(appt.date, appt.time).getTime() - (opts.now ?? Date.now()) >= REFUND_CUTOFF_MS;
   // Late, but the doctor moved this consult in the last 24 hours: the new
   // time may not suit the family, so they still get their money back.
-  if (opts.by === 'parent' && !early && !doctorMovedRecently(appt.last_rescheduled_by, appt.rescheduled_at, opts.now)) {
-    return { done: true, refund: 'none', late: true };
+  const giveBack =
+    opts.by === 'doctor' || early || doctorMovedRecently(appt.last_rescheduled_by, appt.rescheduled_at, opts.now);
+
+  const paid = payments.find((p) => p.status === 'paid');
+  if (!paid) {
+    if (appt.status !== 'upcoming') return { done: true, refund: 'not_paid' };
+    const { data: use } = await admin
+      .from('care_plan_credit_uses')
+      .select('id')
+      .eq('appointment_id', appt.id)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (!use) return { done: true, refund: 'not_paid' };
+    if (!giveBack) return { done: true, refund: 'none', late: true, plan: 'used' };
+    const back = await returnPlanCredit(admin, appt.id, opts.by);
+    if (back === 'expired') return { done: true, refund: 'not_paid', plan: 'expired' };
+    if (back === 'rebook_owed') {
+      inBackground('rebook alert', alertRebookOwed(appt.id, { date: appt.date, time: appt.time }));
+      return { done: true, refund: 'not_paid', plan: 'rebook_owed' };
+    }
+    return { done: true, refund: 'not_paid', plan: 'returned' };
   }
+
+  if (!giveBack) return { done: true, refund: 'none', late: true };
 
   const reason = opts.refundReason ?? (opts.by === 'doctor' ? 'doctor_cancelled' : 'parent_cancelled');
   const result = await refundPaymentRow(admin, paid.id, reason, { awaitAlert: opts.awaitAlert });

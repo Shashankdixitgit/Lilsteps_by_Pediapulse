@@ -1,0 +1,60 @@
+plan: first booking with a credit is confirmed                           => confirmed
+plan: same booking again is "already"                                    => already
+plan: booking is upcoming, paid_with_plan, no hold time                  => upcoming true -
+plan: one active credit use recorded                                     => 1
+plan: another parent's booking id is "unknown"                           => unknown
+plan: second credit                                                      => confirmed
+plan: third credit                                                       => confirmed
+plan: fourth booking in the month is "no_credit"                         => no_credit
+plan: ... and stays a hold the family can pay ₹449 for                   => awaiting_payment
+plan: a parent without a plan gets "no_plan"                             => no_plan
+plan: expired hold is "expired"                                          => expired
+rpc as parent: confirm_consult_with_plan refused                         => permission denied for function confirm_consult_with_plan
+rpc as parent: return_plan_credit refused                                => permission denied for function return_plan_credit
+rls parent A1: sees own plan                                             => 1
+rls parent A1: sees own two months                                       => 2
+rls parent A1: sees own three credit uses                                => 3
+rls parent A1: insert a plan refused                                     => permission denied for table care_plans
+rls parent A1: add credits refused                                       => permission denied for table care_plan_periods
+rls parent A1: drop a credit use refused                                 => permission denied for table care_plan_credit_uses
+rls parent A1: mark own consult paid_with_plan refused                   => Only cancelling is allowed.
+get_my_care_plan A1: 0 of 3 left                                         => active 0/3 cancel_at_end=false
+guard parent: direct cancel of a plan consult refused                    => Please cancel from the app so your plan consult can be returned.
+guard parent: drop own unpaid hold still allowed                         => OK rows=1
+reschedule parent: a plan consult can be moved for free                  => OK rows=1
+rls parent A2: sees no plan of A1                                        => 0
+rls parent A2: sees no months of A1                                      => 0
+rls parent A2: sees no credit uses of A1                                 => 0
+get_my_care_plan A2: null (never subscribed)                             => null
+rls anon: plans refused                                                  => permission denied for table care_plans
+rls anon: get_my_care_plan refused                                       => permission denied for function get_my_care_plan
+rls doctor: sees no family's plan                                        => 0
+doctor: sees the Care Plan flag on own consult                           => true
+guard doctor: direct cancel of a plan consult refused                    => Cancel from the dashboard so the family is refunded.
+guard doctor: marking it completed / no-show is fine                     => OK rows=1
+guard doctor: can't flip paid_with_plan                                  => Only the visit status and video link can be changed.
+return: month still running → "returned"                                 => returned
+return: again is idempotent                                              => returned
+return: a consult with no plan credit → "none"                           => none
+return: who cancelled must be parent or doctor                           => ERROR return_plan_credit: p_by must be parent or doctor
+return: slot of the cancelled consult is open again                      => true
+plan: the returned credit can be used again                              => confirmed
+get_my_care_plan A1: back to 0 left after rebooking                      => 0
+return: doctor cancel after the month ended → "rebook_owed"              => rebook_owed
+return: PARENT cancel after the month ended → "expired" (no free consult => expired
+return: ... and a later doctor call can't turn it into a rebook          => expired
+appointment_was_paid: a plan consult counts (doctor may message)         => true
+interplay: ₹449 paid after a plan booking → refund_needed                => refund_needed
+interplay: ... payment row is refund_due                                 => refund_due booking_upcoming
+one live plan per parent: a second one refused                           => duplicate key value violates unique constraint "care_plans_one_live_per_parent_uidx"
+a finished plan does not block a new one                                 => OK rows=2
+one month per plan and start                                             => duplicate key value violates unique constraint "care_plan_periods_care_plan_id_period_start_key"
+one credit use per consult                                               => duplicate key value violates unique constraint "care_plan_credit_uses_appointment_id_key"
+one plan email per key and channel                                       => duplicate key value violates unique constraint "notification_log_one_plan_message_uidx"
+same plan key on another channel is fine                                 => OK rows=2
+paused plan: booking with the plan is "no_plan"                          => no_plan
+paused plan: get_my_care_plan shows paused, no consults                  => paused left=null
+paused counts as live: no second plan while paused                       => duplicate key value violates unique constraint "care_plans_one_live_per_parent_uidx"
+race: session 1 r1 confirmed
+race: session 2 r2 no_credit (waited for session 1: yes)
+race: active uses in the month 3

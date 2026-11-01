@@ -16,7 +16,7 @@ import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { confirmAsync } from '@/lib/confirm';
 
-import { REFUND_FAILED_TEXT, type RefundOutcome } from '@/lib/consultPayment';
+import { type CancelOutcome, REFUND_FAILED_TEXT } from '@/lib/consultPayment';
 
 import { appointmentStart, doctorShortName, whenLabel } from './appointmentFormat';
 
@@ -28,6 +28,8 @@ export interface CancellableAppointment {
   date: string;
   time: string;
   doctorName: string;
+  /** Booked with a Care Plan consult (appointments.paid_with_plan): the question talks about the plan, not money. */
+  paidWithPlan?: boolean;
   /**
    * The child the consult is for. Home and the Consult tab list the active
    * child's consults, so this defaults to the active child.
@@ -50,7 +52,7 @@ export function cancelLabel(a: CancellableAppointment): string {
 }
 
 export function useCancelAppointment(
-  cancel: (id: string) => Promise<{ refund: RefundOutcome; late?: boolean } | void>,
+  cancel: (id: string) => Promise<CancelOutcome | void>,
 ) {
   const [notice, setNotice] = useState<CancelNoticeState | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
@@ -72,9 +74,13 @@ export function useCancelAppointment(
       const ok = await askToConfirm(
         childName ? `Cancel ${childName}'s consult?` : 'Cancel this consult?',
         `${childName ? `${childName} with ` : ''}${a.doctorName} · ${when}. The slot will be released for other families. ` +
-          (early
-            ? 'If you paid, the full amount is refunded.'
-            : 'It starts in less than 2 hours. If you paid, it is not refunded.'),
+          (a.paidWithPlan
+            ? early
+              ? 'The consult goes back to your Care Plan, as long as that plan month hasn’t ended.'
+              : 'It starts in less than 2 hours, so this Care Plan consult counts as used.'
+            : early
+              ? 'If you paid, the full amount is refunded.'
+              : 'It starts in less than 2 hours. If you paid, it is not refunded.'),
       );
       if (!ok) return;
       setCancellingId(a.id);
@@ -83,7 +89,15 @@ export function useCancelAppointment(
       try {
         const result = await cancel(a.id);
         const refundLine =
-          result?.refund === 'started'
+          result?.plan === 'returned'
+            ? ' The consult has gone back to your Care Plan.'
+            : result?.plan === 'used'
+            ? ' It was less than 2 hours before the consult, so this Care Plan consult counts as used.'
+            : result?.plan === 'expired'
+            ? ' The plan month it was booked in has ended, so it can’t go back to your plan. Nothing more was charged.'
+            : result?.plan === 'rebook_owed'
+            ? ' The plan month has ended, so the clinic will book a free consult for you.'
+            : result?.refund === 'started'
             ? ' Your refund has started; it reaches your account in 5–7 working days.'
             : result?.refund === 'failed'
               ? ` ${REFUND_FAILED_TEXT}`

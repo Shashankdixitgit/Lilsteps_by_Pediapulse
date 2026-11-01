@@ -10,7 +10,7 @@ import { parentContact } from '@/lib/parent';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { vaccineBucket } from '@/lib/vaccines';
 import { FlashToast } from '../../flash-toast';
-import { LateBadge, UrgencyBadge } from '../../urgency-badge';
+import { CarePlanBadge, LateBadge, UrgencyBadge } from '../../urgency-badge';
 import { VideoLinkBanner } from '../../video-link-banner';
 import { OnboardingAnswersList, onboardingAnswersEyebrow, type OnboardingAnswers } from './onboarding-answers';
 import { CancelConsultButton } from './cancel-consult-button';
@@ -31,6 +31,8 @@ type AppointmentRow = {
   reschedule_count: number;
   followup_of: string | null;
   hold_expires_at: string | null;
+  /** Booked with the family's Care Plan (0053). */
+  paid_with_plan: boolean;
   children: { id: string; name: string; dob: string; sex: string; weight: number | null; height: number | null; blood_group: string | null; onboarding_answers: OnboardingAnswers } | null;
   parents: { name: string | null; phone: string | null } | null;
 };
@@ -129,7 +131,7 @@ export default async function ConsultationPage({
   const { data: appointment } = await supabase
     .from('appointments')
     .select(
-      'id, date, time, status, ai_summary_id, meet_link, reschedule_count, followup_of, hold_expires_at, ' +
+      'id, date, time, status, ai_summary_id, meet_link, reschedule_count, followup_of, hold_expires_at, paid_with_plan, ' +
         'children(id, name, dob, sex, weight, height, blood_group, onboarding_answers), ' +
         'parents(name, phone)',
     )
@@ -296,6 +298,7 @@ export default async function ConsultationPage({
               </span>
               <UrgencyBadge urgency={urgency} />
               {isLate && <LateBadge />}
+              {appointment.paid_with_plan && <CarePlanBadge />}
             </div>
           </div>
         </div>

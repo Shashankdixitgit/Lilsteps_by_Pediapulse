@@ -296,7 +296,7 @@ export async function cancelConsultAction(appointmentId: string): Promise<{ erro
   if (!appt || appt.status === 'awaiting_payment') return { error: 'Appointment not found' };
   if (appt.status !== 'upcoming') return refuse(appt.id, 'Only an upcoming consult can be cancelled');
 
-  const { data, error } = await supabase.functions.invoke<{ refund?: string; error?: string }>('consult-payment', {
+  const { data, error } = await supabase.functions.invoke<{ refund?: string; plan?: string; error?: string }>('consult-payment', {
     body: { action: 'cancel', appointmentId: appt.id },
   });
   if (error) {
@@ -314,10 +314,17 @@ export async function cancelConsultAction(appointmentId: string): Promise<{ erro
   }
 
   const refund = data?.refund;
+  // A Care Plan consult (0053): no money moves; the consult goes back to the
+  // family's plan, or the clinic books a free one if that month has ended.
+  const plan = data?.plan;
   const firstName = appt.children?.name?.split(' ')[0];
   const slot = `${formatDayShort(appt.date)}, ${formatSlotTime(appt.time)}`;
   const refundLine =
-    refund === 'started'
+    plan === 'returned'
+      ? ' The consult has gone back to your Care Plan, so you can use it for another booking.'
+      : plan === 'rebook_owed'
+        ? ' As your Care Plan month has ended, the clinic will book a free consult for you.'
+      : refund === 'started'
       ? ' Your payment is being refunded in full; it usually reaches your account in 5 to 7 working days.'
       : refund === 'failed'
         ? ' Your payment will be refunded in full; the clinic team will confirm once it has gone through.'
@@ -336,7 +343,11 @@ export async function cancelConsultAction(appointmentId: string): Promise<{ erro
   revalidatePath(`/consultations/${appt.id}`);
   const who = appt.children?.name ?? 'the patient';
   const note =
-    refund === 'started'
+    plan === 'returned'
+      ? 'Care Plan consult returned to the family'
+      : plan === 'rebook_owed'
+        ? 'Care Plan month ended, clinic team to book a free consult'
+      : refund === 'started'
       ? 'full refund started'
       : refund === 'failed'
         ? 'refund did not go through yet, clinic team to follow up'

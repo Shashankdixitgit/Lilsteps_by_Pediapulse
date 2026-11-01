@@ -28,7 +28,7 @@ import {
 import { Suspense } from 'react';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { FlashToast } from './flash-toast';
-import { LateBadge, UrgencyBadge } from './urgency-badge';
+import { CarePlanBadge, LateBadge, UrgencyBadge } from './urgency-badge';
 import { VideoLinkBanner } from './video-link-banner';
 import { Schedule, type CalEvent, type NextUp } from './schedule/schedule';
 
@@ -40,6 +40,8 @@ type QueueRow = {
   summary_ready: boolean;
   ai_summary_id: string | null;
   meet_link: string | null;
+  /** Booked with the family's Care Plan (0053); no amount is shown to doctors. */
+  paid_with_plan: boolean;
   children: { id: string; name: string; dob: string; sex: string } | null;
   parents: { name: string | null } | null;
 };
@@ -48,7 +50,7 @@ type QueueRow = {
 type ClosedRow = QueueRow & { closedAt: string | null };
 
 const QUEUE_SELECT =
-  'id, date, time, status, summary_ready, ai_summary_id, meet_link, children(id, name, dob, sex), parents(name)';
+  'id, date, time, status, summary_ready, ai_summary_id, meet_link, paid_with_plan, children(id, name, dob, sex), parents(name)';
 
 const CLOSED_LABEL: Record<string, string> = {
   completed: 'Completed',
@@ -442,6 +444,7 @@ function QueueTable({
                     {child && <span className="text-[12px] text-[var(--ink-3)]">{computeAge(child.dob)}</span>}
                     {!closed && <UrgencyBadge urgency={urgency} className="shrink-0" />}
                     {!closed && lateIds?.has(appt.id) && <LateBadge className="shrink-0" />}
+                    {appt.paid_with_plan && <CarePlanBadge className="shrink-0" />}
                   </div>
                   {concern && <div className="truncate text-[13px] text-[var(--ink-3)]">{concern}</div>}
                 </div>
@@ -464,6 +467,7 @@ function QueueTable({
                     </span>
                     {!closed && <UrgencyBadge urgency={urgency} className="shrink-0" />}
                     {!closed && lateIds?.has(appt.id) && <LateBadge className="shrink-0" />}
+                    {appt.paid_with_plan && <CarePlanBadge className="shrink-0" />}
                   </div>
                   <div className="truncate text-[13px] text-[var(--ink-2)]">
                     Parent · {parentName || '—'}
