@@ -103,6 +103,29 @@ const SECTIONS: readonly LegalSection[] = [
 ];
 
 type DeleteStep = 'idle' | 'confirm' | 'deleting';
+
+/** What delete-account answers (supabase/functions/delete-account). */
+interface DeleteAccountResponse {
+  ok?: boolean;
+  error?: string;
+  refundsStarted?: number;
+  refundsFailed?: number;
+  /** Plain words from the server when a refund could not be started. */
+  notice?: string;
+}
+
+/** The goodbye message, with what happened to any paid consults. */
+function deletedMessage(data: DeleteAccountResponse): string {
+  const base = 'Your LilSteps account and your children’s data have been deleted.';
+  if (data.refundsFailed) {
+    return `${base} ${data.notice ?? `We couldn’t start a refund automatically. Our team will refund it by hand. Questions? Write to ${SUPPORT_EMAIL}.`}`;
+  }
+  if (data.refundsStarted) {
+    const n = data.refundsStarted;
+    return `${base} ${n === 1 ? 'Your upcoming consult was' : `Your ${n} upcoming consults were`} cancelled and refunded in full: it usually reaches your account in 5–7 working days.`;
+  }
+  return base;
+}
 const CONFIRM_WORD = 'DELETE';
 
 /** Pulls the plain message out of an edge-function error response. */
@@ -144,10 +167,9 @@ export default function PrivacyScreen() {
     if (!user || !canDelete || step === 'deleting') return;
     setStep('deleting');
     setError(null);
-    const { data, error: fnError } = await supabase.functions.invoke<{ ok?: boolean; error?: string }>(
-      'delete-account',
-      { body: { confirm: CONFIRM_WORD } },
-    );
+    const { data, error: fnError } = await supabase.functions.invoke<DeleteAccountResponse>('delete-account', {
+      body: { confirm: CONFIRM_WORD },
+    });
     if (fnError || !data?.ok) {
       setError(fnError ? await functionErrorMessage(fnError) : (data?.error ?? 'Something went wrong. Please try again.'));
       setStep('confirm');
@@ -155,7 +177,7 @@ export default function PrivacyScreen() {
     }
     // The account is gone on the server. Tell the parent first (sign-out can
     // reload the web app and drop a later message), then clear this device.
-    notify('Account deleted', 'Your LilSteps account and your children’s data have been deleted.');
+    notify('Account deleted', deletedMessage(data));
     await clearOnboardingDraft(user.id).catch(() => undefined);
     await signOut().catch(() => undefined);
     router.replace('/');
@@ -205,7 +227,8 @@ export default function PrivacyScreen() {
               <>
                 <Text style={typography.bodySM}>
                   Deleting your account removes it and every child profile, record, check-in, booking,
-                  chat and prescription linked to it. This cannot be undone.
+                  chat and prescription linked to it. Upcoming paid consults are cancelled and refunded in
+                  full. This cannot be undone.
                 </Text>
                 <GradientButton label="Delete my account" variant="danger" onPress={() => setStep('confirm')} />
               </>
@@ -220,7 +243,8 @@ export default function PrivacyScreen() {
                     'Your account and sign-in',
                     'All your children’s profiles and health details',
                     'Uploaded records, photos, check-ins and growth entries',
-                    'Bookings, chats with doctors and prescriptions (upcoming consults are cancelled)',
+                    'Bookings, chats with doctors and prescriptions',
+                    'Upcoming consults are cancelled, and paid ones are refunded in full (5–7 working days)',
                   ].map((line) => (
                     <View key={line} style={styles.listRow}>
                       <Text style={[typography.bodySM, styles.dot]}>•</Text>

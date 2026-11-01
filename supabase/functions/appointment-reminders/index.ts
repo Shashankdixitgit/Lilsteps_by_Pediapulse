@@ -1,6 +1,8 @@
 // Edge Function: appointment-reminders
 //
-// Cron-triggered. Sends two reminders per appointment:
+// Cron-triggered every 15 minutes (pg_cron job 'appointment-reminders',
+// pg_net + the Vault secret 'lilsteps_server_key' on the apikey header).
+// Sends two reminders per appointment:
 //   • 24h before (template: appointment_reminder_24h)
 //   • 1h before  (template: appointment_reminder_1h)
 //
@@ -9,14 +11,11 @@
 // dispatched. Keyed on the start time so a rescheduled consult is reminded
 // again for its new time.
 //
-// Schedule (recommended): hourly via pg_cron — see migration notes.
-//   select cron.schedule('appointment-reminders', '0 * * * *',
-//     $$ select net.http_post(...); $$);
+// Also runs the refund-alert sweep (_shared/refundAlerts.ts) first: a
+// payment that is refund_failed, or stuck owing a refund for 30+ minutes,
+// is emailed to the team once.
 //
-// Or, simpler: invoke via Supabase Scheduled Functions in the dashboard.
-//
-// NOT DEPLOYED yet: no SMS provider (Twilio/DLT) and no pg_cron schedule.
-// Rejects any caller without a server key, so deploying it is safe.
+// Rejects any caller without a server key.
 //
 // Deploy: `supabase functions deploy appointment-reminders --no-verify-jwt --project-ref ahikfefphptmtivwukpv`
 
@@ -24,6 +23,7 @@ import { alreadyNotified, notifyParent } from '../_shared/parentNotify.ts';
 import { jsonResponse } from '../_shared/cors.ts';
 import { createAdminClient, isServerCaller } from '../_shared/supabase.ts';
 import { consultStart, startsAtKey } from '../_shared/schedule.ts';
+import { sweepRefundAlerts } from '../_shared/refundAlerts.ts';
 
 interface AppointmentRow {
   id: string;
@@ -42,6 +42,16 @@ Deno.serve(async (req) => {
   if (!isServerCaller(req)) return jsonResponse({ error: 'Unauthorized' }, 401);
 
   const admin = createAdminClient();
+
+  // Refunds a person must look at (refundAlerts.ts): emails the team once per
+  // payment. Rides on this 15-minute schedule; it never stops the reminders.
+  let refundAlerts: Awaited<ReturnType<typeof sweepRefundAlerts>> | { error: string } = [];
+  try {
+    refundAlerts = await sweepRefundAlerts(admin);
+  } catch (e) {
+    console.error(`[appointment-reminders] refund alert sweep: ${(e as Error).message}`);
+    refundAlerts = { error: 'sweep failed' };
+  }
 
   const now = new Date();
   const horizonEnd = new Date(now.getTime() + 26 * 3600 * 1000); // a bit > 24h
@@ -111,5 +121,5 @@ Deno.serve(async (req) => {
     }
   }
 
-  return jsonResponse({ ok: true, dispatched: results.length, results });
+  return jsonResponse({ ok: true, dispatched: results.length, results, refundAlerts });
 });

@@ -14,6 +14,7 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { createMeetForAppointment, type MeetAppointment } from './meet.ts';
 import { alreadyNotified, inBackground, notifyParent } from './parentNotify.ts';
+import { alertRefundProblem } from './refundAlerts.ts';
 
 /** ₹449 per consult. The only place the price is set; the app never sends it. */
 export const CONSULT_PRICE_PAISE = 44900;
@@ -270,16 +271,27 @@ export async function afterConsultConfirmed(admin: SupabaseClient, appointmentId
   }
 }
 
+export interface RefundOptions {
+  /**
+   * Wait for the team alert (refund_failed) instead of sending it in the
+   * background. delete-account needs this: the alert reads the consult
+   * time, which is gone once the account is deleted.
+   */
+  awaitAlert?: boolean;
+}
+
 /**
  * Refund a payments row in full and record it. The row is claimed
  * (paid / refund_due / refund_failed → refund_pending) BEFORE calling
  * Razorpay so two callers never both refund; a Razorpay failure leaves
- * refund_failed, which the next status check or webhook retries.
+ * refund_failed, which the next status check or webhook retries, and
+ * emails the team once (refundAlerts.ts).
  */
 export async function refundPaymentRow(
   admin: SupabaseClient,
   paymentRowId: string,
   reason: string,
+  opts: RefundOptions = {},
 ): Promise<RefundResult> {
   const { data: claimed, error: claimErr } = await admin
     .from('payments')
@@ -313,6 +325,12 @@ export async function refundPaymentRow(
       .from('payments')
       .update({ status: 'refund_failed', updated_at: new Date().toISOString() })
       .eq('id', paymentRowId);
+    // RazorpayError messages are our own ("Razorpay 400"); Razorpay's error
+    // body stays in the logs only.
+    const detail = e instanceof RazorpayError ? `${e.message}, refund reason ${reason}` : `No answer from Razorpay, refund reason ${reason}`;
+    const alert = alertRefundProblem(admin, paymentRowId, 'refund_failed', { note: detail });
+    if (opts.awaitAlert) await alert;
+    else inBackground('refund alert', alert);
     return 'refund_failed';
   }
 }
