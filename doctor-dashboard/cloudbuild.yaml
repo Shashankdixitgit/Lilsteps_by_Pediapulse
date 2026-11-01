@@ -1,0 +1,16 @@
+# Build the doctor dashboard image. NEXT_PUBLIC_* are public values baked in at build time.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg=NEXT_PUBLIC_SUPABASE_URL=${_SUPABASE_URL}
+      - --build-arg=NEXT_PUBLIC_SUPABASE_ANON_KEY=${_SUPABASE_ANON_KEY}
+      - --build-arg=NEXT_PUBLIC_GOOGLE_CALENDAR_ENABLED=${_GOOGLE_CALENDAR_ENABLED}
+      - -t
+      - asia-south1-docker.pkg.dev/$PROJECT_ID/lilsteps/doctor-dashboard:${_TAG}
+      - .
+images:
+  - asia-south1-docker.pkg.dev/$PROJECT_ID/lilsteps/doctor-dashboard:${_TAG}
+substitutions:
+  _GOOGLE_CALENDAR_ENABLED: ''
+  _TAG: latest
