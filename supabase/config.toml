@@ -12,6 +12,8 @@
 #   demo-signup                               signed-out caller; DEMO_SIGNUP_ENABLED + demo-only addresses
 #
 # Deploy order for payments (0045): migration → functions + secrets → app.
+# Care Plan (0053): migration → RAZORPAY_CARE_PLAN_ID secret → care-plan,
+# consult-payment, razorpay-webhook, delete-account → webhook events → app.
 
 project_id = "lilsteps"
 
@@ -35,6 +37,9 @@ verify_jwt = true
 
 [functions.appointment-reminders]
 verify_jwt = false
+
+[functions.care-plan]
+verify_jwt = true
 
 [functions.consult-payment]
 verify_jwt = true

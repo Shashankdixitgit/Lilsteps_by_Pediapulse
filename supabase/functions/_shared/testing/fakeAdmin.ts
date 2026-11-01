@@ -2,7 +2,8 @@
 // Covers the query-builder calls the edge functions make (select / insert /
 // update / delete with eq, in, not-in, is, lt, lte, gte, or, order, limit,
 // range, maybeSingle, single), plus auth.admin and storage stubs, the 0052
-// one-refund-alert unique index, and the FK effects of deleting a parent.
+// one-refund-alert unique index, the 0053 Care Plan unique indexes, and the
+// FK effects of deleting a parent.
 //
 // Razorpay is faked separately with stubRazorpay(): it replaces fetch.
 
@@ -69,8 +70,24 @@ function uuid(): string {
   return `00000000-0000-4000-8000-${String(seq).padStart(12, '0')}`;
 }
 
-/** 0052: one queued / sent refund alert per payment. */
+/** 0052: one queued / sent refund alert per payment. 0053: Care Plan uniques. */
 function violatesUnique(table: string, row: Row, rows: Row[]): boolean {
+  if (table === 'care_plan_periods') {
+    return rows.some(
+      (r) =>
+        r !== row &&
+        ((r.care_plan_id === row.care_plan_id && r.period_start === row.period_start) ||
+          (row.razorpay_payment_id && r.razorpay_payment_id === row.razorpay_payment_id)),
+    );
+  }
+  if (table === 'care_plans') {
+    const live = (r: Row) => ['created', 'authenticated', 'active', 'pending', 'halted'].includes(r.status ?? 'created');
+    return live(row) && rows.some((r) => r !== row && live(r) && r.parent_id === row.parent_id);
+  }
+  if (table === 'notification_log' && row.payload?.plan_key) {
+    const live = (r: Row) => String(r.template).startsWith('care_plan_') && ['queued', 'sent'].includes(r.status);
+    return live(row) && rows.some((r) => r !== row && live(r) && r.channel === row.channel && r.payload?.plan_key === row.payload.plan_key);
+  }
   if (table !== 'notification_log') return false;
   const live = (r: Row) => r.template === 'refund_alert' && ['queued', 'sent'].includes(r.status);
   if (!live(row)) return false;

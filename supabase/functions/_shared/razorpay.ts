@@ -31,7 +31,8 @@ export const REFUND_CUTOFF_MS = 2 * 60 * 60 * 1000;
 const API = 'https://api.razorpay.com/v1';
 
 export class RazorpayError extends Error {
-  constructor(message: string, readonly status: number) {
+  /** `detail`: the start of Razorpay's error body, for our own checks and logs; never sent to the app. */
+  constructor(message: string, readonly status: number, readonly detail = '') {
     super(message);
   }
 }
@@ -80,10 +81,13 @@ async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promi
   if (!res.ok) {
     // Razorpay error bodies are logged, never returned to the app.
     console.error(`[razorpay] ${method} ${path} → ${res.status}: ${text.slice(0, 500)}`);
-    throw new RazorpayError(`Razorpay ${res.status}`, res.status);
+    throw new RazorpayError(`Razorpay ${res.status}`, res.status, text.slice(0, 500));
   }
   return text ? JSON.parse(text) : {};
 }
+
+/** The same timed, logged Razorpay call, for the Care Plan helpers (carePlan.ts). */
+export const razorpayCall = call;
 
 export interface PaymentLink {
   id: string;
@@ -231,6 +235,8 @@ export type FinalizeOutcome =
  *
  * On the first 'confirmed' the family gets the confirmation SMS and the
  * consult a Meet link, here on the server, whichever path got here first.
+ * (A Care Plan booking, consult-payment use_plan, ends in the same
+ * afterConsultConfirmed.)
  */
 export async function finalizePaidLink(
   admin: SupabaseClient,
@@ -268,7 +274,7 @@ export async function afterConsultConfirmed(admin: SupabaseClient, appointmentId
   try {
     const { data: appt } = await admin
       .from('appointments')
-      .select('id, date, time, status, doctor_id, parent_id, child_id, meet_link, doctors(name), children(name)')
+      .select('id, date, time, status, doctor_id, parent_id, child_id, meet_link, paid_with_plan, doctors(name), children(name)')
       .eq('id', appointmentId)
       .maybeSingle();
     if (!appt || appt.status !== 'upcoming') return;
@@ -289,6 +295,7 @@ export async function afterConsultConfirmed(admin: SupabaseClient, appointmentId
             child: (appt as any).children?.name ?? '',
             date: appt.date,
             time: String(appt.time).slice(0, 5),
+            ...((appt as any).paid_with_plan ? { plan: 'yes' } : {}),
           },
         });
       })(),
