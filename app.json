@@ -184,6 +184,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "d7890260-0b5d-4902-8cb3-0730fea00867"
+      }
+    },
+    "owner": "lilsteps-clinic"
   }
 }
