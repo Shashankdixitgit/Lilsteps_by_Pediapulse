@@ -13,7 +13,7 @@
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { createMeetForAppointment, type MeetAppointment } from './meet.ts';
-import { dispatch } from './notify.ts';
+import { alreadyNotified, notifyParent } from './parentNotify.ts';
 
 /** ₹449 per consult. The only place the price is set; the app never sends it. */
 export const CONSULT_PRICE_PAISE = 44900;
@@ -73,6 +73,7 @@ export function createPaymentLink(input: {
   description: string;
   callbackUrl: string;
   contact?: string | null;
+  email?: string | null;
 }): Promise<PaymentLink> {
   return call('POST', '/payment_links', {
     amount: CONSULT_PRICE_PAISE,
@@ -81,7 +82,10 @@ export function createPaymentLink(input: {
     expire_by: Math.floor(input.expireBy.getTime() / 1000),
     reference_id: input.paymentId,
     description: input.description,
-    customer: input.contact ? { contact: input.contact } : undefined,
+    customer:
+      input.contact || input.email
+        ? { ...(input.contact ? { contact: input.contact } : {}), ...(input.email ? { email: input.email } : {}) }
+        : undefined,
     // The app shows the link itself; no Razorpay SMS/email to the family.
     notify: { sms: false, email: false },
     reminder_enable: false,
@@ -225,58 +229,32 @@ export async function finalizePaidLink(
 }
 
 /**
- * Confirmation SMS (once per consult: skipped when notification_log already
- * has a sent or queued one) and the per-consult Meet link (idempotent: an
+ * Confirmation email (once per consult: notification_log + the 0046 unique
+ * index stop a second one) and the per-consult Meet link (idempotent: an
  * existing link is reused). Best effort — the consult is booked either way.
  */
 export async function afterConsultConfirmed(admin: SupabaseClient, appointmentId: string): Promise<void> {
   try {
     const { data: appt } = await admin
       .from('appointments')
-      .select('id, date, time, status, doctor_id, parent_id, child_id, meet_link, doctors(name), parents(phone)')
+      .select('id, date, time, status, doctor_id, parent_id, child_id, meet_link, doctors(name), children(name)')
       .eq('id', appointmentId)
       .maybeSingle();
     if (!appt || appt.status !== 'upcoming') return;
 
-    const { count } = await admin
-      .from('notification_log')
-      .select('id', { count: 'exact', head: true })
-      .eq('appointment_id', appointmentId)
-      .eq('template', 'appointment_confirmation')
-      .in('status', ['sent', 'queued', 'skipped']);
-    const phone = (appt as any).parents?.phone as string | undefined;
-    if ((count ?? 0) === 0 && phone) {
-      const params = {
-        doctor: (appt as any).doctors?.name ?? 'your doctor',
-        date: appt.date,
-        time: String(appt.time).slice(0, 5),
-      };
-      const { data: queued } = await admin
-        .from('notification_log')
-        .insert({
-          channel: 'sms',
-          template: 'appointment_confirmation',
-          recipient: phone,
-          parent_id: appt.parent_id,
-          child_id: appt.child_id,
-          appointment_id: appt.id,
-          status: 'queued',
-          payload: { template: 'appointment_confirmation', params },
-        })
-        .select('id')
-        .single();
-      const r = await dispatch({ channel: 'sms', template: 'appointment_confirmation', params, recipient: { phone } });
-      if (queued?.id) {
-        await admin
-          .from('notification_log')
-          .update({
-            status: r.ok ? 'sent' : r.notConfigured ? 'skipped' : 'failed',
-            provider_id: r.providerId ?? null,
-            error: r.error ?? null,
-            sent_at: r.ok ? new Date().toISOString() : null,
-          })
-          .eq('id', queued.id);
-      }
+    if (!(await alreadyNotified(admin, appointmentId, 'appointment_confirmation'))) {
+      await notifyParent(admin, {
+        parentId: appt.parent_id,
+        childId: appt.child_id,
+        appointmentId: appt.id,
+        template: 'appointment_confirmation',
+        params: {
+          doctor: (appt as any).doctors?.name ?? 'your doctor',
+          child: (appt as any).children?.name ?? '',
+          date: appt.date,
+          time: String(appt.time).slice(0, 5),
+        },
+      });
     }
 
     await createMeetForAppointment(admin, appt as unknown as MeetAppointment);

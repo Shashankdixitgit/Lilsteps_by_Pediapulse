@@ -5,7 +5,8 @@
 //
 // Request body:
 //   {
-//     channel: 'sms' | 'whatsapp' | 'email' | 'push',
+//     channel: 'sms' | 'whatsapp' | 'email' | 'push'   ('sms'/'whatsapp' are sent as
+//              'email' while SMS_ENABLED is off — older dashboards/apps still ask for 'sms'),
 //     template: TemplateKey (see ../_shared/templates.ts),
 //     params?: Record<string, string>,
 //     recipient: { parent_id? | doctor_id?, child_id?, appointment_id? }
@@ -22,21 +23,23 @@
 //
 // Rate limit: RATE_LIMIT_PER_HOUR rows in notification_log per caller (sent_by).
 //
-// Providers: if a channel's provider has no secrets yet (Twilio / Resend), the
+// Providers: if a channel's provider has no secrets yet (SMTP / Twilio), the
 // row is logged as 'skipped' and the function returns 200 { ok: false,
 // skipped: true } — callers are fire-and-forget and must not break on it.
 //
 // Deploy: MCP deploy_edge_function (include ../_shared/*.ts), verify_jwt on.
 // Secrets needed:
 //   TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_SMS, TWILIO_FROM_WHATSAPP
-//   RESEND_API_KEY (or any SMTP-relay key — adapt _shared/notify.ts), EMAIL_FROM
+//   SMTP_HOST, SMTP_PORT (465), SMTP_USER, SMTP_PASS, EMAIL_FROM (see _shared/email.ts)
+//   SMS_ENABLED=true only once SMS (DLT) is live
 //
 // Cron reminder functions call the shared dispatch helper directly, not this
 // HTTP endpoint.
 
 // deno-lint-ignore-file no-explicit-any
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
-import { dispatch, isChannel, type Recipient } from '../_shared/notify.ts';
+import { type Channel, dispatch, isChannel, type Recipient, smsEnabled } from '../_shared/notify.ts';
+import { parentContact } from '../_shared/parentNotify.ts';
 import { isTemplateKey } from '../_shared/templates.ts';
 import { createAdminClient, getCaller } from '../_shared/supabase.ts';
 
@@ -84,6 +87,9 @@ Deno.serve(async (req) => {
 
   // ── Validate shape ─────────────────────────────────────────────────────────
   if (!isChannel(body?.channel)) return jsonResponse({ error: 'Invalid channel' }, 400);
+  // SMS is off until DLT is done: those messages go by email instead.
+  const channel: Channel =
+    (body.channel === 'sms' || body.channel === 'whatsapp') && !smsEnabled() ? 'email' : body.channel;
   if (!isTemplateKey(body?.template)) return jsonResponse({ error: 'Invalid template' }, 400);
   const params = cleanParams(body?.params);
   if (!params) return jsonResponse({ error: 'Invalid params' }, 400);
@@ -140,7 +146,7 @@ Deno.serve(async (req) => {
       .eq('parent_id', caller.id)
       .eq('doctor_id', doctorId!);
     if ((count ?? 0) === 0) return jsonResponse({ error: 'Forbidden' }, 403);
-    if (body.channel !== 'email') {
+    if (channel !== 'email') {
       return jsonResponse({ error: 'Doctors can only be notified by email' }, 400);
     }
   }
@@ -187,14 +193,12 @@ Deno.serve(async (req) => {
     appointment_id: appointmentId,
   };
   if (parentId) {
-    const { data: parent } = await admin
-      .from('parents')
-      .select('phone, email, expo_push_token')
-      .eq('id', parentId)
-      .maybeSingle();
-    recipient.phone = parent?.phone ?? undefined;
-    recipient.email = parent?.email ?? undefined;
-    recipient.expo_push_token = parent?.expo_push_token ?? undefined;
+    // Email = the address they sign in with (verified), not an editable profile field.
+    const contact = await parentContact(admin, parentId);
+    recipient.phone = contact.phone;
+    recipient.email = contact.email;
+    recipient.expo_push_token = contact.expo_push_token;
+    if (!params.parent && contact.name) params.parent = contact.name.trim().split(/\s+/)[0].slice(0, 40);
   } else {
     const { data: link } = await admin
       .from('doctor_auth')
@@ -208,10 +212,15 @@ Deno.serve(async (req) => {
     }
   }
 
+  if (childId && !params.child) {
+    const { data: child } = await admin.from('children').select('name').eq('id', childId).maybeSingle();
+    if (child?.name) params.child = String(child.name).slice(0, MAX_PARAM_LENGTH);
+  }
+
   const address =
-    body.channel === 'email'
+    channel === 'email'
       ? recipient.email
-      : body.channel === 'push'
+      : channel === 'push'
         ? recipient.expo_push_token
         : recipient.phone;
 
@@ -219,7 +228,7 @@ Deno.serve(async (req) => {
   const { data: queued, error: qErr } = await admin
     .from('notification_log')
     .insert({
-      channel: body.channel,
+      channel,
       template: body.template,
       recipient: address ?? 'unknown',
       parent_id: parentId ?? null,
@@ -238,8 +247,8 @@ Deno.serve(async (req) => {
   }
 
   const result = address
-    ? await dispatch({ channel: body.channel, template: body.template, params, recipient })
-    : { ok: false, error: `No ${body.channel} contact on record`, notConfigured: true };
+    ? await dispatch({ channel, template: body.template, params, recipient })
+    : { ok: false, error: `No ${channel} contact on record`, notConfigured: true };
 
   const status = result.ok ? 'sent' : result.notConfigured ? 'skipped' : 'failed';
   await admin

@@ -2,6 +2,9 @@
 // cron-triggered reminder functions. Provider-specific calls live here so they
 // can be unit-swapped (e.g. MSG91 instead of Twilio) without touching the
 // dispatch logic.
+//
+// SMS / WhatsApp are OFF (no DLT registration yet): they only send when
+// SMS_ENABLED=true. Email is the default channel for parents.
 
 // deno-lint-ignore-file no-explicit-any
 
@@ -11,6 +14,11 @@ export const CHANNELS: readonly Channel[] = ['sms', 'whatsapp', 'email', 'push']
 
 export function isChannel(v: unknown): v is Channel {
   return typeof v === 'string' && (CHANNELS as readonly string[]).includes(v);
+}
+
+/** SMS / WhatsApp sending is switched on (SMS_ENABLED=true). Off until DLT is done. */
+export function smsEnabled(): boolean {
+  return Deno.env.get('SMS_ENABLED') === 'true';
 }
 
 export interface Recipient {
@@ -85,36 +93,15 @@ async function sendTwilioMessage(
   return { ok: true, providerId: data?.sid };
 }
 
-// ── Email (Supabase SMTP — generic SMTP fetch via Resend-style API not used).
-// For now we use Supabase Auth's built-in email by triggering an auth.users
-// invite; for arbitrary transactional email, send via a small SMTP relay.
-// Wire your provider here when ready.
+// ── Email (SMTP, see email.ts) ───────────────────────────────────────────────
 
-async function sendEmail(to: string, subject: string, body: string): Promise<DispatchResult> {
-  const apiKey = Deno.env.get('RESEND_API_KEY');
-  const from = Deno.env.get('EMAIL_FROM') ?? 'noreply@pediapulse.in';
-
-  if (!apiKey) {
-    // No provider configured yet — short-circuit so the dispatcher records a
-    // 'skipped' entry instead of failing the whole batch.
-    return { ok: false, error: 'Email provider not configured', notConfigured: true };
-  }
-
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ from, to, subject, text: body }),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => 'unknown');
-    return { ok: false, error: `Email provider ${res.status}: ${errText}` };
-  }
-  const data = await res.json();
-  return { ok: true, providerId: data?.id };
+async function sendTemplateEmail(
+  to: string,
+  template: string,
+  params: Record<string, string>,
+): Promise<DispatchResult> {
+  const msg = renderEmail(template, params);
+  return sendEmail({ to, subject: msg.subject, text: msg.text, html: msg.html });
 }
 
 // ── Expo push ─────────────────────────────────────────────────────────────────
@@ -150,23 +137,26 @@ async function sendExpoPush(
 
 // ── Template rendering ────────────────────────────────────────────────────────
 
-import { renderTemplate } from './templates.ts';
+import { renderEmail, renderTemplate } from './templates.ts';
+import { sendEmail } from './email.ts';
 
 export async function dispatch(input: NotifyInput): Promise<DispatchResult> {
   const rendered = renderTemplate(input.template, input.params ?? {});
 
   switch (input.channel) {
     case 'sms':
+      if (!smsEnabled()) return { ok: false, error: 'SMS is switched off', notConfigured: true };
       if (!input.recipient.phone) return { ok: false, error: 'Missing phone' };
       return sendTwilioMessage(input.recipient.phone, rendered.body, 'sms');
 
     case 'whatsapp':
+      if (!smsEnabled()) return { ok: false, error: 'WhatsApp is switched off', notConfigured: true };
       if (!input.recipient.phone) return { ok: false, error: 'Missing phone' };
       return sendTwilioMessage(input.recipient.phone, rendered.body, 'whatsapp');
 
     case 'email':
       if (!input.recipient.email) return { ok: false, error: 'Missing email' };
-      return sendEmail(input.recipient.email, rendered.subject ?? 'Pedia Pulse', rendered.body);
+      return sendTemplateEmail(input.recipient.email, input.template, input.params ?? {});
 
     case 'push':
       if (!input.recipient.expo_push_token) {
@@ -174,7 +164,7 @@ export async function dispatch(input: NotifyInput): Promise<DispatchResult> {
       }
       return sendExpoPush(
         input.recipient.expo_push_token,
-        rendered.subject ?? 'Pedia Pulse',
+        rendered.subject ?? 'LilSteps',
         rendered.body,
         rendered.data,
       );

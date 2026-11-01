@@ -52,6 +52,7 @@ import {
   verifyLinkCallbackSignature,
 } from '../_shared/razorpay.ts';
 import { isAllowedReturnUrl } from '../razorpay-return/allow.ts';
+import { notifyParent, parentContact } from '../_shared/parentNotify.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MINUTE = 60 * 1000;
@@ -65,8 +66,9 @@ interface Appointment {
   status: string;
   cancel_reason: string | null;
   hold_expires_at: string | null;
+  child_id: string;
   doctors: { name: string } | null;
-  parents: { phone: string | null } | null;
+  children: { name: string } | null;
 }
 
 interface PaymentRow {
@@ -122,7 +124,7 @@ Deno.serve(async (req) => {
 
   const { data: appt } = await admin
     .from('appointments')
-    .select('id, parent_id, doctor_id, date, time, status, cancel_reason, hold_expires_at, doctors(name), parents(phone)')
+    .select('id, parent_id, doctor_id, child_id, date, time, status, cancel_reason, hold_expires_at, doctors(name), children(name)')
     .eq('id', appointmentId)
     .maybeSingle<Appointment>();
   if (!appt) return jsonResponse({ error: 'Appointment not found' }, 404);
@@ -223,6 +225,8 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
 
   const callbackUrl =
     `${Deno.env.get('SUPABASE_URL')}/functions/v1/razorpay-return?to=${encodeURIComponent(returnUrl)}`;
+  // Prefill Razorpay's page with the parent's sign-in email (and phone, if any).
+  const contact = await parentContact(admin, appt.parent_id);
   let link;
   try {
     link = await createPaymentLink({
@@ -231,7 +235,8 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
       expireBy,
       description: `Video consult with ${appt.doctors?.name ?? 'your doctor'}`.slice(0, 2048),
       callbackUrl,
-      contact: appt.parents?.phone ?? null,
+      contact: contact.phone ?? null,
+      email: contact.email ?? null,
     });
   } catch (e) {
     await admin.from('payments').delete().eq('id', row.id);
@@ -370,13 +375,53 @@ async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): P
     }
   }
 
+  const outcome = await cancelRefund(admin, appt, payments, by);
+  // A booked consult (not an unpaid hold) gets a cancellation email.
+  if (appt.status === 'upcoming') await emailCancellation(admin, appt, by, outcome.refund);
+  return jsonResponse(outcome);
+}
+
+/** The refund part of a cancel; the result is the response body. */
+async function cancelRefund(
+  admin: any,
+  appt: Appointment,
+  payments: PaymentRow[],
+  by: 'parent' | 'doctor',
+): Promise<{ refund: 'none' | 'not_paid' | 'started' | 'failed'; late?: true }> {
   const paid = payments.find((p) => p.status === 'paid');
-  if (!paid) return jsonResponse({ refund: 'not_paid' });
+  if (!paid) return { refund: 'not_paid' };
 
   const early = consultStart(appt.date, appt.time).getTime() - Date.now() >= REFUND_CUTOFF_MS;
-  if (by === 'parent' && !early) return jsonResponse({ refund: 'none', late: true });
+  if (by === 'parent' && !early) return { refund: 'none', late: true };
 
   const result = await refundPaymentRow(admin, paid.id, by === 'doctor' ? 'doctor_cancelled' : 'parent_cancelled');
-  if (result === 'not_paid') return jsonResponse({ refund: 'not_paid' });
-  return jsonResponse({ refund: result === 'refund_failed' ? 'failed' : 'started' });
+  if (result === 'not_paid') return { refund: 'not_paid' };
+  return { refund: result === 'refund_failed' ? 'failed' : 'started' };
+}
+
+/** Best effort: the cancel stands whether or not the email goes out. */
+async function emailCancellation(
+  admin: any,
+  appt: Appointment,
+  by: 'parent' | 'doctor',
+  refund: 'none' | 'not_paid' | 'started' | 'failed',
+): Promise<void> {
+  try {
+    await notifyParent(admin, {
+      parentId: appt.parent_id,
+      childId: appt.child_id,
+      appointmentId: appt.id,
+      template: 'appointment_cancelled',
+      params: {
+        doctor: appt.doctors?.name ?? 'your doctor',
+        child: appt.children?.name ?? '',
+        date: appt.date,
+        time: String(appt.time).slice(0, 5),
+        by,
+        refund: refund === 'none' ? 'late' : refund,
+      },
+    });
+  } catch (e) {
+    console.error(`[consult-payment] cancel email ${appt.id}: ${(e as Error).message}`);
+  }
 }

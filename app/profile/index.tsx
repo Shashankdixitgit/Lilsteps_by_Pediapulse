@@ -9,7 +9,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { SettingsCard, SettingsRow as Row } from '@/components/settings-row';
 import { HeroCard } from '@/components/ui/HeroCard';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
-import { useAuth } from '@/context/auth';
+import { DEMO_EMAIL_DOMAIN, useAuth } from '@/context/auth';
 import { useChild } from '@/context/child';
 import { clearOnboardingDraft } from '@/context/onboarding';
 import { useNotificationPermission } from '@/hooks/useNotificationPermission';
@@ -17,8 +17,6 @@ import { confirmAsync } from '@/lib/confirm';
 import { EMPTY_PARENT_EXTRAS, fetchParentExtras, relationshipLabel } from '@/lib/parentProfile';
 import { formatPhone } from '@/lib/phone';
 import { layout, typography } from '@/styles/global';
-
-const DEMO_EMAIL_DOMAIN = '@demo.lilsteps.dev';
 
 const QUICK_LINKS = [
   { key: 'records', label: 'Health records', icon: 'folder-outline', route: '/(tabs)/records' },
@@ -72,8 +70,8 @@ export default function ProfileScreen() {
   const medications =
     child?.medications.map((m) => [m.name, m.dosage, m.frequency].filter(Boolean).join(' · ')) ?? [];
 
-  // Phone is how parents sign in. The test-login email
-  // (phone-…@demo.lilsteps.dev) is internal and never shown.
+  // Email is how parents sign in (phone only when PHONE_AUTH is on). The
+  // test-login email (phone-…@demo.lilsteps.dev) is internal and never shown.
   const phone = formatPhone(user?.phone || (user?.user_metadata?.phone as string | undefined) || '');
   const email = user?.email && !user.email.endsWith(DEMO_EMAIL_DOMAIN) ? user.email : null;
 

@@ -45,7 +45,7 @@ maestro test .maestro --include-tags=parent,auth
 | Flow | What it asserts |
 | --- | --- |
 | `01-cold-start.yaml` | App launches without crash; lands on auth OR home |
-| `02-signup-form.yaml` | Signup form accepts name + phone; OTP screen renders. Stops before OTP entry. |
+| `02-signup-form.yaml` | Signup form accepts name + email + password; the email-code screen renders. Stops before code entry. |
 | `03-onboarded-home.yaml` | Home greeting, quick actions, AI check-in entry, tabs nav |
 
 ## Caveats

@@ -18,7 +18,7 @@
 //
 // Deploy: `supabase functions deploy appointment-reminders --no-verify-jwt --project-ref ahikfefphptmtivwukpv`
 
-import { dispatch } from '../_shared/notify.ts';
+import { alreadyNotified, notifyParent } from '../_shared/parentNotify.ts';
 import { jsonResponse } from '../_shared/cors.ts';
 import { createAdminClient, isServerCaller } from '../_shared/supabase.ts';
 
@@ -29,7 +29,7 @@ interface AppointmentRow {
   parent_id: string;
   child_id: string;
   doctors: { name: string } | null;
-  parents: { phone: string | null; expo_push_token: string | null } | null;
+  children: { name: string } | null;
 }
 
 function buildSlot(date: string, time: string): Date {
@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
   const { data, error } = await admin
     .from('appointments')
     .select(
-      'id, date, time, parent_id, child_id, doctors(name), parents(phone, expo_push_token)',
+      'id, date, time, parent_id, child_id, doctors(name), children(name)',
     )
     .eq('status', 'upcoming')
     .gte('date', todayIso)
@@ -83,71 +83,26 @@ Deno.serve(async (req) => {
     if (templates.length === 0) continue;
 
     for (const template of templates) {
-      // Idempotency: skip if already sent
-      const { count } = await admin
-        .from('notification_log')
-        .select('id', { count: 'exact', head: true })
-        .eq('appointment_id', appt.id)
-        .eq('template', template)
-        .eq('status', 'sent');
-      if ((count ?? 0) > 0) {
+      // Idempotency: one of each reminder per consult, on any channel (the
+      // 0046 unique index also stops a second run racing this one).
+      if (await alreadyNotified(admin, appt.id, template)) {
         results.push({ id: appt.id, template, ok: true });
         continue;
       }
 
-      const params = {
-        doctor: appt.doctors?.name ?? 'your doctor',
-        date: appt.date,
-        time: appt.time.slice(0, 5),
-      };
-
-      // SMS first (cheap + works for non-app users), then push if token present.
-      const channels: Array<'sms' | 'push'> = [];
-      if (appt.parents?.phone) channels.push('sms');
-      if (appt.parents?.expo_push_token) channels.push('push');
-
-      for (const channel of channels) {
-        const { data: queued } = await admin
-          .from('notification_log')
-          .insert({
-            channel,
-            template,
-            recipient:
-              channel === 'sms'
-                ? appt.parents?.phone ?? ''
-                : appt.parents?.expo_push_token ?? '',
-            parent_id: appt.parent_id,
-            child_id: appt.child_id,
-            appointment_id: appt.id,
-            status: 'queued',
-            payload: { template, params },
-          })
-          .select('id')
-          .single();
-
-        const r = await dispatch({
-          channel,
-          template,
-          params,
-          recipient: {
-            phone: appt.parents?.phone ?? undefined,
-            expo_push_token: appt.parents?.expo_push_token ?? undefined,
-          },
-        });
-
-        if (queued?.id) {
-          await admin
-            .from('notification_log')
-            .update({
-              status: r.ok ? 'sent' : 'failed',
-              provider_id: r.providerId ?? null,
-              error: r.error ?? null,
-              sent_at: r.ok ? new Date().toISOString() : null,
-            })
-            .eq('id', queued.id);
-        }
-        results.push({ id: appt.id, template, ok: r.ok, error: r.error });
-      }
+      const sent = await notifyParent(admin, {
+        parentId: appt.parent_id,
+        childId: appt.child_id,
+        appointmentId: appt.id,
+        template,
+        params: {
+          doctor: appt.doctors?.name ?? 'your doctor',
+          child: appt.children?.name ?? '',
+          date: appt.date,
+          time: appt.time.slice(0, 5),
+        },
+      });
+      for (const r of sent) results.push({ id: appt.id, template, ok: r.ok, error: r.error });
     }
   }
 

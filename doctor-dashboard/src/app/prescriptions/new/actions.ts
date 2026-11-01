@@ -117,7 +117,7 @@ export async function createPrescriptionAction(params: {
     supabase.functions
       .invoke('notify', {
         body: {
-          channel: 'sms',
+          channel: 'email',
           template: 'prescription_issued',
           params: { doctor: doctor?.name ?? 'your doctor' },
           recipient: { parent_id: child.parent_id, child_id: params.childId },
