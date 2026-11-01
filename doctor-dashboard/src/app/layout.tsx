@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Roboto, Roboto_Mono } from 'next/font/google';
 import './globals.css';
+import { DevFeedback } from './dev-feedback';
 import { DashboardNav } from './nav';
 
 const roboto = Roboto({
@@ -33,6 +34,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <DashboardNav />
         {children}
+        <DevFeedback />
       </body>
     </html>
   );
