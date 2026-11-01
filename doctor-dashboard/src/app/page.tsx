@@ -1,6 +1,18 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { fetchConcerns, fetchUrgencies, type Urgency } from '@/lib/appointments';
+import {
+  SLOT_MINUTES,
+  daysFrom,
+  eventKind,
+  isIsoDate,
+  isIsoMonth,
+  minutesToLabel,
+  parseView,
+  rangeStart,
+  shiftMonth,
+  timeToMinutes,
+} from '@/lib/calendar';
 import { getCurrentDoctor, hasVideoLink } from '@/lib/doctor';
 import {
   computeAge,
@@ -18,6 +30,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { FlashToast } from './flash-toast';
 import { LateBadge, UrgencyBadge } from './urgency-badge';
 import { VideoLinkBanner } from './video-link-banner';
+import { Schedule, type CalEvent, type NextUp } from './schedule/schedule';
 
 type QueueRow = {
   id: string;
@@ -26,6 +39,7 @@ type QueueRow = {
   status: string;
   summary_ready: boolean;
   ai_summary_id: string | null;
+  meet_link: string | null;
   children: { id: string; name: string; dob: string; sex: string } | null;
   parents: { name: string | null } | null;
 };
@@ -34,7 +48,7 @@ type QueueRow = {
 type ClosedRow = QueueRow & { closedAt: string | null };
 
 const QUEUE_SELECT =
-  'id, date, time, status, summary_ready, ai_summary_id, children(id, name, dob, sex), parents(name)';
+  'id, date, time, status, summary_ready, ai_summary_id, meet_link, children(id, name, dob, sex), parents(name)';
 
 const CLOSED_LABEL: Record<string, string> = {
   completed: 'Completed',
@@ -69,18 +83,6 @@ function ClosedWhen({ closedAt, date, time }: { closedAt: string | null; date: s
       <span className={closedAt ? 'mt-1 text-[12px] text-[var(--ink-3)]' : 'text-[14px] text-[var(--ink)]'}>
         Booked for {slotDay}, {formatSlotTime(time)}
       </span>
-    </div>
-  );
-}
-
-function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {
-  return (
-    <div className="rounded-xl border border-[var(--hairline)] bg-[var(--card)] p-6">
-      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
-        {label}
-      </div>
-      <div className="mt-3 font-display text-[40px] leading-none text-[var(--ink)]">{value}</div>
-      <div className="mt-2 text-[13px] text-[var(--ink-3)]">{hint}</div>
     </div>
   );
 }
@@ -122,9 +124,9 @@ const CLOSED_LOOKBACK_DAYS = 7;
 export default async function QueuePage({
   searchParams,
 }: {
-  searchParams: Promise<{ closed?: string }>;
+  searchParams: Promise<{ closed?: string; d?: string; v?: string; m?: string }>;
 }) {
-  const { closed } = await searchParams;
+  const { closed, d, v, m } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const doctor = await getCurrentDoctor(supabase);
   if (!doctor) redirect('/login');
@@ -132,13 +134,25 @@ export default async function QueuePage({
   // would still say "yesterday" until 5:30am IST.
   const today = todayIst();
 
+  // Calendar position: ?d= anchor day, ?v= 1 / 3 / 7 days, ?m= mini-calendar month.
+  const view = parseView(v);
+  const anchor = isIsoDate(d) ? d : today;
+  const days = daysFrom(rangeStart(anchor, view), view);
+  const miniMonth = isIsoMonth(m) ? m : anchor.slice(0, 7);
+
   // Only live visits: completed / no-show / cancelled drop out of the queue.
   // Closed visits from the last 7 days stay visible under "Recently closed".
   // A visit can be closed before its booked date, so "recent" is judged by
   // when it was closed (consultations.created_at: the row is written only
   // when the visit is closed) as well as by the booked date.
   const closedSince = `${istDatePlus(-CLOSED_LOOKBACK_DAYS)}T00:00:00+05:30`;
-  const [{ data, error }, { data: closedByDate }, { data: recentConsults }] = await Promise.all([
+  const [
+    { data, error },
+    { data: closedByDate },
+    { data: recentConsults },
+    { data: inRange },
+    { data: monthBookings },
+  ] = await Promise.all([
     supabase
       .from('appointments')
       .select(QUEUE_SELECT)
@@ -161,6 +175,27 @@ export default async function QueuePage({
       .select('appointment_id, created_at')
       .gte('created_at', closedSince)
       .returns<{ appointment_id: string; created_at: string }[]>(),
+    // Visits in the calendar's days. Open and closed ones only: an unpaid
+    // hold (awaiting_payment) is not a consult and a cancelled one is gone.
+    supabase
+      .from('appointments')
+      .select(QUEUE_SELECT)
+      .eq('doctor_id', doctor.doctorId)
+      .gte('date', days[0])
+      .lte('date', days[days.length - 1])
+      .in('status', ['upcoming', 'completed', 'no_show'])
+      .order('date', { ascending: true })
+      .order('time', { ascending: true })
+      .returns<QueueRow[]>(),
+    // Days with an open booking, for the dots on the mini calendar.
+    supabase
+      .from('appointments')
+      .select('date')
+      .eq('doctor_id', doctor.doctorId)
+      .eq('status', 'upcoming')
+      .gte('date', `${miniMonth}-01`)
+      .lt('date', `${shiftMonth(miniMonth, 1)}-01`)
+      .returns<{ date: string }[]>(),
   ]);
 
   const closedAtByAppt = new Map((recentConsults ?? []).map((c) => [c.appointment_id, c.created_at]));
@@ -181,9 +216,10 @@ export default async function QueuePage({
   const recentlyClosed: ClosedRow[] = [...(closedByDate ?? []), ...(closedEarly ?? [])]
     .map((r) => ({ ...r, closedAt: closedAtByAppt.get(r.id) ?? null }))
     .sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
-  const allRows = [...rows, ...recentlyClosed];
+  const rangeRows = inRange ?? [];
+  const allRows = [...rows, ...recentlyClosed, ...rangeRows];
   const [concerns, urgencies] = await Promise.all([
-    fetchConcerns(supabase, allRows.map((r) => r.id)),
+    fetchConcerns(supabase, [...new Set(allRows.map((r) => r.id))]),
     fetchUrgencies(supabase, allRows),
   ]);
   const overdue = rows.filter((a) => a.date < today);
@@ -202,6 +238,48 @@ export default async function QueuePage({
 
   const today_str = formatDayLong(new Date().toISOString()).toUpperCase();
   const todayReady = todays.filter((a) => a.summary_ready).length;
+
+  const nowMinutes = timeToMinutes(now);
+  const toEvent = (r: QueueRow): CalEvent => ({
+    id: r.id,
+    date: r.date,
+    start: timeToMinutes(r.time),
+    childName: r.children?.name ?? 'Unknown',
+    parentName: r.parents?.name?.trim() || null,
+    concern: concerns.get(r.id) ?? null,
+    kind: eventKind(r.status, urgencies.get(r.id), !!r.ai_summary_id),
+    status: r.status,
+    late: lateIds.has(r.id),
+    needsClosing: r.status === 'upcoming' && r.date < today,
+  });
+  const events = rangeRows.map(toEvent);
+
+  // Next up: the first open visit that has not ended yet (today's in-progress
+  // slot counts), then the few after it.
+  const ahead = rows.filter(
+    (r) => r.date > today || (r.date === today && timeToMinutes(r.time) + SLOT_MINUTES > nowMinutes),
+  );
+  const whenLabel = (r: QueueRow): string => {
+    const start = timeToMinutes(r.time);
+    if (r.date === today) {
+      const diff = start - nowMinutes;
+      if (diff <= 0) return 'In progress now';
+      if (diff < 60) return `Starts in ${diff} min`;
+      return `Today · ${minutesToLabel(start)}`;
+    }
+    return `${relativeDayLabel(r.date) ?? formatDayShort(r.date)} · ${minutesToLabel(start)}`;
+  };
+  const nextUp: NextUp | null = ahead[0]
+    ? {
+        event: toEvent(ahead[0]),
+        urgency: urgencies.get(ahead[0].id),
+        when: whenLabel(ahead[0]),
+        // Per-appointment Calendar-event Meet link, else the doctor's permanent room.
+        meetLink: ahead[0].meet_link ?? doctor.defaultMeetLink ?? null,
+      }
+    : null;
+  const after = ahead.slice(1, 4).map((r) => ({ event: toEvent(r), when: whenLabel(r) }));
+  const bookedDays = new Set((monthBookings ?? []).map((b) => b.date));
 
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-12 sm:px-8">
@@ -222,12 +300,19 @@ export default async function QueuePage({
 
       {!hasVideoLink(doctor) && <VideoLinkBanner className="mt-8" />}
 
-      {/* Summary stats */}
-      <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3 fade-up">
-        <StatCard label="Today" value={todays.length} hint="Consultations scheduled today" />
-        <StatCard label="Summary ready" value={todayReady} hint="Today, with AI pre-visit notes" />
-        <StatCard label="Upcoming" value={later.length} hint="Booked for later days" />
-      </section>
+      {!error && (
+        <Schedule
+          today={today}
+          nowMinutes={nowMinutes}
+          days={days}
+          nav={{ anchor, view, month: miniMonth }}
+          events={events}
+          bookedDays={bookedDays}
+          nextUp={nextUp}
+          later={after}
+          stats={{ today: todays.length, ready: todayReady, upcoming: later.length }}
+        />
+      )}
 
       {error && (
         <div className="mt-10 rounded-xl border border-[var(--hairline-strong)] border-l-2 border-l-[var(--ink)] bg-[var(--card)] px-5 py-4 font-mono text-[13px] text-[var(--ink)]">
@@ -246,25 +331,6 @@ export default async function QueuePage({
               urgencies={urgencies}
             />
           )}
-          <QueueTable
-            title="Today"
-            hint={`${todays.length} scheduled`}
-            rows={todays}
-            concerns={concerns}
-            urgencies={urgencies}
-            lateIds={lateIds}
-            emptyTitle="No appointments today"
-            emptyBody="New bookings for today appear here as parents schedule them."
-          />
-          <QueueTable
-            title="Upcoming"
-            hint={`${later.length} booked`}
-            rows={later}
-            concerns={concerns}
-            urgencies={urgencies}
-            emptyTitle="Nothing booked yet"
-            emptyBody="Bookings for later days appear here."
-          />
           {recentlyClosed.length > 0 && (
             <QueueTable
               title="Recently closed"

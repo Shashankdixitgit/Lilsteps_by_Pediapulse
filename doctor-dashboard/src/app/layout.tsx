@@ -1,11 +1,18 @@
 import type { Metadata } from 'next';
-import { Roboto, Roboto_Mono } from 'next/font/google';
+import { EB_Garamond, Figtree, Roboto_Mono } from 'next/font/google';
 import './globals.css';
 import { DashboardNav } from './nav';
 
-const roboto = Roboto({
-  variable: '--font-roboto',
+const figtree = Figtree({
+  variable: '--font-figtree',
   subsets: ['latin'],
+  display: 'swap',
+});
+
+const garamond = EB_Garamond({
+  variable: '--font-garamond',
+  subsets: ['latin'],
+  style: ['normal', 'italic'],
   display: 'swap',
 });
 
@@ -28,7 +35,7 @@ export default function RootLayout({
   return (
     <html
       lang="en-IN"
-      className={`${roboto.variable} ${robotoMono.variable} h-full`}
+      className={`${figtree.variable} ${garamond.variable} ${robotoMono.variable} h-full`}
     >
       <body className="min-h-full flex flex-col">
         <DashboardNav />

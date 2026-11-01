@@ -21,7 +21,7 @@ export function SignOutButton() {
     <button
       onClick={handle}
       disabled={pending}
-      className="link-underline cursor-pointer text-[13px] uppercase tracking-[0.14em] text-[var(--ink-3)] hover:text-[var(--alert)] disabled:opacity-60"
+      className="link-underline cursor-pointer text-[14px] font-medium text-[var(--ink-3)] hover:text-[var(--alert)] disabled:opacity-60"
     >
       {pending ? 'Out…' : 'Sign out'}
     </button>

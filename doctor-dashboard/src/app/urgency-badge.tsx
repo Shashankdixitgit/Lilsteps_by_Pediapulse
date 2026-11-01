@@ -1,15 +1,15 @@
 import type { Urgency } from '@/lib/appointments';
 
 /**
- * AI check-in urgency. The palette is monochrome, so urgency is carried by
- * weight: "Urgent" is a filled ink pill, "See in 1–2 days" (soon) an outlined
- * one. Routine shows nothing so the flags stand out.
+ * AI check-in urgency, in the same colours as the calendar events: "Urgent"
+ * is a coral pill, "See in 1–2 days" (soon) an amber one. Routine shows
+ * nothing so the flags stand out.
  */
 export function UrgencyBadge({ urgency, className }: { urgency: Urgency | null | undefined; className?: string }) {
   if (urgency === 'urgent') {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--ink)] bg-[var(--ink)] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--paper)] ${className ?? ''}`}
+        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[#b93d27] bg-[#b93d27] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-white ${className ?? ''}`}
       >
         ⚠ Urgent
       </span>
@@ -18,7 +18,7 @@ export function UrgencyBadge({ urgency, className }: { urgency: Urgency | null |
   if (urgency === 'soon') {
     return (
       <span
-        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--ink)] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--ink)] ${className ?? ''}`}
+        className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-[var(--amber)] bg-[#fff1d9] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7a4a06] ${className ?? ''}`}
       >
         See in 1–2 days
       </span>

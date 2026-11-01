@@ -163,7 +163,7 @@ export default async function ConversationPage({
               href={meetLink}
               target="_blank"
               rel="noreferrer"
-              className="editorial-btn-ghost"
+              className="btn-go"
             >
               Start video
             </a>
@@ -178,7 +178,7 @@ export default async function ConversationPage({
             href={`/prescriptions/new?child=${child?.id ?? ''}${
               conversation.appointment_id ? `&appointment=${conversation.appointment_id}` : ''
             }`}
-            className="editorial-btn"
+            className="btn-peach"
           >
             Issue prescription
           </Link>

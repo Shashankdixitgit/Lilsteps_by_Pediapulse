@@ -261,12 +261,12 @@ export default async function ConsultationPage({
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[var(--hairline)] pt-5">
           {meetLink && (
             // Per-appointment Calendar-event Meet link, else the doctor's permanent room.
-            <a href={meetLink} target="_blank" rel="noreferrer" className="editorial-btn">
+            <a href={meetLink} target="_blank" rel="noreferrer" className="btn-go">
               Start video
             </a>
           )}
           <OpenChatButton appointmentId={appointment.id} />
-          <Link href={`/prescriptions/new?child=${child.id}&appointment=${appointment.id}`} className="editorial-btn-ghost">
+          <Link href={`/prescriptions/new?child=${child.id}&appointment=${appointment.id}`} className="btn-peach">
             {prescriptions.length > 0 ? 'Issue another prescription' : 'Issue prescription'}
           </Link>
           <Link href={`/prescriptions?child=${child.id}`} className="editorial-btn-ghost">
