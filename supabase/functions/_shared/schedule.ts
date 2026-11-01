@@ -9,12 +9,31 @@ export function consultStart(date: string, time: string): Date {
 }
 
 /**
- * notification_log payload.starts_at for a consult time ("2026-11-03T17:30").
- * Part of the one-message index (0051): one reschedule email / reminder per
- * consult time.
+ * notification_log payload.starts_at for a consult time and its move count
+ * ("2026-11-03T17:30#1"). Part of the one-message index (0051): one
+ * reschedule email / reminder per move, even when a consult is moved back to
+ * a time it had before.
  */
-export function startsAtKey(date: string, time: string): string {
-  return `${date}T${time.slice(0, 5)}`;
+export function startsAtKey(date: string, time: string, rescheduleCount: number): string {
+  return `${date}T${time.slice(0, 5)}#${rescheduleCount}`;
+}
+
+/** A parent cancelling late still gets a full refund if the doctor moved the consult this recently. */
+export const DOCTOR_MOVE_REFUND_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a parent's late cancel (under the 2-hour line) is still refunded
+ * in full: the doctor moved this consult within the last 24 hours, so the
+ * new time may simply not suit the family.
+ */
+export function doctorMovedRecently(
+  lastRescheduledBy: string | null | undefined,
+  rescheduledAt: string | null | undefined,
+  now = Date.now(),
+): boolean {
+  if (lastRescheduledBy !== 'doctor' || !rescheduledAt) return false;
+  const at = new Date(rescheduledAt).getTime();
+  return Number.isFinite(at) && now - at <= DOCTOR_MOVE_REFUND_WINDOW_MS;
 }
 
 /** An instant as IST date ("2026-11-03") and time ("16:30"), for email wording. */

@@ -22,6 +22,7 @@ import {
 import { DayStrip, TimeSlotGrid, type TimeChip } from '@/components/consult/SlotPickerParts';
 import { GradientButton, TextButton } from '@/components/gradient-button';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { useAuth } from '@/context/auth';
 import { AppColors } from '@/constants/theme';
 import { useTimeSlots } from '@/hooks/useDoctors';
 import { MAX_RESCHEDULES, RESCHEDULE_CUTOFF_MINUTES, rescheduleConsult } from '@/lib/consultPayment';
@@ -58,6 +59,10 @@ function blockedReason(a: RescheduleAppointment, now: Date): string | null {
 export default function RescheduleScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id: string }>();
+  // The server emails the sign-in address; test logins never get mail.
+  const { user } = useAuth();
+  const email = user?.email?.toLowerCase() ?? '';
+  const hasEmail = !!email && !email.endsWith('lilsteps.dev');
   const [appt, setAppt] = useState<RescheduleAppointment | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -137,11 +142,11 @@ export default function RescheduleScreen() {
             <Ionicons name="checkmark" size={28} color={AppColors.primary} />
           </View>
           <Text style={[typography.headingSM, styles.centerText]} accessibilityRole="header">
-            Your consult has moved
+            Your consult is moved.
           </Text>
           <Text style={[typography.bodySM, styles.centerText]}>
-            {movedTo} with {doctorName}. Nothing more to pay, and the video link stays the same. We&apos;ve emailed you
-            the new time.
+            {movedTo} with {doctorName}. Nothing more to pay, and the video link stays the same.
+            {hasEmail ? " We'll email you the new time." : ''}
           </Text>
           <GradientButton label="Done" onPress={() => router.back()} style={styles.wide} />
         </View>

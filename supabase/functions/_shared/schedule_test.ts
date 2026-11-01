@@ -4,14 +4,23 @@
 // expiry, the email return URL, the follow-up / reschedule emails, and the
 // per-time reminder idempotency.
 import { assert, assertEquals, assertStringIncludes } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { consultStart, emailPaymentReturnUrl, followupLinkExpiry, istParts, startsAtKey } from './schedule.ts';
+import {
+  consultStart,
+  doctorMovedRecently,
+  emailPaymentReturnUrl,
+  followupLinkExpiry,
+  istParts,
+  startsAtKey,
+} from './schedule.ts';
 import { renderEmail, renderTemplate, safeLink, SERVER_ONLY_TEMPLATES } from './templates.ts';
 import { alreadyNotified } from './parentNotify.ts';
 
 Deno.test('consult times: IST wall clock and the starts_at key', () => {
   assertEquals(consultStart('2026-11-03', '17:30:00').toISOString(), '2026-11-03T12:00:00.000Z');
-  assertEquals(startsAtKey('2026-11-03', '17:30:00'), '2026-11-03T17:30');
-  assertEquals(startsAtKey('2026-11-03', '09:05'), '2026-11-03T09:05');
+  assertEquals(startsAtKey('2026-11-03', '17:30:00', 0), '2026-11-03T17:30#0');
+  assertEquals(startsAtKey('2026-11-03', '09:05', 2), '2026-11-03T09:05#2');
+  // Review item 6: moved away and back to the same time is a new key.
+  assert(startsAtKey('2026-11-03', '10:00', 0) !== startsAtKey('2026-11-03', '10:00', 2));
   // 23:30 UTC is 05:00 the next day in India.
   assertEquals(istParts(new Date('2026-11-03T23:30:00Z')), { date: '2026-11-04', time: '05:00' });
 });
@@ -94,23 +103,23 @@ Deno.test('reminders: per consult time; old rows count only for a consult never 
   // A sent row exists for the OLD time only.
   const sentFor = (f: string[]) =>
     f.some((x) => x.includes('status.eq.sent')) &&
-    (f.some((x) => x === 'eq payload->>starts_at=2026-11-03T10:00') || f.some((x) => x.includes('starts_at.is.null')))
+    (f.some((x) => x === 'eq payload->>starts_at=2026-11-03T10:00#0') || f.some((x) => x.includes('starts_at.is.null')))
       ? 1
       : 0;
   const moved = fakeAdmin(sentFor);
   assertEquals(
-    await alreadyNotified(moved.admin, 'a1', 'appointment_reminder_24h', { key: '2026-11-04T09:00', legacyCounts: false }),
+    await alreadyNotified(moved.admin, 'a1', 'appointment_reminder_24h', { key: '2026-11-04T09:00#1', legacyCounts: false }),
     false,
     'moved consult: reminded again for its new time',
   );
   const same = fakeAdmin(sentFor);
   assertEquals(
-    await alreadyNotified(same.admin, 'a1', 'appointment_reminder_24h', { key: '2026-11-03T10:00', legacyCounts: false }),
+    await alreadyNotified(same.admin, 'a1', 'appointment_reminder_24h', { key: '2026-11-03T10:00#0', legacyCounts: false }),
     true,
   );
   const legacy = fakeAdmin(sentFor);
   assertEquals(
-    await alreadyNotified(legacy.admin, 'a1', 'appointment_reminder_24h', { key: '2026-11-04T09:00', legacyCounts: true }),
+    await alreadyNotified(legacy.admin, 'a1', 'appointment_reminder_24h', { key: '2026-11-04T09:00#1', legacyCounts: true }),
     true,
     'never moved: a pre-0051 row (no starts_at) still counts',
   );
@@ -119,4 +128,14 @@ Deno.test('reminders: per consult time; old rows count only for a consult never 
   const plain = fakeAdmin(() => 0);
   assertEquals(await alreadyNotified(plain.admin, 'a1', 'appointment_confirmation'), false);
   assert(plain.calls.every((f) => !f.some((x) => x.includes('starts_at'))));
+});
+
+Deno.test('review item 4: a late parent cancel is refunded only if the DOCTOR moved it in the last 24 h', () => {
+  const now = Date.parse('2026-11-03T10:00:00Z');
+  assertEquals(doctorMovedRecently('doctor', '2026-11-03T08:00:00Z', now), true);
+  assertEquals(doctorMovedRecently('doctor', '2026-11-02T10:00:00Z', now), true, 'exactly 24 h');
+  assertEquals(doctorMovedRecently('doctor', '2026-11-02T09:59:00Z', now), false, 'older than 24 h');
+  assertEquals(doctorMovedRecently('parent', '2026-11-03T08:00:00Z', now), false, 'the parent moved it');
+  assertEquals(doctorMovedRecently(null, null, now), false, 'never moved');
+  assertEquals(doctorMovedRecently('doctor', 'garbage', now), false);
 });

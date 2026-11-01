@@ -80,9 +80,9 @@ Deno.serve(async (req) => {
     }
     if (templates.length === 0) continue;
 
-    // Reminders are per consult TIME: a consult moved with Reschedule (0051)
-    // gets them again for its new time.
-    const startsAt = startsAtKey(appt.date, appt.time);
+    // Reminders are per consult time AND move (0051): a consult moved with
+    // Reschedule gets them again, even if moved back to an earlier time.
+    const startsAt = startsAtKey(appt.date, appt.time, appt.reschedule_count ?? 0);
     for (const template of templates) {
       // Idempotency: one of each reminder per consult time, on any channel
       // (the 0051 unique index also stops a second run racing this one);

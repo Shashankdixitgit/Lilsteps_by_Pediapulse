@@ -190,7 +190,8 @@ export default async function ConsultationPage({
   const canFollowUp = appointment.status === 'completed';
   const [pickerSlots, { data: pendingFollowup }] = await Promise.all([
     doctor && (canReschedule || canFollowUp)
-      ? fetchOpenSlots(supabase, doctor.doctorId, canFollowUp ? 120 : 0)
+      ? // Both need the new time 2 hours or more away (0051).
+      fetchOpenSlots(supabase, doctor.doctorId, 120)
       : Promise.resolve([]),
     canFollowUp
       ? supabase

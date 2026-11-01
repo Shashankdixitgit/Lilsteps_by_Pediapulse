@@ -9,9 +9,9 @@ export const PICKER_DAYS = 14;
 
 /**
  * The doctor's open slots from `minutesAhead` minutes from now (IST) up to
- * PICKER_DAYS days ahead, in time order. Reschedule passes 0 (any time still
- * ahead); a follow-up passes 120 (book_followup, 0051, needs 2 hours so the
- * family has time to pay). The database checks again on save.
+ * PICKER_DAYS days ahead, in time order. Reschedule and follow-up both pass
+ * 120: reschedule_appointment and book_followup (0051) need the new time 2
+ * hours or more away. The database checks again on save.
  */
 export async function fetchOpenSlots(
   supabase: SupabaseClient,

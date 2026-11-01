@@ -3,6 +3,7 @@
 -- 1. appointments gains:
 --      reschedule_count  how many times this consult was moved (max 3)
 --      rescheduled_at    when it was last moved
+--      last_rescheduled_by  who made that move: 'parent' or 'doctor'
 --      followup_of       the completed consult a doctor-booked follow-up
 --                        comes from (null for a family's own booking)
 -- 2. reschedule_appointment(appointment, new slot): the parent or the doctor
@@ -12,8 +13,13 @@
 --        line as the refund rule in consult-payment's cancel), and the
 --        doctor must be taking bookings;
 --      - doctor: any time before the start;
---      - the new slot: same doctor, open, in the future;
+--      - the new slot: same doctor, open, and at least 2 hours from now
+--        (for the doctor too: a family must not find their consult moved
+--        to a time they can't make, or past the 2-hour cancel line);
 --      - at most 3 moves per consult.
+--    Who moved it is recorded: a parent cancelling less than 2 hours before
+--    the start still gets a full refund when the DOCTOR moved the consult in
+--    the last 24 hours (consult-payment cancel).
 --    Both slot rows are locked (in id order, so two moves never deadlock),
 --    the old one re-opens, the new one is taken, and the consult's date /
 --    time change in one transaction. The Meet room is kept: rooms are open
@@ -26,15 +32,21 @@
 --    for a child they have seen into one of their own open slots. It is an
 --    unpaid hold ('awaiting_payment') for the family: held for 24 hours, but
 --    only until 1 hour before the slot, so the slot must be at least 2 hours
---    away. One open follow-up per child per doctor. Paying it goes through
+--    away. One open follow-up per child per doctor, and at most 3 follow-ups
+--    booked per child per doctor per day (any status; so cancel-and-rebook
+--    can't spam the family with payment emails). Paying it goes through
 --    the normal consult-payment / webhook path (confirm_consult_payment).
 -- 4. hold_slot: a doctor-booked follow-up does not count towards the
 --    family's limit of two unpaid bookings (otherwise a doctor's follow-up
 --    could stop a family booking).
 -- 5. notification_log one-message index (0046) learns the consult's start
---    time (payload.starts_at): a reschedule email per new time, and the
---    reminders again after a move. 'followup_payment_request' is one per
---    booking.
+--    time and move count (payload.starts_at = "YYYY-MM-DDTHH:MM#n", n =
+--    reschedule_count): a reschedule email per move, and the reminders again
+--    after each move, even a move back to an earlier time.
+--    'followup_payment_request' is one per booking.
+-- 6. guard_appointment_update, doctor branch: status only moves forward
+--    (upcoming -> completed / no_show / cancelled, completed <-> no_show),
+--    as in 0050.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ── 1. columns ──────────────────────────────────────────────────────────────
@@ -42,12 +54,18 @@
 alter table public.appointments
   add column if not exists reschedule_count integer not null default 0,
   add column if not exists rescheduled_at   timestamptz,
+  add column if not exists last_rescheduled_by text,
   add column if not exists followup_of      uuid references public.appointments(id) on delete set null;
 
 alter table public.appointments
   drop constraint if exists appointments_reschedule_count_check;
 alter table public.appointments
   add constraint appointments_reschedule_count_check check (reschedule_count between 0 and 3);
+alter table public.appointments
+  drop constraint if exists appointments_last_rescheduled_by_check;
+alter table public.appointments
+  add constraint appointments_last_rescheduled_by_check
+  check (last_rescheduled_by is null or last_rescheduled_by in ('parent', 'doctor'));
 
 create index if not exists appointments_followup_of_idx
   on public.appointments (followup_of)
@@ -88,8 +106,8 @@ begin
   -- the move counter may change, and the consult stays upcoming.
   if coalesce(current_setting('lilsteps.reschedule_appt', true), '') = old.id::text
      and old.status = 'upcoming' and new.status = 'upcoming'
-     and (to_jsonb(new) - 'date' - 'time' - 'reschedule_count' - 'rescheduled_at')
-       = (to_jsonb(old) - 'date' - 'time' - 'reschedule_count' - 'rescheduled_at') then
+     and (to_jsonb(new) - 'date' - 'time' - 'reschedule_count' - 'rescheduled_at' - 'last_rescheduled_by')
+       = (to_jsonb(old) - 'date' - 'time' - 'reschedule_count' - 'rescheduled_at' - 'last_rescheduled_by') then
     return new;
   end if;
 
@@ -115,6 +133,13 @@ begin
     if new.status is distinct from old.status then
       if old.status = 'cancelled' then
         raise exception 'A cancelled consult cannot be reopened.' using errcode = '42501';
+      end if;
+      -- Only forward from upcoming, or between the two closed states.
+      if not (
+        (old.status = 'upcoming' and new.status in ('completed', 'no_show', 'cancelled'))
+        or (old.status in ('completed', 'no_show') and new.status in ('completed', 'no_show'))
+      ) then
+        raise exception 'A closed visit cannot be reopened.' using errcode = '42501';
       end if;
       if new.status = 'cancelled' and exists (
         select 1 from public.payments
@@ -248,6 +273,9 @@ begin
   if (v_new.date + v_new.time) <= v_now_ist then
     raise exception 'This time has already passed. Please pick another.' using errcode = 'P0001';
   end if;
+  if (v_new.date + v_new.time) - v_now_ist < interval '2 hours' then
+    raise exception 'Pick a time at least 2 hours from now, so the family can make it.' using errcode = 'P0001';
+  end if;
   if v_by = 'parent' and not exists (
     select 1 from public.doctors d where d.id = v_appt.doctor_id and d.is_available
   ) then
@@ -261,7 +289,8 @@ begin
        set date = v_new.date,
            time = v_new.time,
            reschedule_count = reschedule_count + 1,
-           rescheduled_at = now()
+           rescheduled_at = now(),
+           last_rescheduled_by = v_by
      where id = v_appt.id
     returning * into v_appt;
   exception when unique_violation then
@@ -352,6 +381,17 @@ begin
     raise exception 'A follow-up for this child is already waiting for payment. Cancel it first to pick another time.'
       using errcode = 'P0001';
   end if;
+  -- At most 3 follow-ups per child per doctor per clinic day, whatever
+  -- became of them (each one emails the family a payment link).
+  if (
+    select count(*) from public.appointments a
+     where a.child_id = v_from.child_id and a.doctor_id = v_doctor
+       and a.followup_of is not null
+       and (a.created_at at time zone 'Asia/Kolkata')::date = (now() at time zone 'Asia/Kolkata')::date
+  ) >= 3 then
+    raise exception 'You have already booked 3 follow-ups for this child today. Please try again tomorrow, or message the family.'
+      using errcode = 'P0001';
+  end if;
 
   select * into v_slot from public.time_slots where id = p_slot_id for update;
   if not found or v_slot.doctor_id <> v_doctor then
@@ -388,7 +428,9 @@ revoke execute on function public.book_followup(uuid, uuid) from public, anon;
 grant execute on function public.book_followup(uuid, uuid) to authenticated;
 
 -- ── 4. hold_slot: follow-ups don't count towards the two-hold limit ─────────
--- As 0045, with `followup_of is null` in the limit and in "already held".
+-- As 0045, with `followup_of is null` in the two-hold limit only. (The
+-- "already held" lookup is unchanged: a parent holding a slot the doctor
+-- booked as a follow-up for the same child gets that hold back, as before.)
 
 create or replace function public.hold_slot(
   p_slot_id       uuid,
@@ -485,9 +527,9 @@ revoke execute on function public.hold_slot(uuid, uuid, uuid, text) from public,
 grant execute on function public.hold_slot(uuid, uuid, uuid, text) to authenticated;
 
 -- ── 5. one booking message per consult time ─────────────────────────────────
--- Key: appointment + template + channel + the consult's start time
--- (payload.starts_at, "YYYY-MM-DDTHH:MM"; '' on rows from before 0051 and on
--- messages that don't depend on the time). Older duplicates under the new
+-- Key: appointment + template + channel + the consult's start time and move
+-- count (payload.starts_at, "YYYY-MM-DDTHH:MM#n"; '' on rows from before
+-- 0051 and on messages that don't depend on the time). Older duplicates under the new
 -- key are marked first, as 0046 did.
 
 update public.notification_log n

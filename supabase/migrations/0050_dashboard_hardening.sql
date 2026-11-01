@@ -9,10 +9,14 @@
 --    change status, cancel_reason, meet_link and summary_ready, and:
 --      - may not set 'cancelled' while a payment for it is 'paid'
 --        ("Cancel from the dashboard so the family is refunded.");
---      - may not reopen a cancelled consult;
+--      - may move the status only along upcoming -> completed / no_show /
+--        cancelled, and completed <-> no_show (fixing a mis-click). A
+--        closed or cancelled visit can never go back to upcoming: that
+--        would let a consult that happened be cancelled and refunded, or
+--        be held again;
 --      - may set cancel_reason only to 'doctor', and only when cancelling.
---    Closing a visit (completed / no_show) is unchanged. The edge functions
---    run as the service role (auth.uid() is null) and are not affected.
+--    The edge functions run as the service role (auth.uid() is null) and
+--    are not affected.
 -- 2. prescriptions:
 --    a. doctor_name / registration_number / qualifications are copied from
 --       the doctors row when the prescription is issued (BEFORE INSERT
@@ -26,7 +30,10 @@
 --       registration number; field lengths. Header and items are written in
 --       one transaction (before, a failed items insert left an empty
 --       prescription: two such rows exist live). The direct INSERT policies
---       on prescriptions / prescription_items are dropped.
+--       on prescriptions / prescription_items are dropped, and so are the
+--       doctor UPDATE / DELETE policies (prescriptions_update_doctor,
+--       prescription_items_update_doctor, prescription_items_delete_doctor):
+--       an issued prescription is never changed (no client used them).
 --    c. CHECK constraints with the same limits as the dashboard form
 --       (doctor-dashboard/src/lib/prescription-limits.ts).
 -- 3. appointments.meet_link must be a Google Meet room link (or null).
@@ -35,7 +42,10 @@
 --    files, the AI check-in, the parent's contact row) only while they have a
 --    real consult with the child (upcoming / completed / no_show) or a chat
 --    with the family. An unpaid hold (awaiting_payment) or a cancelled
---    booking no longer opens the records.
+--    booking no longer opens the records. One exception for starting a
+--    chat (not for reading records): a consult the doctor cancelled AFTER
+--    it was paid, so the dashboard can tell the family about the refund. An
+--    unpaid hold the doctor dropped does not count.
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- ── 1. guard_appointment_update ─────────────────────────────────────────────
@@ -85,6 +95,13 @@ begin
     if new.status is distinct from old.status then
       if old.status = 'cancelled' then
         raise exception 'A cancelled consult cannot be reopened.' using errcode = '42501';
+      end if;
+      -- Only forward from upcoming, or between the two closed states.
+      if not (
+        (old.status = 'upcoming' and new.status in ('completed', 'no_show', 'cancelled'))
+        or (old.status in ('completed', 'no_show') and new.status in ('completed', 'no_show'))
+      ) then
+        raise exception 'A closed visit cannot be reopened.' using errcode = '42501';
       end if;
       if new.status = 'cancelled' and exists (
         select 1 from public.payments
@@ -256,10 +273,28 @@ create policy "checkin_messages_select" on public.checkin_messages
   );
 
 -- conversations_insert: doctor_treats_child now needs a real consult or a
--- chat. The one extra case is the consult the doctor just cancelled
--- (cancel_reason 'doctor', set only by consult-payment on an upcoming
--- consult): the dashboard tells the family in chat, which may need a new
--- thread. The parent branch is unchanged.
+-- chat. The one extra case is a PAID consult the doctor cancelled
+-- (cancel_reason 'doctor' and a payment row that was paid, whatever its
+-- refund state now): the dashboard tells the family about the refund in
+-- chat, which may need a new thread. An unpaid hold the doctor dropped
+-- (also cancel_reason 'doctor') does NOT open a chat, so cancelling a
+-- stranger's hold can't be used to reach their child's records. The parent
+-- branch is unchanged.
+-- Whether money was ever captured for this booking (paid, or paid and now
+-- being / been refunded). Security definer: payments are readable by the
+-- parent only, and this is needed inside a doctor's policy.
+create or replace function private.appointment_was_paid(p_appointment_id uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $$
+  select exists (
+    select 1 from public.payments p
+     where p.appointment_id = p_appointment_id
+       and p.status in ('paid', 'refund_due', 'refund_pending', 'refunded', 'refund_failed')
+  );
+$$;
+revoke execute on function private.appointment_was_paid(uuid) from public, anon;
+grant execute on function private.appointment_was_paid(uuid) to authenticated, service_role;
+
 drop policy if exists "conversations_insert" on public.conversations;
 drop policy if exists "conversations_insert_parent" on public.conversations;
 drop policy if exists "conversations_insert_doctor" on public.conversations;
@@ -293,6 +328,7 @@ create policy "conversations_insert" on public.conversations
             and a.parent_id = conversations.parent_id
             and a.status = 'cancelled'
             and a.cancel_reason = 'doctor'
+            and private.appointment_was_paid(a.id)
         )
       )
     )
@@ -514,5 +550,9 @@ drop policy if exists "prescriptions_insert_doctor" on public.prescriptions;
 drop policy if exists "prescriptions_insert" on public.prescriptions;
 drop policy if exists "prescription_items_insert_doctor" on public.prescription_items;
 drop policy if exists "prescription_items_insert" on public.prescription_items;
+-- An issued prescription is never edited or deleted from a client.
+drop policy if exists "prescriptions_update_doctor" on public.prescriptions;
+drop policy if exists "prescription_items_update_doctor" on public.prescription_items;
+drop policy if exists "prescription_items_delete_doctor" on public.prescription_items;
 
 notify pgrst, 'reload schema';

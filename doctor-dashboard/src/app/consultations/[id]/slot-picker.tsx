@@ -96,7 +96,7 @@ export function SlotPicker({
   const title = mode === 'reschedule' ? `Move ${childFirstName}'s consult` : `Book a follow-up for ${childFirstName}`;
   const intro =
     mode === 'reschedule'
-      ? `Now: ${currentWhen}. Pick a new time. There is no charge: the family's payment carries over, the video link stays the same, and they get an email and a note in chat.`
+      ? `Now: ${currentWhen}. Pick a new time at least 2 hours from now. There is no charge: the family's payment carries over, the video link stays the same, and they get an email and a note in chat.`
       : `Pick a time at least 2 hours from now. The family gets an email to pay the consult fee (₹449) to confirm it. The time is held for them for up to 24 hours, and released 1 hour before it starts if not paid.`;
 
   return (

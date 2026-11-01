@@ -24,12 +24,16 @@
 //        → {refund: 'started' | 'failed' | 'none' | 'not_paid', late?: true}
 //          Unpaid hold: dropped, link cancelled. Paid consult: cancelled;
 //          refunded in full when it is 2 h or more before the start, or when
-//          the doctor cancels. Less than 2 h before (parent): no refund.
+//          the doctor cancels. Less than 2 h before (parent): no refund,
+//          unless the doctor moved the consult in the last 24 h (then full).
+//          A doctor may drop an unpaid hold only if it is a follow-up they
+//          booked (followup_of); any other family's hold is not theirs.
 //   POST {action:"reschedule", appointmentId, slotId}            parent / doctor
 //        → {appointment: {id, date, time, reschedule_count}}
 //          Free: moves an upcoming PAID consult to another open slot of the
 //          same doctor (reschedule_appointment, 0051, run as the caller so
-//          it checks who they are; parent: 2 h or more before the start).
+//          it checks who they are; parent: 2 h or more before the start;
+//          the new time 2 h or more from now for everyone).
 //          The payment and the Meet room stay. The family gets the
 //          'appointment_rescheduled' email (once per new time).
 //   POST {action:"followup", appointmentId, slotId}              doctor only
@@ -52,7 +56,14 @@
 // deno-lint-ignore-file no-explicit-any
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
 import { createAdminClient, createUserClient, getCaller } from '../_shared/supabase.ts';
-import { consultStart, emailPaymentReturnUrl, followupLinkExpiry, istParts, startsAtKey } from '../_shared/schedule.ts';
+import {
+  consultStart,
+  doctorMovedRecently,
+  emailPaymentReturnUrl,
+  followupLinkExpiry,
+  istParts,
+  startsAtKey,
+} from '../_shared/schedule.ts';
 import { formatEmailDate, formatEmailTime } from '../_shared/templates.ts';
 import {
   cancelPaymentLink,
@@ -86,7 +97,9 @@ interface Appointment {
   cancel_reason: string | null;
   hold_expires_at: string | null;
   child_id: string;
-  followup_of?: string | null;
+  followup_of: string | null;
+  last_rescheduled_by: string | null;
+  rescheduled_at: string | null;
   doctors: { name: string } | null;
   children: { name: string } | null;
 }
@@ -152,7 +165,10 @@ Deno.serve(async (req) => {
 
   const { data: appt } = await admin
     .from('appointments')
-    .select('id, parent_id, doctor_id, child_id, date, time, status, cancel_reason, hold_expires_at, doctors(name), children(name)')
+    .select(
+      'id, parent_id, doctor_id, child_id, date, time, status, cancel_reason, hold_expires_at, followup_of, ' +
+        'last_rescheduled_by, rescheduled_at, doctors(name), children(name)',
+    )
     .eq('id', appointmentId)
     .maybeSingle<Appointment>();
   if (!appt) return jsonResponse({ error: 'Appointment not found' }, 404);
@@ -398,6 +414,12 @@ async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): P
   if (appt.status !== 'upcoming' && appt.status !== 'awaiting_payment') {
     return jsonResponse({ error: 'This consult has already happened.' }, 409);
   }
+  // A family's unpaid hold is theirs alone: a doctor may only withdraw a
+  // follow-up they booked themselves. (A doctor-cancelled hold must never
+  // become a way into a stranger's chat or records.)
+  if (by === 'doctor' && appt.status === 'awaiting_payment' && !appt.followup_of) {
+    return jsonResponse({ error: 'Appointment not found' }, 404);
+  }
 
   const { data: updated } = await admin
     .from('appointments')
@@ -448,7 +470,11 @@ async function cancelRefund(
   if (!paid) return { refund: 'not_paid' };
 
   const early = consultStart(appt.date, appt.time).getTime() - Date.now() >= REFUND_CUTOFF_MS;
-  if (by === 'parent' && !early) return { refund: 'none', late: true };
+  // Late, but the doctor moved this consult in the last 24 hours: the new
+  // time may not suit the family, so they still get their money back.
+  if (by === 'parent' && !early && !doctorMovedRecently(appt.last_rescheduled_by, appt.rescheduled_at)) {
+    return { refund: 'none', late: true };
+  }
 
   const result = await refundPaymentRow(admin, paid.id, by === 'doctor' ? 'doctor_cancelled' : 'parent_cancelled');
   if (result === 'not_paid') return { refund: 'not_paid' };
@@ -531,7 +557,7 @@ async function emailReschedule(admin: any, appt: Appointment, moved: Appointment
         time: String(moved.time).slice(0, 5),
         by,
       },
-      payload: { starts_at: startsAtKey(moved.date, String(moved.time)) },
+      payload: { starts_at: startsAtKey(moved.date, String(moved.time), moved.reschedule_count) },
     });
   } catch (e) {
     console.error(`[consult-payment] reschedule email ${appt.id}: ${(e as Error).message}`);
