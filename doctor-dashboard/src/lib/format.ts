@@ -148,3 +148,29 @@ export function istNowPlus(minutes: number): { date: string; time: string } {
     time: at.toLocaleTimeString('en-GB', { timeZone: CLINIC_TZ, hour12: false }),
   };
 }
+
+/** Epoch ms of a DB `date` + `time` read as IST wall clock. */
+export function istSlotMs(date: string, time: string): number {
+  return Date.parse(`${date}T${time.length === 5 ? `${time}:00` : time.slice(0, 8)}+05:30`);
+}
+
+/** Video opens 15 min before the slot and closes 90 min after its start: the same window get_my_appointment_meet_link (0045) uses. */
+export const VIDEO_OPENS_BEFORE_MIN = 15;
+export const VIDEO_CLOSES_AFTER_MIN = 90;
+
+/**
+ * Where an appointment stands against its video window: 'before' (not open
+ * yet), 'open', or 'closed' (window over, or the visit is no longer upcoming).
+ */
+export function videoWindow(
+  status: string,
+  date: string,
+  time: string,
+  nowMs: number = Date.now(),
+): 'before' | 'open' | 'closed' {
+  if (status !== 'upcoming') return 'closed';
+  const start = istSlotMs(date, time);
+  if (nowMs < start - VIDEO_OPENS_BEFORE_MIN * 60_000) return 'before';
+  if (nowMs > start + VIDEO_CLOSES_AFTER_MIN * 60_000) return 'closed';
+  return 'open';
+}

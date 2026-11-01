@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { fetchAllergiesNotKnown, fetchUrgencies, noAllergiesLabel } from '@/lib/appointments';
 import { allergyText } from '@/lib/consultations';
 import { getCurrentDoctor } from '@/lib/doctor';
-import { computeAge, formatClock, formatDayLong, formatDayShort, formatSlotTime, nowIstTime, todayIst } from '@/lib/format';
+import { computeAge, formatClock, formatDayLong, formatDayShort, formatSlotTime, nowIstTime, todayIst, videoWindow } from '@/lib/format';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { UrgencyBadge } from '../../urgency-badge';
 import { chatParentLabel } from '../parent-label';
@@ -27,7 +27,7 @@ type ConversationDetail = {
 };
 
 type AllergyRow = { id: string; name: string; severity: string };
-type ApptLite = { id: string; date: string; time: string; status: string; ai_summary_id: string | null };
+type ApptLite = { id: string; date: string; time: string; status: string; ai_summary_id: string | null; meet_link: string | null };
 
 export default async function ConversationPage({
   params,
@@ -73,7 +73,7 @@ export default async function ConversationPage({
     child
       ? supabase
           .from('appointments')
-          .select('id, date, time, status, ai_summary_id')
+          .select('id, date, time, status, ai_summary_id, meet_link')
           .eq('child_id', child.id)
           // Only this doctor's visits: the links below open and prescribe
           // against them.
@@ -86,7 +86,6 @@ export default async function ConversationPage({
       : Promise.resolve({ data: [] as ApptLite[] }),
     child ? fetchAllergiesNotKnown(supabase, child.id) : Promise.resolve(false),
   ]);
-  const meetLink = doctor?.defaultMeetLink ?? null;
 
   // An open visit from today on that the AI check-in marked urgent.
   const today = todayIst();
@@ -111,6 +110,11 @@ export default async function ConversationPage({
     open[0] ??
     list[0] ??
     null;
+  // "Start video" only while one of this child's open visits is inside its
+  // video window (15 min before to 90 min after the start): that visit's own
+  // Meet room, else the doctor's backup room.
+  const liveVisit = list.find((a) => videoWindow(a.status, a.date, a.time) === 'open');
+  const meetLink = liveVisit ? liveVisit.meet_link ?? doctor?.defaultMeetLink ?? null : null;
 
   // Group messages by day for editorial section breaks
   const grouped: { day: string; items: MessageRow[] }[] = [];

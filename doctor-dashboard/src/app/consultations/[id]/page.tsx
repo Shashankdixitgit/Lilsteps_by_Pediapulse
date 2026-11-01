@@ -4,14 +4,13 @@ import { Suspense } from 'react';
 import { fetchAllergiesNotKnown, fetchConcerns, noAllergiesLabel } from '@/lib/appointments';
 import { parseVisitNotes, severityLabel } from '@/lib/consultations';
 import { withBasePath } from '@/lib/base-path';
-import { getCurrentDoctor, hasVideoLink } from '@/lib/doctor';
-import { computeAge, dateStamp, formatClock, formatDate, formatDateTime, formatDayShort, formatSlotTime, nowIstTime, todayIst } from '@/lib/format';
+import { getCurrentDoctor } from '@/lib/doctor';
+import { computeAge, dateStamp, formatClock, formatDate, formatDateTime, formatDayShort, formatSlotTime, nowIstTime, todayIst, VIDEO_OPENS_BEFORE_MIN, videoWindow } from '@/lib/format';
 import { parentContact } from '@/lib/parent';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { vaccineBucket } from '@/lib/vaccines';
 import { FlashToast } from '../../flash-toast';
 import { CarePlanBadge, LateBadge, UrgencyBadge } from '../../urgency-badge';
-import { VideoLinkBanner } from '../../video-link-banner';
 import { OnboardingAnswersList, onboardingAnswersEyebrow, type OnboardingAnswers } from './onboarding-answers';
 import { CancelConsultButton } from './cancel-consult-button';
 import { CancelFollowupButton } from './cancel-followup-button';
@@ -220,7 +219,9 @@ export default async function ConsultationPage({
   // Read through getCurrentDoctor, not a doctors() join, so this page keeps
   // working if parents lose read access to doctors.default_meet_link (P1).
   const meetLink = appointment.meet_link ?? doctor?.defaultMeetLink ?? null;
-  const showVideoBanner = !meetLink && !hasVideoLink(doctor);
+  // Start video only while the visit is open and inside its video window
+  // (15 min before to 90 min after the start, as get_my_appointment_meet_link).
+  const video = videoWindow(appointment.status, appointment.date, appointment.time);
 
   // Bucketed by date, not the stored snapshot, and the yearly flu shot is
   // never overdue (R2-10): the same view the parent app shows.
@@ -304,11 +305,19 @@ export default async function ConsultationPage({
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[var(--hairline)] pt-5">
-          {meetLink && (
-            // Per-appointment Calendar-event Meet link, else the doctor's permanent room.
+          {video === 'open' && meetLink && (
+            // The consult's own Meet room, else the doctor's backup room.
             <a href={meetLink} target="_blank" rel="noreferrer" className="btn-go">
               Start video
             </a>
+          )}
+          {video === 'open' && !meetLink && (
+            <span className="text-[13px] text-[var(--ink-3)]">No video link yet</span>
+          )}
+          {video === 'before' && (
+            <span className="text-[13px] text-[var(--ink-3)]">
+              Video opens {VIDEO_OPENS_BEFORE_MIN} min before the start{meetLink ? '' : ' · no video link yet'}
+            </span>
           )}
           <OpenChatButton appointmentId={appointment.id} />
           {/* Only for a real visit: create_prescription (0050) refuses no-show and cancelled ones. */}
@@ -357,7 +366,6 @@ export default async function ConsultationPage({
           <span className="font-semibold">Urgent check-in.</span> The AI check-in suggests seeing {firstName} today.
         </div>
       )}
-      {showVideoBanner && <VideoLinkBanner className="mt-4" />}
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
         {/* ── Main column ── */}

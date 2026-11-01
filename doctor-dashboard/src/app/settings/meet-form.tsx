@@ -19,7 +19,9 @@ export function MeetLinkForm({ initialLink }: { initialLink: string | null }) {
       setLink(res.link ?? '');
       setFeedback({
         kind: 'ok',
-        msg: res.link ? 'Saved. Parents will join this room.' : 'Cleared. Parents will see that no link is set yet.',
+        msg: res.link
+          ? 'Saved. This room is used only if a consult has no room of its own.'
+          : 'Cleared. Consults still get their own Meet room automatically.',
       });
     });
   }
@@ -31,7 +33,7 @@ export function MeetLinkForm({ initialLink }: { initialLink: string | null }) {
           htmlFor="meet-link"
           className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]"
         >
-          Your Google Meet link
+          Backup Google Meet link (optional)
         </label>
         <input
           id="meet-link"
@@ -61,8 +63,7 @@ export function MeetLinkForm({ initialLink }: { initialLink: string | null }) {
           <li>At consult time, open the same link and admit the parent from the waiting room.</li>
         </ol>
         <p className="mt-2 text-[14px] leading-[1.55] text-[var(--ink-3)]">
-          Until a link is saved, parents are told you haven&apos;t added a video link yet, so
-          they can message you instead.
+          Optional. Each paid consult already has its own Meet room; this one is only a backup.
         </p>
       </div>
 

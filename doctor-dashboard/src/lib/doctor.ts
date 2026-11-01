@@ -10,8 +10,8 @@ export type CurrentDoctor = {
 
 /**
  * The signed-in doctor's row, or null when the user is not a doctor.
- * `googleConnected` means per-appointment Meet links can be created; with
- * neither that nor `defaultMeetLink`, parents have no video link to join.
+ * Every paid consult gets its own Meet room from the clinic account
+ * (appointments.meet_link); `defaultMeetLink` is the doctor's optional backup.
  */
 export async function getCurrentDoctor(supabase: SupabaseClient): Promise<CurrentDoctor | null> {
   const {
@@ -49,8 +49,4 @@ export async function getCurrentDoctor(supabase: SupabaseClient): Promise<Curren
     defaultMeetLink: (link as string | null)?.trim() || null,
     googleConnected: !!tok,
   };
-}
-
-export function hasVideoLink(doctor: CurrentDoctor | null): boolean {
-  return !!doctor && (!!doctor.defaultMeetLink || doctor.googleConnected);
 }
