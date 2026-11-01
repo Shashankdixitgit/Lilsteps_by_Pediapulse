@@ -1,6 +1,8 @@
 // Edge Function: create-meet-event
 //
-// Called from the parent app right after `bookAppointment` succeeds. Uses
+// Called by the parent or the doctor for a booked consult. Since 0045 the
+// server also does this itself once a consult is paid (_shared/razorpay.ts),
+// so the app no longer calls it after booking. Uses
 // the doctor's stored Google refresh token to mint a Calendar event for the
 // appointment with a Hangouts Meet conference attached, then writes the
 // resulting meet link back to appointments.meet_link.
@@ -21,12 +23,9 @@
 // Caller must be the parent on the appointment or its doctor. Google error
 // bodies are logged, never returned.
 
-// deno-lint-ignore-file no-explicit-any
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
+import { createMeetForAppointment, type MeetAppointment } from '../_shared/meet.ts';
 import { createAdminClient, getCaller } from '../_shared/supabase.ts';
-
-const CLINIC_TZ = 'Asia/Kolkata';
-const SLOT_DURATION_MIN = 30;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
@@ -49,7 +48,7 @@ Deno.serve(async (req) => {
     .from('appointments')
     .select('id, date, time, status, doctor_id, parent_id, child_id, meet_link')
     .eq('id', body.appointmentId)
-    .maybeSingle();
+    .maybeSingle<MeetAppointment>();
   if (apptErr || !appt) return jsonResponse({ error: 'Appointment not found' }, 404);
 
   // Only the parent on the appointment or its doctor may create the event.
@@ -64,113 +63,7 @@ Deno.serve(async (req) => {
     }
   }
 
-  // Idempotent — if already has a Meet link from a prior call, return it.
-  if (appt.meet_link) return jsonResponse({ ok: true, meetLink: appt.meet_link, reused: true });
-
-  // No calendar invite for a consult that was cancelled or already happened.
-  if (appt.status !== 'upcoming') {
-    return jsonResponse({ error: 'This consult is no longer upcoming' }, 409);
-  }
-
-  // Doctor's Google refresh token
-  const { data: tok } = await admin
-    .from('doctor_google_tokens')
-    .select('refresh_token, google_email')
-    .eq('doctor_id', appt.doctor_id)
-    .maybeSingle();
-  if (!tok?.refresh_token) {
-    return jsonResponse(
-      { error: 'Doctor has not connected Google Calendar' },
-      400,
-    );
-  }
-
-  const clientId = Deno.env.get('GOOGLE_CLIENT_ID');
-  const clientSecret = Deno.env.get('GOOGLE_CLIENT_SECRET');
-  if (!clientId || !clientSecret) {
-    return jsonResponse({ error: 'Google OAuth secrets not configured' }, 500);
-  }
-
-  // 1. Refresh access token
-  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      refresh_token: tok.refresh_token,
-      grant_type: 'refresh_token',
-    }),
-  });
-  if (!tokenRes.ok) {
-    const err = await tokenRes.text().catch(() => 'unknown');
-    console.error(`[create-meet-event] token refresh ${tokenRes.status} for doctor ${appt.doctor_id}: ${err}`);
-    return jsonResponse({ error: 'Could not reach Google Calendar' }, 502);
-  }
-  const tokenData = await tokenRes.json();
-  const accessToken: string | undefined = tokenData.access_token;
-  if (!accessToken) return jsonResponse({ error: 'No access token returned' }, 502);
-
-  // 2. Fetch parent + child for event copy
-  const [parentRes, childRes] = await Promise.all([
-    admin.from('parents').select('email, name').eq('id', appt.parent_id).maybeSingle(),
-    admin.from('children').select('name').eq('id', appt.child_id).maybeSingle(),
-  ]);
-  const parent = parentRes.data as { email: string | null; name: string | null } | null;
-  const child = childRes.data as { name: string | null } | null;
-
-  // 3. Compose Calendar event
-  const startIso = `${appt.date}T${appt.time.slice(0, 8)}+05:30`; // IST -> ISO
-  const startMs = new Date(startIso).getTime();
-  const endIso = new Date(startMs + SLOT_DURATION_MIN * 60_000).toISOString();
-  const startIsoForApi = new Date(startMs).toISOString();
-
-  const attendees: { email: string }[] = [];
-  if (parent?.email) attendees.push({ email: parent.email });
-
-  const eventRes = await fetch(
-    'https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1&sendUpdates=all',
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        summary: `LilSteps video consult — ${child?.name ?? 'your patient'}`,
-        description: 'Paediatric video consultation booked in the LilSteps app.',
-        start: { dateTime: startIsoForApi, timeZone: CLINIC_TZ },
-        end: { dateTime: endIso, timeZone: CLINIC_TZ },
-        attendees,
-        conferenceData: {
-          createRequest: {
-            requestId: `lilsteps-${appt.id}`,
-            conferenceSolutionKey: { type: 'hangoutsMeet' },
-          },
-        },
-      }),
-    },
-  );
-  if (!eventRes.ok) {
-    const err = await eventRes.text().catch(() => 'unknown');
-    console.error(`[create-meet-event] Calendar API ${eventRes.status} for appt ${appt.id}: ${err}`);
-    return jsonResponse({ error: 'Could not create the calendar event' }, 502);
-  }
-  const event = await eventRes.json();
-  const meetLink: string | undefined =
-    event.hangoutLink ??
-    event.conferenceData?.entryPoints?.find((e: any) => e.entryPointType === 'video')?.uri;
-  if (!meetLink) return jsonResponse({ error: 'Calendar event created but no Meet link returned' }, 502);
-
-  // 4. Persist on the appointment
-  const { error: updateErr } = await admin
-    .from('appointments')
-    .update({ meet_link: meetLink })
-    .eq('id', appt.id);
-  if (updateErr) {
-    console.error(`[create-meet-event] meet_link update failed for ${appt.id}: ${updateErr.message}`);
-    return jsonResponse({ error: 'Could not save the meeting link' }, 500);
-  }
-
-  return jsonResponse({ ok: true, meetLink, eventId: event.id });
+  const result = await createMeetForAppointment(admin, appt);
+  if (!result.ok) return jsonResponse({ error: result.error }, result.status);
+  return jsonResponse({ ok: true, meetLink: result.meetLink, reused: result.reused, eventId: result.eventId });
 });

@@ -600,7 +600,8 @@ export function useCheckinSession(sessionId: string | null) {
         .from('appointments')
         .select('id, doctor_id, date, time')
         .eq('ai_summary_id', sessionId)
-        .neq('status', 'cancelled')
+        // An unpaid hold is not a booking yet (0045).
+        .not('status', 'in', '(cancelled,awaiting_payment)')
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle<CheckinBooking>();

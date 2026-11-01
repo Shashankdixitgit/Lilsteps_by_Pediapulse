@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "@/lib/supabase": "./stubs/supabase.ts",
+    "@/lib/support": "./stubs/support.ts",
+    "expo-linking": "./stubs/expo-linking.ts",
+    "expo-web-browser": "./stubs/expo-web-browser.ts",
+    "react-native": "./stubs/react-native.ts"
+  }
+}

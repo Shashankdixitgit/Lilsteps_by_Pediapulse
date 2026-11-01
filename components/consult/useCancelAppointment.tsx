@@ -3,7 +3,8 @@
  * Used by Home and the Consult tab so both behave the same.
  *
  * - Ask: lib/confirm (native Alert; in-app dialog on web) with Keep /
- *   Cancel consult.
+ *   Cancel consult. The question says whether the payment comes back
+ *   (2 h or more before the start: yes; later: no). The server decides.
  * - Result: an inline notice ("Cancelled …" or the error) read out by
  *   screen readers via a polite live region.
  */
@@ -15,7 +16,12 @@ import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { confirmAsync } from '@/lib/confirm';
 
-import { doctorShortName, whenLabel } from './appointmentFormat';
+import { REFUND_FAILED_TEXT, type RefundOutcome } from '@/lib/consultPayment';
+
+import { appointmentStart, doctorShortName, whenLabel } from './appointmentFormat';
+
+/** Same cut-off as the server (REFUND_CUTOFF_MS in _shared/razorpay.ts). */
+const REFUND_CUTOFF_MS = 2 * 60 * 60 * 1000;
 
 export interface CancellableAppointment {
   id: string;
@@ -43,7 +49,9 @@ export function cancelLabel(a: CancellableAppointment): string {
   return `Cancel consult with ${a.doctorName}, ${whenLabel(a.date, a.time)}`;
 }
 
-export function useCancelAppointment(cancel: (id: string) => Promise<void>) {
+export function useCancelAppointment(
+  cancel: (id: string) => Promise<{ refund: RefundOutcome; late?: boolean } | void>,
+) {
   const [notice, setNotice] = useState<CancelNoticeState | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,21 +68,33 @@ export function useCancelAppointment(cancel: (id: string) => Promise<void>) {
       const when = whenLabel(a.date, a.time);
       // R2-22: a parent of two must know whose consult this is.
       const childName = a.childName ?? activeChildName;
+      const early = appointmentStart(a.date, a.time).getTime() - Date.now() >= REFUND_CUTOFF_MS;
       const ok = await askToConfirm(
         childName ? `Cancel ${childName}'s consult?` : 'Cancel this consult?',
-        `${childName ? `${childName} with ` : ''}${a.doctorName} · ${when}. The slot will be released for other families.`,
+        `${childName ? `${childName} with ` : ''}${a.doctorName} · ${when}. The slot will be released for other families. ` +
+          (early
+            ? 'If you paid, the full amount is refunded.'
+            : 'It starts in less than 2 hours. If you paid, it is not refunded.'),
       );
       if (!ok) return;
       setCancellingId(a.id);
       setNotice(null);
       if (timer.current) clearTimeout(timer.current);
       try {
-        await cancel(a.id);
+        const result = await cancel(a.id);
+        const refundLine =
+          result?.refund === 'started'
+            ? ' Your refund has started; it reaches your account in 5–7 working days.'
+            : result?.refund === 'failed'
+              ? ` ${REFUND_FAILED_TEXT}`
+              : result?.late
+              ? ' It was less than 2 hours before the consult, so the payment is not refunded.'
+              : '';
         setNotice({
           tone: 'success',
-          text: `Cancelled ${childName ? `${childName}'s` : 'your'} consult with ${doctorShortName(a.doctorName)} (${when}).`,
+          text: `Cancelled ${childName ? `${childName}'s` : 'your'} consult with ${doctorShortName(a.doctorName)} (${when}).${refundLine}`,
         });
-        timer.current = setTimeout(() => setNotice(null), 6000);
+        timer.current = setTimeout(() => setNotice(null), refundLine ? 10000 : 6000);
       } catch (e) {
         const msg = e instanceof Error && e.message ? e.message : 'Please try again.';
         setNotice({ tone: 'danger', text: `Couldn't cancel. ${msg}` });

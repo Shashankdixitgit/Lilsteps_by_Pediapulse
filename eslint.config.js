@@ -5,7 +5,8 @@ const expoConfig = require('eslint-config-expo/flat');
 module.exports = defineConfig([
   expoConfig,
   {
-    ignores: ['dist/*'],
+    // tests/deno runs under Deno with stubbed imports (see its import_map.json).
+    ignores: ['dist/*', 'tests/deno/*'],
   },
   {
     // New in eslint-config-expo 57 (react-hooks v7). Existing effects that

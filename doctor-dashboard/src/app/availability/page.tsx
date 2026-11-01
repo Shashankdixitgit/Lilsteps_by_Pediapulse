@@ -16,6 +16,7 @@ type BookedRow = {
   id: string;
   date: string;
   time: string;
+  status: string;
   children: { name: string } | null;
 };
 
@@ -40,18 +41,21 @@ export default async function AvailabilityPage() {
       .returns<SlotRow[]>(),
     supabase
       .from('appointments')
-      .select('id, date, time, children(name)')
+      .select('id, date, time, status, children(name)')
       .eq('doctor_id', doctor.doctorId)
       .gte('date', todayIso)
       .neq('status', 'cancelled')
       .returns<BookedRow[]>(),
   ]);
 
-  const bookedByKey = new Map<string, { appointmentId: string; childName: string }>();
+  // A family mid-payment holds the slot (0045) but isn't booked yet: show it
+  // as held, without their name or a link, until the payment goes through.
+  const bookedByKey = new Map<string, { appointmentId: string; childName: string; held: boolean }>();
   (booked ?? []).forEach((b) =>
     bookedByKey.set(`${b.date} ${b.time}`, {
       appointmentId: b.id,
       childName: b.children?.name ?? 'patient',
+      held: b.status === 'awaiting_payment',
     }),
   );
 

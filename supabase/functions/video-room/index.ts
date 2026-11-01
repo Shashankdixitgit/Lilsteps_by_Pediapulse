@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
   const userId = caller.id;
   const { data: appt } = await admin
     .from('appointments')
-    .select('id, parent_id, doctor_id, date, time')
+    .select('id, parent_id, doctor_id, date, time, status')
     .eq('id', body.appointmentId)
     .maybeSingle<{
       id: string;
@@ -113,8 +113,15 @@ Deno.serve(async (req) => {
       doctor_id: string;
       date: string;
       time: string;
+      status: string;
     }>();
   if (!appt) return jsonResponse({ error: 'Appointment not found' }, 404);
+  // Only a booked (paid) consult gets a room: not an unpaid hold (0045), not
+  // a cancelled one. A visit the doctor already closed keeps its room so a
+  // late re-join still works.
+  if (appt.status !== 'upcoming' && appt.status !== 'completed') {
+    return jsonResponse({ error: 'This consult is not booked' }, 409);
+  }
 
   const { data: doctorAuth } = await admin
     .from('doctor_auth')

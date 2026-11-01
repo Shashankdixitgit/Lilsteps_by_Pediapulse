@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth';
-import { notify } from '@/lib/notify';
 import { appointmentEnded } from '@/components/consult/appointmentFormat';
+import { cancelConsult, type RefundOutcome } from '@/lib/consultPayment';
 
 export interface AppointmentRow {
   id: string;
@@ -11,7 +11,12 @@ export interface AppointmentRow {
   doctor_id: string;
   date: string;
   time: string;
-  status: 'upcoming' | 'completed' | 'cancelled' | 'no_show';
+  /** 'awaiting_payment': hold_slot holds the slot until the consult is paid (0045). */
+  status: 'awaiting_payment' | 'upcoming' | 'completed' | 'cancelled' | 'no_show';
+  /** Until when an unpaid booking holds its slot. */
+  hold_expires_at?: string | null;
+  /** Why it was cancelled: 'payment_expired' = an unpaid hold that ran out. */
+  cancel_reason?: 'payment_expired' | 'parent' | 'doctor' | null;
   summary_ready: boolean;
   ai_summary_id: string | null;
   /** What the parent typed in "Book a doctor" (0020). */
@@ -48,24 +53,6 @@ export async function linkConversationToAppointment(conversationId: string, appo
   });
 }
 
-/**
- * Ask create-meet-event for a per-consult Meet link, but only when the
- * doctor has connected Google Calendar (doctor_has_google_calendar, 0027).
- * Otherwise the function can only answer 400, so we don't call it and the
- * parent's Join video falls back to doctors.default_meet_link.
- */
-async function requestMeetLink(appointmentId: string, doctorId: string) {
-  try {
-    const { data: connected, error } = await supabase.rpc('doctor_has_google_calendar', {
-      p_doctor_id: doctorId,
-    });
-    if (error || connected !== true) return;
-    await supabase.functions.invoke('create-meet-event', { body: { appointmentId } });
-  } catch {
-    // Logged on the function side; the UI falls back to the default link.
-  }
-}
-
 export function useAppointments(childId: string | null) {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
@@ -85,6 +72,9 @@ export function useAppointments(childId: string | null) {
       .from('appointments')
       .select('*, doctors(name, specialisation, hospital, has_meet_link, has_google_calendar), checkin_sessions(ai_summary)')
       .eq('child_id', childId)
+      // Unpaid holds, and holds that ran out unpaid, are not bookings yet.
+      .neq('status', 'awaiting_payment')
+      .or('cancel_reason.is.null,cancel_reason.neq.payment_expired')
       .order('date', { ascending: true })
       .order('time', { ascending: true });
 
@@ -126,11 +116,15 @@ export function useAppointments(childId: string | null) {
       slotId = slot.id;
     }
 
-    // book_slot (0015) checks the child is ours, locks the slot row, fails if
-    // it is taken or past, then marks it booked and creates the appointment —
-    // all in one transaction, so two parents can never get the same slot.
+    // hold_slot (0045) checks the child is ours, locks the slot row, fails
+    // if it is taken or past, then holds it and creates the booking as
+    // 'awaiting_payment' — all in one transaction, so two parents can never
+    // get the same slot. Calling it again for a slot this parent already
+    // holds returns that hold. The caller takes the payment next; the server
+    // sends the confirmation SMS and makes the Meet link once it is paid.
+    // (book_slot now only tells old app builds to update.)
     const { data: appt, error: err } = await supabase
-      .rpc('book_slot', {
+      .rpc('hold_slot', {
         p_slot_id: slotId,
         p_child_id: data.child_id,
         p_ai_summary_id: data.ai_summary_id ?? null,
@@ -139,47 +133,18 @@ export function useAppointments(childId: string | null) {
       .single<AppointmentRow>();
 
     if (err || !appt) throw new Error(err?.message ?? 'Booking failed');
-
-    // Fire-and-forget confirmation SMS to the parent.
-    const { data: doctor } = await supabase
-      .from('doctors')
-      .select('name')
-      .eq('id', data.doctor_id)
-      .maybeSingle();
-
-    notify({
-      channel: 'sms',
-      template: 'appointment_confirmation',
-      params: {
-        doctor: doctor?.name ?? 'your doctor',
-        date: data.date,
-        time: data.time.slice(0, 5),
-      },
-      recipient: {
-        parent_id: user.id,
-        child_id: data.child_id,
-        appointment_id: appt.id,
-      },
-    });
-
-    // Fire-and-forget: a per-appointment Google Meet link via the doctor's
-    // connected Calendar. The appointment is booked either way.
-    void requestMeetLink(appt.id, data.doctor_id);
-
-    await fetch();
     return appt;
   }
 
-  async function cancelAppointment(appointmentId: string) {
-    // The release_appointment_slot trigger (0015) re-opens the time slot.
-    const { error: err } = await supabase
-      .from('appointments')
-      .update({ status: 'cancelled' })
-      .eq('id', appointmentId);
-
-    if (err) throw new Error(err.message);
-
+  /**
+   * Through consult-payment, which refunds a paid consult cancelled 2 h or
+   * more before the start. The release_appointment_slot trigger (0015)
+   * re-opens the time slot.
+   */
+  async function cancelAppointment(appointmentId: string): Promise<{ refund: RefundOutcome; late?: boolean }> {
+    const result = await cancelConsult(appointmentId);
     await fetch();
+    return result;
   }
 
   // Still to happen (or in progress): judged on clinic (IST) time, so a

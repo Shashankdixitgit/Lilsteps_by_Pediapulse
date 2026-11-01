@@ -1,9 +1,10 @@
 /**
  * Booking Confirmation — Step 3 (final)
  *
- * Shows the summary, books via useAppointments.bookAppointment, then renders
- * a success state in-place. Payment step is intentionally skipped — the
- * proposal MVP does not include payment.
+ * Shows the summary, holds the slot via useAppointments.bookAppointment,
+ * takes the ₹449 payment (useConsultCheckout → Razorpay), then renders a
+ * success state in-place. The consult is only booked once the server says
+ * the payment went through.
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -26,6 +27,8 @@ import { typography } from '@/styles/global';
 import { useChild } from '@/context/child';
 import { supabase } from '@/lib/supabase';
 import { linkConversationToAppointment, useAppointments } from '@/hooks/useAppointments';
+import { useConsultCheckout } from '@/hooks/useConsultCheckout';
+import { CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 import { useConversations } from '@/hooks/useConversations';
 
 interface DoctorInfo {
@@ -36,7 +39,7 @@ interface DoctorInfo {
   has_google_calendar: boolean;
 }
 
-/** Messages book_slot (0015/0020) raises on purpose; safe to show as they are. */
+/** Messages hold_slot (0045, from book_slot 0015/0020) raises on purpose; safe to show as they are. */
 const BOOKING_MESSAGES = [
   'Please sign in again to book.',
   'Child not found.',
@@ -44,6 +47,7 @@ const BOOKING_MESSAGES = [
   'This slot was just taken.',
   'This slot has already passed.',
   'This doctor is not taking bookings right now.',
+  'Please update LilSteps to book.',
 ];
 
 /**
@@ -54,8 +58,10 @@ function bookingErrorText(e: unknown): string {
   const msg = e instanceof Error ? e.message.trim() : '';
   const known = BOOKING_MESSAGES.find((m) => msg === m);
   if (known) return `Couldn't book: ${known} Please go back and pick another time.`;
+  // hold_slot's two-holds limit names its own wait; show it as it is.
+  if (msg.startsWith('You already have two bookings waiting for payment.')) return msg;
   if (/fetch|network|timed? ?out|offline/i.test(msg)) {
-    return "Couldn't book: no connection. Check your internet and tap Confirm booking again.";
+    return "Couldn't book: no connection. Check your internet and tap the Pay button again.";
   }
   return "Couldn't book this time. Please try again, or go back and pick another time.";
 }
@@ -77,7 +83,8 @@ export default function ConfirmScreen() {
   const [error, setError] = useState<string | null>(null);
 
   const [doctor, setDoctor] = useState<DoctorInfo | null>(null);
-  const [booking, setBooking] = useState(false);
+  const { checkout, resumeFor, releaseHold, paying: booking, notice: payNotice, awaitingPayment } =
+    useConsultCheckout();
   // The booked appointment's id (set on success); the chat is linked to it.
   const [bookedId, setBookedId] = useState<string | null>(null);
   const confirmed = bookedId !== null;
@@ -94,29 +101,50 @@ export default function ConfirmScreen() {
     })();
   }, [doctorId]);
 
+  // Came back to this slot with a payment left unfinished: offer to finish it.
+  const childId = child?.id;
+  useEffect(() => {
+    if (!childId || !doctorId || !dateIso || !time) return;
+    void resumeFor({ childId, doctorId, date: dateIso, time });
+    // Once per slot; resumeFor is a fresh function each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [childId, doctorId, dateIso, time]);
+
   const childName = child?.name ?? 'Your child';
   // describe → slots pass this as a route param (already decoded).
   const issueText = (issue ?? '').trim();
 
   async function confirmBooking() {
     if (!child || !doctorId || !dateIso || !time) return;
-    setBooking(true);
     setError(null);
     try {
-      const appt = await bookAppointment({
-        child_id: child.id,
-        doctor_id: doctorId,
-        date: dateIso,
-        time,
-        slot_id: slotId || undefined,
-        concern: issueText || undefined,
-      });
-      setBookedId(appt.id);
+      const paidId = await checkout(
+        () =>
+          bookAppointment({
+            child_id: child.id,
+            doctor_id: doctorId,
+            date: dateIso,
+            time,
+            slot_id: slotId || undefined,
+            concern: issueText || undefined,
+          }),
+        { childId: child.id, doctorId, date: dateIso, time },
+        `${doctor?.name ?? 'your doctor'}, ${whenPhrase(dateIso, time)}`,
+      );
+      if (paidId) setBookedId(paidId);
     } catch (e) {
       // Inline (Alert.alert is a no-op on web).
       setError(bookingErrorText(e));
-    } finally {
-      setBooking(false);
+    }
+  }
+
+  async function cancelHold() {
+    setError(null);
+    try {
+      await releaseHold();
+      router.back();
+    } catch {
+      setError("Couldn't cancel the booking. Please try again.");
     }
   }
 
@@ -226,12 +254,22 @@ export default function ConfirmScreen() {
           <DetailRow label="Time" value={time ? formatTime(time) : ''} />
           <DetailRow label="Mode" value={`Video · ${CONSULT_MINUTES} min`} />
           {issueText.length > 0 && <DetailRow label="Concern" value={issueText} />}
+          <DetailRow label="Fee" value={CONSULT_PRICE_LABEL} />
         </View>
 
         <View style={styles.policyNote}>
           <Ionicons name="shield-checkmark-outline" size={Size.iconMeta} color={AppColors.secondary} />
-          <Text style={typography.caption}>Nothing to pay now. You can cancel any time before the consult.</Text>
+          <Text style={[typography.caption, styles.flex]}>
+            Paid securely through Razorpay. Cancel 2 hours or more before the consult for a full refund. If
+            the doctor cancels, you get a full refund.
+          </Text>
         </View>
+
+        {payNotice ? (
+          <Text style={[typography.bodySM, styles.noticeText]} accessibilityLiveRegion="polite" aria-live="polite">
+            {payNotice}
+          </Text>
+        ) : null}
 
         {error ? (
           <Text style={[typography.bodySM, styles.errorText]} accessibilityRole="alert">
@@ -241,7 +279,21 @@ export default function ConfirmScreen() {
       </ScrollView>
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
-        <GradientButton label="Confirm booking" onPress={confirmBooking} loading={booking} disabled={booking} />
+        <GradientButton
+          label={awaitingPayment ? `Finish paying ${CONSULT_PRICE_LABEL}` : `Pay ${CONSULT_PRICE_LABEL} and book`}
+          onPress={confirmBooking}
+          loading={booking}
+          disabled={booking}
+        />
+        {awaitingPayment ? (
+          <GradientButton
+            variant="ghost"
+            label="Cancel booking"
+            onPress={cancelHold}
+            disabled={booking}
+            style={styles.selfCenter}
+          />
+        ) : null}
       </View>
     </View>
   );
@@ -300,6 +352,8 @@ const styles = StyleSheet.create({
   detailValue: { ...typography.title, lineHeight: 20, flex: 1, textAlign: 'right' },
 
   policyNote: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 4 },
+  flex: { flex: 1 },
+  noticeText: { color: AppColors.onSurfaceVariant, textAlign: 'center' },
 
   bottomBar: {
     paddingHorizontal: 20,

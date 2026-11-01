@@ -68,7 +68,8 @@ export default async function ConversationPage({
           .from('appointments')
           .select('id, date, time, status, ai_summary_id')
           .eq('child_id', child.id)
-          .neq('status', 'cancelled')
+          // Unpaid holds (0045) are not consults yet.
+          .not('status', 'in', '(cancelled,awaiting_payment)')
           .order('date', { ascending: false })
           .order('time', { ascending: false })
           .returns<ApptLite[]>()
