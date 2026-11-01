@@ -46,7 +46,7 @@
 //          payment (afterConsultConfirmed). 'no_credit' / 'no_plan': the
 //          hold stays, so the family can still pay ₹449 for it.
 //        Cancelling a plan consult (action cancel) answers
-//        {refund: 'not_paid', plan: 'returned' | 'rebook_owed'} or
+//        {refund: 'not_paid', plan: 'returned' | 'rebook_owed' | 'expired'} or
 //        {refund: 'none', late: true, plan: 'used'} (_shared/consultCancel.ts).
 //   POST {action:"followup", appointmentId, slotId}              doctor only
 //        appointmentId = the COMPLETED consult the follow-up is for.
@@ -448,6 +448,7 @@ async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): P
       result.plan === 'returned' ? 'plan_returned'
       : result.plan === 'used' ? 'plan_used'
       : result.plan === 'rebook_owed' ? 'plan_rebook'
+      : result.plan === 'expired' ? 'plan_expired'
       : outcome.refund === 'none' ? 'late'
       : outcome.refund;
     inBackground('cancel email', emailCancellation(admin, appt, by, line));

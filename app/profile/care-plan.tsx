@@ -73,7 +73,7 @@ function hero(view: CarePlanView): { badge: string; title: string; body: string 
       return {
         badge: 'Paused',
         title: 'Your plan is paused',
-        body: 'We couldn’t collect the monthly payment, so no new plan consults were added. Subscribe again to restart it.',
+        body: 'No plan consults can be used while the plan is paused (usually because a monthly payment couldn’t be collected). Subscribe again to restart it.',
       };
     default:
       return {
@@ -92,8 +92,11 @@ export default function CarePlanScreen() {
   const [error, setError] = useState<string | null>(null);
   const view = viewOf(plan);
   const h = hero(view);
-  const canSubscribe = view.kind === 'none' || view.kind === 'paused' || view.kind === 'starting';
-  const canCancel = view.kind === 'active' || view.kind === 'retrying';
+  // Authorised at Razorpay but no paid month yet: Subscribe can't help (it
+  // is waiting on Razorpay), Cancel ends it at once.
+  const authorised = plan?.status === 'authenticated' && view.kind === 'starting';
+  const canSubscribe = (view.kind === 'none' || view.kind === 'paused' || view.kind === 'starting') && !authorised;
+  const canCancel = view.kind === 'active' || view.kind === 'retrying' || authorised;
   const hasCredits = (view.kind === 'active' || view.kind === 'ending' || view.kind === 'ended') && view.left > 0;
 
   async function subscribe() {
@@ -183,8 +186,9 @@ export default function CarePlanScreen() {
             ))}
           </View>
           <Text style={[typography.caption, styles.caption]}>
-            A plan consult cancelled 2 hours or more before it starts goes back to your plan. Less than 2 hours
-            before, or if you don’t attend, it counts as used. If the doctor cancels, it goes back to your plan.
+            A plan consult cancelled 2 hours or more before it starts goes back to your plan, if that plan month
+            hasn’t ended. Less than 2 hours before, or if you don’t attend, it counts as used. If the doctor
+            cancels, it goes back to your plan, or the clinic books you a free consult if the month has ended.
           </Text>
         </View>
 

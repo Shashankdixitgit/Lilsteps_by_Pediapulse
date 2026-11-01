@@ -34,8 +34,12 @@ export type PaymentState = 'paid' | 'pending' | 'expired' | 'cancelled';
 
 export type RefundOutcome = 'started' | 'failed' | 'none' | 'not_paid';
 
-/** A Care Plan consult that was cancelled: back to the plan, used, or a free one owed (0053). */
-export type PlanCreditOutcome = 'returned' | 'used' | 'rebook_owed';
+/**
+ * A Care Plan consult that was cancelled (0053): back to the plan; used
+ * (under 2 h); expired (the parent cancelled after its plan month ended);
+ * or a free one owed (the doctor cancelled after the month ended).
+ */
+export type PlanCreditOutcome = 'returned' | 'used' | 'expired' | 'rebook_owed';
 
 export interface CancelOutcome {
   refund: RefundOutcome;

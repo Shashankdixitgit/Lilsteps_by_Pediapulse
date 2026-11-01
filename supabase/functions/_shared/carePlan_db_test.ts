@@ -124,8 +124,31 @@ Deno.test({
       assertEquals((await sql`select public.confirm_consult_with_plan(${appts[0]}, ${parent}) as r`)[0].r, 'confirmed');
       assertEquals((await sql`select public.confirm_consult_with_plan(${appts[1]}, ${parent}) as r`)[0].r, 'no_credit');
       await sql`update public.appointments set status = 'cancelled', cancel_reason = 'parent' where id = ${appts[0]}`;
-      assertEquals((await sql`select public.return_plan_credit(${appts[0]}) as r`)[0].r, 'returned');
+      assertEquals((await sql`select public.return_plan_credit(${appts[0]}, 'parent') as r`)[0].r, 'returned');
       assertEquals((await sql`select public.confirm_consult_with_plan(${appts[1]}, ${parent}) as r`)[0].r, 'confirmed');
+    } finally {
+      await sql.end();
+    }
+  },
+});
+
+Deno.test({
+  name: 'db (review #1): parent cancel after the plan month ended → expired; doctor → rebook_owed',
+  ignore: !target,
+  sanitizeResources: false,
+  sanitizeOps: false,
+  async fn() {
+    const sql = await connect();
+    try {
+      const { parent, period, appts } = await seed(sql, 3, 2);
+      for (const a of appts) {
+        assertEquals((await sql`select public.confirm_consult_with_plan(${a}, ${parent}) as r`)[0].r, 'confirmed');
+      }
+      // The month ends (book at month end, cancel in the next one).
+      await sql`update public.care_plan_periods set period_start = now() - interval '31 days', period_end = now() - interval '1 minute' where id = ${period}`;
+      await sql`update public.appointments set status = 'cancelled', cancel_reason = 'parent' where id = any(${appts})`;
+      assertEquals((await sql`select public.return_plan_credit(${appts[0]}, 'parent') as r`)[0].r, 'expired');
+      assertEquals((await sql`select public.return_plan_credit(${appts[1]}, 'doctor') as r`)[0].r, 'rebook_owed');
     } finally {
       await sql.end();
     }

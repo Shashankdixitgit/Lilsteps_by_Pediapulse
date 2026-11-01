@@ -4,10 +4,12 @@
 // account-deletion policy). Called from Profile → Privacy & security →
 // "Delete my account" with the signed-in parent's session.
 //
-// First, a live Care Plan is ended at Razorpay right away (no more
-// charges); if Razorpay can't confirm that, nothing is deleted and the
-// parent is asked to try again. Plan consults follow the plan credit rule
-// (moot once the account is gone).
+// First, a live Care Plan is stopped at Razorpay (no more charges). This
+// never traps the parent: a plan already set to end at the month's end is
+// left to run out, a subscription Razorpay doesn't know (404 / "does not
+// exist") counts as ended, and any other Razorpay failure emails the team to
+// cancel it by hand while the deletion goes on. Plan consults follow the
+// plan credit rule as a parent cancel (after the month ended: 'expired').
 // Then (account.ts settleConsultsBeforeDelete): every consult that has not
 // started yet and every unpaid hold is cancelled through the consult-payment
 // cancel code, with the same refund rules as a parent cancel (in full 2 h or
@@ -81,17 +83,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // ── 0a. Care Plan: ended now at Razorpay, so a deleted account is
-    //        never charged again. If Razorpay can't confirm, stop here (the
-    //        parent tries again) rather than delete and keep billing.
-    try {
-      await endPlansForDeletedAccount(admin, uid);
-    } catch (e) {
-      console.error(`[delete-account] could not end Care Plan for ${uid}: ${(e as Error).message}`);
-      return jsonResponse(
-        { error: 'We could not cancel your Care Plan just now, so your account was not deleted. Please try again in a few minutes.' },
-        502,
-      );
+    // ── 0a. Care Plan: stopped at Razorpay so a deleted account is never
+    //        charged again. Never blocks the deletion: a plan already set to
+    //        end is left to run out, one Razorpay doesn't know is treated as
+    //        ended, and any other Razorpay failure emails the team to cancel
+    //        it by hand (carePlan.ts endPlansForDeletedAccount).
+    const plans = await endPlansForDeletedAccount(admin, uid);
+    if (plans.alerted > 0) {
+      console.error(`[delete-account] ${uid}: ${plans.alerted} Care Plan subscription(s) left for the team to cancel by hand`);
     }
     // ── 0b. Upcoming consults: cancelled, refunded by the usual rules ────
     const settled = await settleConsultsBeforeDelete(admin, uid);

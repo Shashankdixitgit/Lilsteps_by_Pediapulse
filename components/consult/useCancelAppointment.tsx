@@ -76,7 +76,7 @@ export function useCancelAppointment(
         `${childName ? `${childName} with ` : ''}${a.doctorName} · ${when}. The slot will be released for other families. ` +
           (a.paidWithPlan
             ? early
-              ? 'The consult goes back to your Care Plan.'
+              ? 'The consult goes back to your Care Plan, as long as that plan month hasn’t ended.'
               : 'It starts in less than 2 hours, so this Care Plan consult counts as used.'
             : early
               ? 'If you paid, the full amount is refunded.'
@@ -93,6 +93,10 @@ export function useCancelAppointment(
             ? ' The consult has gone back to your Care Plan.'
             : result?.plan === 'used'
             ? ' It was less than 2 hours before the consult, so this Care Plan consult counts as used.'
+            : result?.plan === 'expired'
+            ? ' The plan month it was booked in has ended, so it can’t go back to your plan. Nothing more was charged.'
+            : result?.plan === 'rebook_owed'
+            ? ' The plan month has ended, so the clinic will book a free consult for you.'
             : result?.refund === 'started'
             ? ' Your refund has started; it reaches your account in 5–7 working days.'
             : result?.refund === 'failed'

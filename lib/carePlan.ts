@@ -33,6 +33,7 @@ export type CarePlanStatus =
   | 'active'
   | 'pending'
   | 'halted'
+  | 'paused'
   | 'cancelled'
   | 'completed'
   | 'expired';
@@ -75,6 +76,7 @@ export function viewOf(plan: CarePlan | null): CarePlanView {
     case 'pending':
       return { kind: 'retrying', left, total };
     case 'halted':
+    case 'paused':
       return { kind: 'paused' };
     default:
       // cancelled / completed / expired: a month already paid for still runs.

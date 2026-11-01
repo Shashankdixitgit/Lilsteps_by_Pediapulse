@@ -9,12 +9,15 @@
 --     is left) until the end of the month already paid for.
 --   • A plan consult cancelled 2 h or more before the start, or cancelled by
 --     the doctor: the consult goes back to the plan (no money moves). Less
---     than 2 h before, or a no-show: it is used. If the doctor cancels after
---     that billing month has ended, the credit can't go back to a month that
---     is over: the team books a free consult instead ('rebook_owed').
+--     than 2 h before, or a no-show: it is used. After that billing month
+--     has ended the credit can't go back to it: if the DOCTOR cancels, the
+--     team books a free consult instead ('rebook_owed'); if the PARENT
+--     cancels (or deletes the account), the month is simply over
+--     ('expired', nothing owed — otherwise booking at a month's end and
+--     cancelling in the next month would farm free consults).
 --
 -- 1. care_plans: one row per Razorpay Subscription. status mirrors
---    Razorpay's (created / authenticated / active / pending / halted /
+--    Razorpay's (created / authenticated / active / pending / halted / paused /
 --    cancelled / completed / expired); the edge functions write it from the
 --    webhook and from a direct fetch, never the app. At most one live
 --    (non-final) plan per parent. cancel_at_period_end = the parent asked to
@@ -29,7 +32,8 @@
 -- 3. care_plan_credit_uses: one row per consult booked with the plan.
 --    'active' counts against its period (booked, held, completed, no-show,
 --    late cancel); 'returned' gives it back; 'rebook_owed' = doctor cancelled
---    after the month ended (team books a free consult). One per consult.
+--    after the month ended (team books a free consult); 'expired' = parent
+--    cancelled after the month ended (nothing owed). One per consult.
 -- 4. appointments.paid_with_plan: set when a consult is confirmed with a
 --    plan credit. The doctor dashboard shows a "Care Plan" badge from it (no
 --    money is shown to doctors).
@@ -40,9 +44,10 @@
 --    serialise: one gets it, the other is told 'no_credit' and can pay ₹449.
 --    Lock order is appointment, then period (as confirm_consult_payment:
 --    appointment, then payment). Service role only (consult-payment).
--- 6. return_plan_credit(): consult cancelled under the refund rule →
---    'returned' (period still running) or 'rebook_owed' (period over).
---    Idempotent. Service role only (_shared/consultCancel.ts).
+-- 6. return_plan_credit(appointment, by): consult cancelled under the
+--    refund rule → 'returned' (period still running), 'rebook_owed'
+--    (doctor, period over) or 'expired' (parent, period over). Idempotent.
+--    Service role only (_shared/consultCancel.ts).
 -- 7. private.consult_is_prepaid(): paid by Razorpay OR by a plan credit. The
 --    guard, reschedule_appointment and appointment_was_paid used to check
 --    only payments; a plan consult must get the same protection (no direct
@@ -72,8 +77,9 @@ create table if not exists public.care_plans (
   razorpay_plan_id         text,
   short_url                text,
   status                   text not null default 'created'
+                            -- paused: paused at Razorpay; handled like halted (no plan consults)
                             check (status in ('created', 'authenticated', 'active', 'pending',
-                                              'halted', 'cancelled', 'completed', 'expired')),
+                                              'halted', 'paused', 'cancelled', 'completed', 'expired')),
   current_start            timestamptz,
   current_end              timestamptz,
   cancel_at_period_end     boolean not null default false,
@@ -94,7 +100,7 @@ create index if not exists care_plans_parent_id_idx on public.care_plans (parent
 -- One live plan per parent: also serialises two quick "Subscribe" taps.
 create unique index if not exists care_plans_one_live_per_parent_uidx
   on public.care_plans (parent_id)
-  where status in ('created', 'authenticated', 'active', 'pending', 'halted');
+  where status in ('created', 'authenticated', 'active', 'pending', 'halted', 'paused');
 
 alter table public.care_plans enable row level security;
 revoke all on public.care_plans from anon, authenticated;
@@ -148,7 +154,7 @@ create table if not exists public.care_plan_credit_uses (
   appointment_id uuid unique references public.appointments(id) on delete set null,
   parent_id      uuid references public.parents(id) on delete set null,
   status         text not null default 'active'
-                  check (status in ('active', 'returned', 'rebook_owed')),
+                  check (status in ('active', 'returned', 'rebook_owed', 'expired')),
   returned_at    timestamptz,
   created_at     timestamptz not null default now()
 );
@@ -483,7 +489,7 @@ grant execute on function public.reschedule_appointment(uuid, uuid) to authentic
 -- Returns:
 --   'confirmed'  the held booking is now an upcoming plan consult (first time)
 --   'already'    this booking was already confirmed with the plan
---   'no_plan'    no paid plan month covers now
+--   'no_plan'    no paid plan month covers now (or the plan is halted / paused)
 --   'no_credit'  this month's plan consults are all used
 --   'expired'    the booking is not a live hold any more (expired, cancelled,
 --                or already paid with ₹449)
@@ -526,6 +532,7 @@ begin
     from public.care_plan_periods p
     join public.care_plans c on c.id = p.care_plan_id
    where c.parent_id = p_parent_id
+     and c.status not in ('halted', 'paused')
      and p.period_start <= now() and p.period_end > now()
    order by p.period_end desc
    limit 1
@@ -559,9 +566,12 @@ revoke execute on function public.confirm_consult_with_plan(uuid, uuid) from pub
 grant execute on function public.confirm_consult_with_plan(uuid, uuid) to service_role;
 
 -- ── 6. return_plan_credit ───────────────────────────────────────────────────
--- Returns 'returned' | 'rebook_owed' | 'none' (no active credit on it).
+-- p_by: who cancelled ('parent' — also account deletion — or 'doctor').
+-- Returns 'returned' (month still running), 'rebook_owed' (doctor, month
+-- over), 'expired' (parent, month over) or 'none' (no active credit on it).
+-- Idempotent: a credit already settled answers its status.
 
-create or replace function public.return_plan_credit(p_appointment_id uuid)
+create or replace function public.return_plan_credit(p_appointment_id uuid, p_by text)
 returns text
 language plpgsql
 security definer
@@ -572,6 +582,9 @@ declare
   v_end timestamptz;
   v_new text;
 begin
+  if p_by is null or p_by not in ('parent', 'doctor') then
+    raise exception 'return_plan_credit: p_by must be parent or doctor' using errcode = '22023';
+  end if;
   select * into v_use from public.care_plan_credit_uses
    where appointment_id = p_appointment_id
    for update;
@@ -582,15 +595,19 @@ begin
     return v_use.status;
   end if;
   select period_end into v_end from public.care_plan_periods where id = v_use.period_id;
-  v_new := case when v_end > now() then 'returned' else 'rebook_owed' end;
+  v_new := case
+             when v_end > now() then 'returned'
+             when p_by = 'doctor' then 'rebook_owed'
+             else 'expired'
+           end;
   update public.care_plan_credit_uses
      set status = v_new, returned_at = now()
    where id = v_use.id;
   return v_new;
 end;
 $$;
-revoke execute on function public.return_plan_credit(uuid) from public, anon, authenticated;
-grant execute on function public.return_plan_credit(uuid) to service_role;
+revoke execute on function public.return_plan_credit(uuid, text) from public, anon, authenticated;
+grant execute on function public.return_plan_credit(uuid, text) to service_role;
 
 -- ── 8. get_my_care_plan ─────────────────────────────────────────────────────
 -- null when the parent never had a plan. Otherwise:
@@ -612,7 +629,7 @@ as $$
        -- the live one first, else the newest; a 'created' (never paid) plan
        -- only while it can still be paid
        and not (c.status = 'created' and coalesce(c.auth_expires_at, c.created_at + interval '1 day') <= now())
-     order by (c.status in ('created', 'authenticated', 'active', 'pending', 'halted')) desc, c.created_at desc
+     order by (c.status in ('created', 'authenticated', 'active', 'pending', 'halted', 'paused')) desc, c.created_at desc
      limit 1
   ),
   period as (
@@ -620,6 +637,7 @@ as $$
       from public.care_plan_periods p
       join public.care_plans c on c.id = p.care_plan_id
      where c.parent_id = (select auth.uid())
+       and c.status not in ('halted', 'paused')
        and p.period_start <= now() and p.period_end > now()
      order by p.period_end desc
      limit 1

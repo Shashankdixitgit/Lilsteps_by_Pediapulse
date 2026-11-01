@@ -14,6 +14,8 @@ import {
   type PlanEmail,
   type PlanRow,
   type RazorpaySubscription,
+  subscribeAnswer,
+  verifyCarePlanPlan,
 } from './carePlan.ts';
 import { fakeAdmin, stubRazorpay } from './testing/fakeAdmin.ts';
 
@@ -193,7 +195,7 @@ Deno.test('webhook: a deleted account (parent_id null) gets its state mirrored b
 Deno.test('cancel: active plan → Razorpay cancel at cycle end, stays usable to the end, one email', async () => {
   const calls = stubRazorpay();
   const end = new Date((T0 + MONTH) * 1000).toISOString();
-  const { f, sent, notify } = setup({ status: 'active', current_end: end });
+  const { f, sent, notify } = setup({ status: 'active', current_end: end, paid_count: 1 });
   const r = await cancelPlan(f.client, structuredClone(f.tables.care_plans[0]) as PlanRow, { notify });
   assertEquals(r, { state: 'ends', endsAt: end });
   assertEquals(calls.map((c) => [c.url.replace(/^.*\/v1/, ''), c.body]), [
@@ -220,7 +222,7 @@ Deno.test('cancel: active plan → Razorpay cancel at cycle end, stays usable to
 Deno.test('cancel: never paid (created) or renewal failed (halted) → ends now', async () => {
   for (const status of ['created', 'halted'] as const) {
     const calls = stubRazorpay();
-    const { f, sent, notify } = setup({ status });
+    const { f, sent, notify } = setup({ status, paid_count: status === 'halted' ? 1 : 0 });
     assertEquals(await cancelPlan(f.client, structuredClone(f.tables.care_plans[0]) as PlanRow, { notify }), { state: 'cancelled' });
     assertEquals(calls[0].body, { cancel_at_cycle_end: false });
     assertEquals(f.tables.care_plans[0].status, 'cancelled');
@@ -230,7 +232,7 @@ Deno.test('cancel: never paid (created) or renewal failed (halted) → ends now'
 
 Deno.test('cancel: Razorpay refuses → nothing changes here', async () => {
   globalThis.fetch = (() => Promise.resolve(new Response('{"error":{}}', { status: 400 }))) as typeof fetch;
-  const { f, sent, notify } = setup({ status: 'active' });
+  const { f, sent, notify } = setup({ status: 'active', paid_count: 1 });
   let threw = false;
   try {
     await cancelPlan(f.client, structuredClone(f.tables.care_plans[0]) as PlanRow, { notify });
@@ -250,7 +252,7 @@ Deno.test('account deletion: every live plan is ended now at Razorpay', async ()
       row({ id: 'b', status: 'cancelled', razorpay_subscription_id: 'sub_b' }),
     ],
   });
-  assertEquals(await endPlansForDeletedAccount(f.client, 'u1'), 1);
+  assertEquals(await endPlansForDeletedAccount(f.client, 'u1'), { ended: 1, alerted: 0 });
   assertEquals(calls.map((c) => [c.url.replace(/^.*\/v1/, ''), c.body.cancel_at_cycle_end]), [['/subscriptions/sub_a/cancel', false]]);
   assertEquals(f.tables.care_plans.map((p: any) => p.status), ['cancelled', 'cancelled']);
 });
@@ -284,6 +286,10 @@ Deno.test('emails: generic subjects, no child details, the right line for each c
   assertEquals(back.text.includes('gone back to your Care Plan'), true);
   const used = renderEmail('appointment_cancelled', { refund: 'plan_used' });
   assertEquals(used.text.includes('counts as used'), true);
+  // Review #1: a parent cancel after the plan month ended.
+  const expired = renderEmail('appointment_cancelled', { refund: 'plan_expired' });
+  assertEquals(expired.text.includes('could not go back to the plan'), true);
+  assertEquals(expired.text.includes('free consult'), false, 'no free consult is promised to the parent');
 });
 
 Deno.test('account deletion: a subscription Razorpay already ended does not block the deletion', async () => {
@@ -294,20 +300,213 @@ Deno.test('account deletion: a subscription Razorpay already ended does not bloc
     return Promise.resolve(new Response(JSON.stringify({ id: 'sub_a', status: 'cancelled' }), { status: 200 }));
   }) as typeof fetch;
   const f = fakeAdmin({ care_plans: [row({ id: 'a', status: 'active', razorpay_subscription_id: 'sub_a' })] });
-  assertEquals(await endPlansForDeletedAccount(f.client, 'u1'), 1);
+  assertEquals(await endPlansForDeletedAccount(f.client, 'u1', { alert: () => Promise.resolve() }), { ended: 1, alerted: 0 });
   assertEquals(calls, ['POST /subscriptions/sub_a/cancel', 'GET /subscriptions/sub_a']);
   assertEquals(f.tables.care_plans[0].status, 'cancelled');
 });
 
-Deno.test('account deletion: Razorpay down → throws (the account is not deleted while billing may go on)', async () => {
-  globalThis.fetch = (() => Promise.resolve(new Response('oops', { status: 503 }))) as typeof fetch;
-  const f = fakeAdmin({ care_plans: [row({ id: 'a', status: 'active', razorpay_subscription_id: 'sub_a' })] });
-  let threw = false;
-  try {
-    await endPlansForDeletedAccount(f.client, 'u1');
-  } catch {
-    threw = true;
-  }
-  assertEquals(threw, true);
+
+// ── Review fixes (PR #17) ───────────────────────────────────────────────────
+
+/** A fake Razorpay answering per path; records every call. */
+function razorpay(answers: Record<string, { status: number; body: unknown }>) {
+  Deno.env.set('RAZORPAY_KEY_ID', 'rzp_test_x');
+  Deno.env.set('RAZORPAY_KEY_SECRET', 'secret');
+  const calls: Array<{ call: string; body: any }> = [];
+  globalThis.fetch = ((url: string, init?: RequestInit) => {
+    const call = `${init?.method ?? 'GET'} ${String(url).replace(/^.*\/v1/, '')}`;
+    calls.push({ call, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    const a = answers[call] ?? { status: 200, body: {} };
+    return Promise.resolve(new Response(JSON.stringify(a.body), { status: a.status }));
+  }) as typeof fetch;
+  return calls;
+}
+
+function alerts() {
+  const sent: Array<{ subject: string; lines: string[] }> = [];
+  return { sent, alert: (subject: string, lines: string[]) => (sent.push({ subject, lines }), Promise.resolve()) };
+}
+
+// #2 account deletion is never trapped
+
+Deno.test('#2 deletion: a plan already set to end at the month\'s end → no Razorpay call (it refuses a second cancel)', async () => {
+  const calls = razorpay({});
+  const a = alerts();
+  const f = fakeAdmin({ care_plans: [row({ status: 'active', paid_count: 1, cancel_at_period_end: true })] });
+  assertEquals(await endPlansForDeletedAccount(f.client, 'u1', { alert: a.alert }), { ended: 1, alerted: 0 });
+  assertEquals(calls.length, 0);
+  assertEquals(a.sent.length, 0);
+});
+
+Deno.test('#2 deletion: subscription unknown to Razorpay (404, e.g. test id under live keys) counts as ended', async () => {
+  razorpay({ 'POST /subscriptions/sub_1/cancel': { status: 404, body: { error: { description: 'The id provided does not exist' } } } });
+  const a = alerts();
+  const f = fakeAdmin({ care_plans: [row({ status: 'active', paid_count: 1 })] });
+  assertEquals(await endPlansForDeletedAccount(f.client, 'u1', { alert: a.alert }), { ended: 1, alerted: 0 });
+  assertEquals(f.tables.care_plans[0].status, 'cancelled');
+  assertEquals(a.sent.length, 0);
+});
+
+Deno.test('#2 deletion: "does not exist" in a 400 body also counts as ended', async () => {
+  razorpay({ 'POST /subscriptions/sub_1/cancel': { status: 400, body: { error: { description: 'Subscription does not exist' } } } });
+  const f = fakeAdmin({ care_plans: [row({ status: 'active', paid_count: 1 })] });
+  assertEquals(await endPlansForDeletedAccount(f.client, 'u1', { alert: alerts().alert }), { ended: 1, alerted: 0 });
+});
+
+Deno.test('#2 deletion: any other Razorpay failure → team alerted, deletion continues (no throw)', async () => {
+  razorpay({
+    'POST /subscriptions/sub_1/cancel': { status: 500, body: { error: {} } },
+    'GET /subscriptions/sub_1': { status: 500, body: { error: {} } },
+  });
+  const a = alerts();
+  const f = fakeAdmin({ care_plans: [row({ status: 'active', paid_count: 1 })] });
+  assertEquals(await endPlansForDeletedAccount(f.client, 'u1', { alert: a.alert }), { ended: 0, alerted: 1 });
+  assertEquals(a.sent[0].subject.includes('by hand'), true);
+  assertEquals(a.sent[0].lines.some((l) => l.includes('sub_1')), true);
+});
+
+// #3 a subscription we ended that Razorpay later reports alive
+
+Deno.test('#3 revived: our unpaid plan was cancelled, the parent paid the old link → alert + plan reopened, month recorded', async () => {
+  razorpay({});
+  const a = alerts();
+  const { f, sent, notify } = setup({ status: 'cancelled', last_event_at: T0 });
+  const r = await applySubscription(f.client, sub({ status: 'authenticated', paid_count: 0, current_start: null, current_end: null }), T0 + 60, { notify, alert: a.alert });
+  assertEquals(r.revived, 'reopened');
+  assertEquals(f.tables.care_plans[0].status, 'authenticated');
+  assertEquals(f.tables.care_plans[0].ended_at, null);
+  assertEquals(a.sent.length, 1);
+  assertEquals(a.sent[0].subject.includes('reopened'), true);
+  // ...and the charge that follows gives the month, as for any plan.
+  await applySubscription(f.client, sub(), T0 + 61, { notify, alert: a.alert, charge: { paymentId: 'pay_9', amount: 99900 } });
+  assertEquals(f.tables.care_plan_periods.length, 1);
   assertEquals(f.tables.care_plans[0].status, 'active');
+  assertEquals(sent.map((e) => e.template), ['care_plan_started']);
+  assertEquals(a.sent.length, 1, 'one alert');
+});
+
+Deno.test('#3 revived: parent already has another live plan → cancelled at Razorpay NOW + refund alert, no credits', async () => {
+  const calls = razorpay({});
+  const a = alerts();
+  const f = fakeAdmin({
+    care_plans: [
+      row({ id: 'old', status: 'expired', last_event_at: T0 }),
+      row({ id: 'new', status: 'active', razorpay_subscription_id: 'sub_new', paid_count: 1 }),
+    ],
+    care_plan_periods: [],
+  });
+  const r = await applySubscription(f.client, sub(), T0 + 60, { notify: () => {}, alert: a.alert, charge: { paymentId: 'pay_dup', amount: 99900 } });
+  assertEquals(r.revived, 'cancelled');
+  assertEquals(calls.map((c) => [c.call, c.body?.cancel_at_cycle_end]), [['POST /subscriptions/sub_1/cancel', false]]);
+  assertEquals(f.tables.care_plan_periods.length, 0, 'no consults from a duplicate subscription');
+  assertEquals(f.tables.care_plans.find((p: any) => p.id === 'old')?.status, 'expired');
+  assertEquals(a.sent[0].subject.includes('refund'), true);
+  assertEquals(a.sent[0].lines.some((l) => l.includes('pay_dup')), true);
+});
+
+Deno.test('#3 revived: a deleted account\'s plan charged again → cancelled at Razorpay + refund alert', async () => {
+  const calls = razorpay({});
+  const a = alerts();
+  const { f } = setup({ status: 'cancelled', parent_id: null, last_event_at: T0 });
+  const r = await applySubscription(f.client, sub(), T0 + 60, { notify: () => {}, alert: a.alert, charge: { paymentId: 'pay_x', amount: 99900 } });
+  assertEquals(r.revived, 'cancelled');
+  assertEquals(calls[0].call, 'POST /subscriptions/sub_1/cancel');
+  assertEquals(a.sent.length, 1);
+});
+
+Deno.test('#3 not revived: an OLDER "active" event for a plan Razorpay already cancelled is just stale (no alert)', async () => {
+  const calls = razorpay({});
+  const a = alerts();
+  const { f } = setup({ status: 'cancelled', last_event_at: T0 + 100 });
+  const r = await applySubscription(f.client, sub(), T0 + 50, { notify: () => {}, alert: a.alert });
+  assertEquals(r.revived, undefined);
+  assertEquals(f.tables.care_plans[0].status, 'cancelled');
+  assertEquals([calls.length, a.sent.length], [0, 0]);
+});
+
+// #4 authorised with no paid month
+
+Deno.test('#4 cancel: authenticated with no paid month → cancelled NOW (cancel_at_cycle_end false), no email', async () => {
+  const calls = razorpay({});
+  const { f, sent, notify } = setup({ status: 'authenticated', paid_count: 0 });
+  assertEquals(await cancelPlan(f.client, structuredClone(f.tables.care_plans[0]) as PlanRow, { notify }), { state: 'cancelled' });
+  assertEquals(calls.map((c) => c.body), [{ cancel_at_cycle_end: false }]);
+  assertEquals(f.tables.care_plans[0].status, 'cancelled');
+  assertEquals(typeof f.tables.care_plans[0].last_event_at, 'number', 'stamped, so only newer Razorpay news can revive it');
+  assertEquals(sent.length, 0);
+});
+
+Deno.test('#4 cancel: authenticated WITH a recorded paid month → at cycle end', async () => {
+  const calls = razorpay({});
+  const f = fakeAdmin({
+    care_plans: [row({ status: 'authenticated', paid_count: 0 })],
+    care_plan_periods: [{ id: 'm1', care_plan_id: 'cp1', period_start: 'x', period_end: 'y' }],
+    notification_log: [],
+  });
+  const r = await cancelPlan(f.client, structuredClone(f.tables.care_plans[0]) as PlanRow, { notify: () => {} });
+  assertEquals(r.state, 'ends');
+  assertEquals(calls.map((c) => c.body), [{ cancel_at_cycle_end: true }]);
+});
+
+Deno.test('#4 subscribe: an authorised plan is "starting", never "active"; halted / paused are replaced', () => {
+  assertEquals(subscribeAnswer(row({ status: 'authenticated' })), 'starting');
+  assertEquals(subscribeAnswer(row({ status: 'active' })), 'active');
+  assertEquals(subscribeAnswer(row({ status: 'pending' })), 'pending');
+  assertEquals(subscribeAnswer(row({ status: 'halted' })), 'replace');
+  assertEquals(subscribeAnswer(row({ status: 'paused' })), 'replace');
+  assertEquals(subscribeAnswer(row({ status: 'created' })), 'reuse');
+  assertEquals(subscribeAnswer(null), null);
+});
+
+// #5 the fetch path records a month only when Razorpay counts more paid months than we have
+
+Deno.test('#5 fetch: active, paid_count not above recorded months → no new month (even with new dates)', async () => {
+  const f = fakeAdmin({
+    care_plans: [row({ status: 'active', paid_count: 1, last_event_at: T0 })],
+    care_plan_periods: [{ id: 'm1', care_plan_id: 'cp1', period_start: new Date(T0 * 1000).toISOString(), period_end: 'z' }],
+    notification_log: [],
+  });
+  // Razorpay moved to the next cycle but its charge isn't confirmed (paid_count still 1).
+  const r = await applySubscription(f.client, sub({ current_start: T0 + MONTH, current_end: T0 + 2 * MONTH, paid_count: 1 }), T0 + MONTH + 5, { notify: () => {} });
+  assertEquals(r.periodCreated, false);
+  assertEquals(f.tables.care_plan_periods.length, 1);
+  // paid_count 2 > 1 recorded → the month is recorded.
+  const r2 = await applySubscription(f.client, sub({ current_start: T0 + MONTH, current_end: T0 + 2 * MONTH, paid_count: 2 }), T0 + MONTH + 6, { notify: () => {} });
+  assertEquals(r2.periodCreated, true);
+  assertEquals(f.tables.care_plan_periods.length, 2);
+});
+
+// #6 paused, wrong amount, plan check
+
+Deno.test('#6 paused: active → paused is a real change; no credits are recorded from it', async () => {
+  const { f } = setup({ status: 'active', last_event_at: T0, paid_count: 1 });
+  f.tables.care_plan_periods.push({ id: 'm1', care_plan_id: 'cp1', period_start: 'a', period_end: 'b' });
+  const r = await applySubscription(f.client, sub({ status: 'paused', paid_count: 1 }), T0 + 10, { notify: () => {} });
+  assertEquals([r.status, r.statusChanged, r.periodCreated], ['paused', true, false]);
+  assertEquals(nextPlanState(row({ status: 'paused', last_event_at: T0 }), { status: 'active', at: T0 + 1 }).patch?.status, 'active');
+});
+
+Deno.test('#6 wrong charge amount → no consults for the month + team alert', async () => {
+  const a = alerts();
+  const { f, sent, notify } = setup({ status: 'active', last_event_at: T0 });
+  const r = await applySubscription(f.client, sub(), T0 + 1, { notify, alert: a.alert, charge: { paymentId: 'pay_odd', amount: 1000 } });
+  assertEquals(r.periodCreated, false);
+  assertEquals(f.tables.care_plan_periods.length, 0);
+  assertEquals(sent.length, 0);
+  assertEquals(a.sent[0].subject.includes('wrong amount'), true);
+  assertEquals(a.sent[0].lines.some((l) => l.includes('pay_odd')), true);
+});
+
+Deno.test('#6 subscribe checks the Razorpay plan is ₹999 / monthly / INR (good answer cached)', async () => {
+  const good = { id: 'plan_good', period: 'monthly', interval: 1, item: { amount: 99900, currency: 'INR' } };
+  const calls = razorpay({
+    'GET /plans/plan_good': { status: 200, body: good },
+    'GET /plans/plan_cheap': { status: 200, body: { ...good, id: 'plan_cheap', item: { amount: 9900, currency: 'INR' } } },
+    'GET /plans/plan_yearly': { status: 200, body: { ...good, id: 'plan_yearly', period: 'yearly' } },
+  });
+  assertEquals(await verifyCarePlanPlan('plan_cheap'), false);
+  assertEquals(await verifyCarePlanPlan('plan_yearly'), false);
+  assertEquals(await verifyCarePlanPlan('plan_good'), true);
+  assertEquals(await verifyCarePlanPlan('plan_good'), true);
+  assertEquals(calls.filter((c) => c.call === 'GET /plans/plan_good').length, 1, 'cached after a good answer');
 });

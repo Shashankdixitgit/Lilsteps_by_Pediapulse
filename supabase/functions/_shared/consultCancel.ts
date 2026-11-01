@@ -17,8 +17,11 @@
 //     lines, with the plan consult instead of money: it goes back to the
 //     plan (return_plan_credit) when cancelled 2 h or more before, by the
 //     doctor, or after a doctor's move in the last 24 h; otherwise it is
-//     used. A doctor cancel after that billing month ended can't go back to
-//     the month: 'rebook_owed', and the team is emailed to book a free one.
+//     used. After that billing month has ended a credit can't go back to
+//     it: a DOCTOR cancel then means 'rebook_owed' (the team is emailed to
+//     book a free consult, refund policy); a PARENT cancel (incl. account
+//     deletion) means 'expired' — the month is over and nothing is owed, so
+//     booking at a month's end and cancelling in the next one gains nothing.
 //
 // Who may cancel what is the caller's job; this only does it.
 
@@ -103,7 +106,8 @@ export async function cancelConsult(
       .maybeSingle();
     if (!use) return { done: true, refund: 'not_paid' };
     if (!giveBack) return { done: true, refund: 'none', late: true, plan: 'used' };
-    const back = await returnPlanCredit(admin, appt.id);
+    const back = await returnPlanCredit(admin, appt.id, opts.by);
+    if (back === 'expired') return { done: true, refund: 'not_paid', plan: 'expired' };
     if (back === 'rebook_owed') {
       inBackground('rebook alert', alertRebookOwed(appt.id, { date: appt.date, time: appt.time }));
       return { done: true, refund: 'not_paid', plan: 'rebook_owed' };

@@ -36,10 +36,13 @@ guard doctor: can't flip paid_with_plan                                  => Only
 return: month still running → "returned"                                 => returned
 return: again is idempotent                                              => returned
 return: a consult with no plan credit → "none"                           => none
+return: who cancelled must be parent or doctor                           => ERROR return_plan_credit: p_by must be parent or doctor
 return: slot of the cancelled consult is open again                      => true
 plan: the returned credit can be used again                              => confirmed
 get_my_care_plan A1: back to 0 left after rebooking                      => 0
 return: doctor cancel after the month ended → "rebook_owed"              => rebook_owed
+return: PARENT cancel after the month ended → "expired" (no free consult => expired
+return: ... and a later doctor call can't turn it into a rebook          => expired
 appointment_was_paid: a plan consult counts (doctor may message)         => true
 interplay: ₹449 paid after a plan booking → refund_needed                => refund_needed
 interplay: ... payment row is refund_due                                 => refund_due booking_upcoming
@@ -49,6 +52,9 @@ one month per plan and start                                             => dupl
 one credit use per consult                                               => duplicate key value violates unique constraint "care_plan_credit_uses_appointment_id_key"
 one plan email per key and channel                                       => duplicate key value violates unique constraint "notification_log_one_plan_message_uidx"
 same plan key on another channel is fine                                 => OK rows=2
+paused plan: booking with the plan is "no_plan"                          => no_plan
+paused plan: get_my_care_plan shows paused, no consults                  => paused left=null
+paused counts as live: no second plan while paused                       => duplicate key value violates unique constraint "care_plans_one_live_per_parent_uidx"
 race: session 1 r1 confirmed
 race: session 2 r2 no_credit (waited for session 1: yes)
 race: active uses in the month 3

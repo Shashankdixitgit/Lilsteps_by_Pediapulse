@@ -10,11 +10,15 @@
 //                                full-page redirect (as consult payments).
 //                                A plan page already made and still usable
 //                                is handed back instead of a new one.
-//        | {state:'active' | 'pending'}  already subscribed (pending: a
-//                                renewal is being retried by Razorpay)
-//        A halted plan (renewal failed for good) is ended first, so the
-//        parent can start again. The amount is set on the Razorpay Plan
-//        (RAZORPAY_CARE_PLAN_ID), never by the app.
+//        | {state:'active' | 'pending' | 'starting'}  already subscribed
+//                                (pending: a renewal is being retried;
+//                                starting: authorised, first month not
+//                                recorded yet — never reported as active)
+//        A halted or paused plan is ended first, so the parent can start
+//        again. The amount is set on the Razorpay Plan (RAZORPAY_CARE_PLAN_ID,
+//        checked to be ₹999 / monthly / INR before use), never by the app.
+//        A subscription we give up on is cancelled at Razorpay; if Razorpay
+//        refuses, the team is emailed (never swallowed).
 //   POST {action:"status"}
 //        → {plan}                get_my_care_plan() (0053) after asking
 //                                Razorpay about the live subscription, so a
@@ -22,7 +26,8 @@
 //   POST {action:"cancel"}
 //        → {state:'ends', endsAt} paid month running: no renewal, usable to
 //                                its end (Razorpay cancel_at_cycle_end)
-//        | {state:'cancelled'}   nothing paid to run on: ended now
+//        | {state:'cancelled'}   nothing paid to run on (never paid, authorised
+//                                without a paid month, failed renewal): ended now
 //        | {state:'none'}        no live plan
 //
 // Deploy: supabase functions deploy care-plan (verify_jwt on).
@@ -34,17 +39,21 @@ import { createAdminClient, createUserClient, getCaller } from '../_shared/supab
 import { RazorpayError } from '../_shared/razorpay.ts';
 import { parentContact } from '../_shared/parentNotify.ts';
 import {
+  alertTeam,
   applySubscription,
   AUTH_WINDOW_MINUTES,
   cancelAtRazorpay,
   cancelPlan,
-  cancelSubscription,
   carePlanRazorpayId,
   createSubscription,
   fetchSubscription,
   livePlan,
+  markEndedLocally,
+  PLAN_COLUMNS,
   type PlanRow,
   REUSE_MIN_MINUTES,
+  subscribeAnswer,
+  verifyCarePlanPlan,
 } from '../_shared/carePlan.ts';
 
 const MINUTE = 60_000;
@@ -91,42 +100,64 @@ async function refresh(admin: any, row: PlanRow): Promise<PlanRow | null> {
   return await livePlan(admin, row.parent_id!);
 }
 
+/**
+ * Cancel a subscription we are giving up on right now. A refusal is never
+ * swallowed: the team is emailed to cancel it by hand. (If it is paid
+ * anyway, applySubscription catches the revived subscription.)
+ */
+async function dropAtRazorpay(subId: string, why: string): Promise<void> {
+  try {
+    await cancelAtRazorpay(subId, false);
+  } catch (e) {
+    await alertTeam('Care Plan: cancel an abandoned subscription by hand', [
+      `We stopped using a Care Plan subscription (${why}), but Razorpay did not confirm cancelling it.`,
+      'Please cancel it in the Razorpay dashboard (Subscriptions) so it can\'t be paid or charged, and refund any charge on it.',
+      '',
+      `Razorpay subscription: ${subId}`,
+      `Razorpay answer: ${(e as Error).message}`,
+    ]);
+  }
+}
+
 async function subscribe(admin: any, parentId: string): Promise<Response> {
   const planId = carePlanRazorpayId();
   if (!planId) return jsonResponse({ error: "The Care Plan isn't available yet. Please try again later." }, 503);
+  // The amount comes from the Razorpay Plan: refuse if it isn't ₹999 / monthly / INR.
+  if (!(await verifyCarePlanPlan(planId))) {
+    return jsonResponse({ error: "The Care Plan isn't available yet. Please try again later." }, 503);
+  }
 
   let live = await livePlan(admin, parentId);
   if (live && live.status !== 'created') live = await refresh(admin, live);
 
-  if (live?.status === 'active' || live?.status === 'authenticated') return jsonResponse({ state: 'active' });
-  if (live?.status === 'pending') return jsonResponse({ state: 'pending' });
-  if (live?.status === 'halted') {
-    // Its renewal failed for good: end it, then start a fresh one.
+  const answer = subscribeAnswer(live);
+  if (answer === 'active' || answer === 'pending' || answer === 'starting') return jsonResponse({ state: answer });
+  if (answer === 'replace' && live) {
+    // Halted (renewal failed for good) or paused: end it, then start a fresh one.
     await cancelPlan(admin, live);
     live = null;
   }
-  if (live?.status === 'created') {
+  if (answer === 'reuse' && live) {
     const left = live.auth_expires_at ? new Date(live.auth_expires_at).getTime() - Date.now() : 0;
     if (live.short_url && left > REUSE_MIN_MINUTES * MINUTE) return jsonResponse({ url: live.short_url });
     // About to run out: maybe they paid just now. Otherwise drop it.
     if (live.razorpay_subscription_id) {
       const sub = await fetchSubscription(live.razorpay_subscription_id);
       await applySubscription(admin, sub, Math.floor(Date.now() / 1000));
-      if (sub.status !== 'created') return jsonResponse({ state: sub.status === 'pending' ? 'pending' : 'active' });
-      await cancelAtRazorpay(live.razorpay_subscription_id, false);
+      if (sub.status !== 'created') {
+        const now = await livePlan(admin, parentId);
+        return jsonResponse({ state: subscribeAnswer(now) === 'active' ? 'active' : 'starting' });
+      }
+      await dropAtRazorpay(live.razorpay_subscription_id, 'its first-payment page ran out');
     }
-    await admin
-      .from('care_plans')
-      .update({ status: 'expired', ended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('id', live.id)
-      .eq('status', 'created');
+    await markEndedLocally(admin, live, 'expired');
   }
 
   const authUntil = new Date(Date.now() + AUTH_WINDOW_MINUTES * MINUTE);
   const { data: row, error } = await admin
     .from('care_plans')
     .insert({ parent_id: parentId, razorpay_plan_id: planId, status: 'created', auth_expires_at: authUntil.toISOString() })
-    .select('id')
+    .select(PLAN_COLUMNS)
     .single();
   if (error?.code === '23505') {
     // care_plans_one_live_per_parent_uidx: another tap is making one now.
@@ -150,8 +181,9 @@ async function subscribe(admin: any, parentId: string): Promise<Response> {
     throw e;
   }
   if (!sub.short_url) {
-    await cancelSubscription(sub.id, false).catch(() => undefined);
-    await admin.from('care_plans').update({ status: 'cancelled', razorpay_subscription_id: sub.id }).eq('id', row.id);
+    await admin.from('care_plans').update({ razorpay_subscription_id: sub.id }).eq('id', row.id);
+    await dropAtRazorpay(sub.id, 'Razorpay returned no payment page for it');
+    await markEndedLocally(admin, row as PlanRow);
     return jsonResponse({ error: "Couldn't open the plan page. Please try again." }, 502);
   }
 
@@ -162,8 +194,8 @@ async function subscribe(admin: any, parentId: string): Promise<Response> {
   if (saveErr) {
     // A subscription we can't find again must not take money.
     console.error(`[care-plan] could not save subscription ${sub.id} on ${row.id}: ${saveErr.message}`);
-    await cancelSubscription(sub.id, false).catch(() => undefined);
-    await admin.from('care_plans').update({ status: 'cancelled' }).eq('id', row.id);
+    await dropAtRazorpay(sub.id, 'saving its id failed');
+    await markEndedLocally(admin, row as PlanRow);
     return jsonResponse({ error: "Couldn't open the plan page. Please try again." }, 502);
   }
   return jsonResponse({ url: sub.short_url });

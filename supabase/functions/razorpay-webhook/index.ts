@@ -23,7 +23,7 @@
 //   refund.failed           → payment refund_failed (needs a person: the
 //                             team is emailed once, refundAlerts.ts)
 //   subscription.authenticated / activated / charged / pending / halted /
-//   cancelled / completed   → Care Plan (_shared/carePlan.ts): mirror the
+//   paused / resumed / cancelled / completed   → Care Plan (_shared/carePlan.ts): mirror the
 //                             subscription's status and dates on care_plans
 //                             (older events never overwrite newer ones; the
 //                             event's created_at orders them); charged
@@ -60,6 +60,8 @@ export const SUBSCRIPTION_EVENTS = [
   'subscription.charged',
   'subscription.pending',
   'subscription.halted',
+  'subscription.paused',
+  'subscription.resumed',
   'subscription.cancelled',
   'subscription.completed',
 ];

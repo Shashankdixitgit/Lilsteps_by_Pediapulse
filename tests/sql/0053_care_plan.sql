@@ -114,7 +114,7 @@ select set_config('request.jwt.claim.sub', :'A1', true);
 \o
 set local role authenticated;
 select t('rpc as parent: confirm_consult_with_plan refused', format($q$select public.confirm_consult_with_plan(%L, %L)$q$, :'h4', :'A1'));
-select t('rpc as parent: return_plan_credit refused', format($q$select public.return_plan_credit(%L)$q$, :'h1'));
+select t('rpc as parent: return_plan_credit refused', format($q$select public.return_plan_credit(%L, 'parent')$q$, :'h1'));
 -- ── RLS: own rows only, read only ──
 select v('rls parent A1: sees own plan', 'select count(*) from care_plans');
 select v('rls parent A1: sees own two months', 'select count(*) from care_plan_periods');
@@ -161,9 +161,10 @@ rollback;
 
 -- ── credit back by the rules (consultCancel → return_plan_credit) ──
 update appointments set status = 'cancelled', cancel_reason = 'parent' where id = :'h1';
-select v('return: month still running → "returned"', format($q$select public.return_plan_credit(%L)$q$, :'h1'));
-select v('return: again is idempotent', format($q$select public.return_plan_credit(%L)$q$, :'h1'));
-select v('return: a consult with no plan credit → "none"', format($q$select public.return_plan_credit(%L)$q$, :'h6'));
+select v('return: month still running → "returned"', format($q$select public.return_plan_credit(%L, 'parent')$q$, :'h1'));
+select v('return: again is idempotent', format($q$select public.return_plan_credit(%L, 'doctor')$q$, :'h1'));
+select v('return: a consult with no plan credit → "none"', format($q$select public.return_plan_credit(%L, 'parent')$q$, :'h6'));
+select v('return: who cancelled must be parent or doctor', format($q$select public.return_plan_credit(%L, 'someone')$q$, :'h1'));
 select v('return: slot of the cancelled consult is open again', $q$select is_available from time_slots where id = '51530000-0000-0000-0000-000000000001'$q$);
 select v('plan: the returned credit can be used again', format($q$select public.confirm_consult_with_plan(%L, %L)$q$, :'h4', :'A1'));
 begin;
@@ -181,7 +182,17 @@ values ('aaaaaaaa-0000-0000-0000-0000000000f1','cccccccc-0000-0000-0000-00000000
 insert into care_plan_credit_uses (period_id, appointment_id, parent_id)
 values ('9b000000-0000-0000-0000-000000000000','aaaaaaaa-0000-0000-0000-0000000000f1', :'A1');
 update appointments set status = 'cancelled', cancel_reason = 'doctor' where id = 'aaaaaaaa-0000-0000-0000-0000000000f1';
-select v('return: doctor cancel after the month ended → "rebook_owed"', $q$select public.return_plan_credit('aaaaaaaa-0000-0000-0000-0000000000f1')$q$);
+select v('return: doctor cancel after the month ended → "rebook_owed"', $q$select public.return_plan_credit('aaaaaaaa-0000-0000-0000-0000000000f1', 'doctor')$q$);
+-- Review #1: a PARENT cancel after the month ended gives nothing back and owes nothing
+-- (book at month end, cancel next month must not farm free consults).
+insert into appointments (id, child_id, parent_id, doctor_id, date, time, status, paid_with_plan)
+values ('aaaaaaaa-0000-0000-0000-0000000000f2','cccccccc-0000-0000-0000-000000000001', :'A1',
+        '11111111-0000-0000-0000-000000000001', current_date + 2, '10:30', 'upcoming', true);
+insert into care_plan_credit_uses (period_id, appointment_id, parent_id)
+values ('9b000000-0000-0000-0000-000000000000','aaaaaaaa-0000-0000-0000-0000000000f2', :'A1');
+update appointments set status = 'cancelled', cancel_reason = 'parent' where id = 'aaaaaaaa-0000-0000-0000-0000000000f2';
+select v('return: PARENT cancel after the month ended → "expired" (no free consult)', $q$select public.return_plan_credit('aaaaaaaa-0000-0000-0000-0000000000f2', 'parent')$q$);
+select v('return: ... and a later doctor call can''t turn it into a rebook', $q$select public.return_plan_credit('aaaaaaaa-0000-0000-0000-0000000000f2', 'doctor')$q$);
 select v('appointment_was_paid: a plan consult counts (doctor may message)', $q$select private.appointment_was_paid('aaaaaaaa-0000-0000-0000-0000000000f1')$q$);
 
 -- A ₹449 link paid for a booking that was just confirmed with the plan is refunded.
@@ -201,3 +212,18 @@ select t('one plan email per key and channel', $q$insert into notification_log (
 select t('same plan key on another channel is fine', $q$insert into notification_log (channel, template, recipient, status, payload) values
   ('email','care_plan_renewed','p1@x.in','sent','{"plan_key":"renewed:sub_A1:1"}'),
   ('push','care_plan_renewed','tok','sent','{"plan_key":"renewed:sub_A1:1"}')$q$);
+
+-- Review #6: a paused (or halted) plan gives no plan consults, even inside a paid month.
+begin;
+update care_plans set status = 'paused' where id = '9a000000-0000-0000-0000-000000000001';
+select pg_temp.hold(:'A1', 7) as h7 \gset
+select v('paused plan: booking with the plan is "no_plan"', format($q$select public.confirm_consult_with_plan(%L, %L)$q$, :'h7', :'A1'));
+\o /dev/null
+select set_config('request.jwt.claim.sub', :'A1', true);
+\o
+set local role authenticated;
+select v('paused plan: get_my_care_plan shows paused, no consults', $q$select (p->>'status') || ' left=' || coalesce(p->>'credits_left', 'null') from public.get_my_care_plan() p$q$);
+rollback;
+select t('paused counts as live: no second plan while paused', $q$
+  with x as (update care_plans set status = 'paused' where id = '9a000000-0000-0000-0000-000000000001' returning 1)
+  insert into care_plans (parent_id, status) values ('00000000-0000-0000-0000-0000000000a1', 'created')$q$);

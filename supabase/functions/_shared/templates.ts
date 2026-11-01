@@ -236,6 +236,8 @@ const REFUND_LINES: Record<string, string> = {
     "We couldn't start your refund automatically. Our team will process it by hand — reply to this email if you have any questions.",
   plan_returned: 'This consult has gone back to your Care Plan, so you can use it for another booking this month.',
   plan_used: 'As it was cancelled less than 2 hours before the start, this Care Plan consult counts as used.',
+  plan_expired:
+    'Your Care Plan month had already ended when you cancelled, so this consult could not go back to the plan. Nothing more was charged.',
   plan_rebook:
     'Your Care Plan month has ended, so this consult could not go back to the plan. We will book a free consult for you — our team will be in touch.',
 };

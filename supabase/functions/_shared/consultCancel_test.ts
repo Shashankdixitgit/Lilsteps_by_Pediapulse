@@ -105,6 +105,7 @@ Deno.test('cancel: nothing changes for a cancelled, past or changed booking', as
 function planSetup(when = FAR, monthOver = false) {
   const appt = { id: 'a1', parent_id: 'u1', status: 'upcoming', ...when, last_rescheduled_by: null, rescheduled_at: null };
   const rpcCalls: string[] = [];
+  const rpcArgs: any[] = [];
   const tables: any = {
     appointments: [{ ...appt, paid_with_plan: true }],
     payments: [],
@@ -114,14 +115,16 @@ function planSetup(when = FAR, monthOver = false) {
   const f = fakeAdmin(tables, {
     rpc: (name, args) => {
       rpcCalls.push(name);
+      rpcArgs.push(args);
       const use = tables.care_plan_credit_uses.find((u: any) => u.appointment_id === args.p_appointment_id);
       if (!use) return 'none';
       if (use.status !== 'active') return use.status;
-      use.status = monthOver ? 'rebook_owed' : 'returned';
+      // As return_plan_credit (0053): who cancelled matters once the month is over.
+      use.status = !monthOver ? 'returned' : args.p_by === 'doctor' ? 'rebook_owed' : 'expired';
       return use.status;
     },
   });
-  return { f, appt, rpcCalls };
+  return { f, appt, rpcCalls, rpcArgs };
 }
 
 Deno.test('plan cancel: parent, 2 h or more before → the consult goes back to the plan, no money moves', async () => {
@@ -171,4 +174,20 @@ Deno.test('plan cancel: an unpaid hold never touches plan credits', async () => 
     refund: 'not_paid',
   });
   assertEquals(rpcCalls, []);
+});
+
+Deno.test('plan cancel (review #1): PARENT cancels early but after the plan month ended → expired, no free consult, no alert', async () => {
+  const calls = stubRazorpay();
+  const { f, appt, rpcArgs } = planSetup(FAR, true);
+  assertEquals(await cancelConsult(f.client, appt, { by: 'parent' }), { done: true, refund: 'not_paid', plan: 'expired' });
+  assertEquals(rpcArgs[0].p_by, 'parent', 'the canceller is passed to return_plan_credit');
+  assertEquals(f.tables.care_plan_credit_uses[0].status, 'expired');
+  assertEquals(calls.length, 0);
+});
+
+Deno.test('plan cancel (review #1): account deletion counts as a parent cancel → expired after the month', async () => {
+  stubRazorpay();
+  const { f, appt } = planSetup(FAR, true);
+  const r = await cancelConsult(f.client, appt, { by: 'parent', refundReason: 'account_deleted', awaitAlert: true });
+  assertEquals(r, { done: true, refund: 'not_paid', plan: 'expired' });
 });
