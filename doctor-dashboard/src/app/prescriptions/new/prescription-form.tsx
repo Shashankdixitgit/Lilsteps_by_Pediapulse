@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useMemo, useState, useTransition, type ReactNode } from 'react';
-import { findAllergyClashes, type AllergyInput } from '@/lib/allergy-clash';
+import { allergyCheckText, findAllergyClashes, type AllergyInput } from '@/lib/allergy-clash';
 import { ALLERGIES_NOT_KNOWN_LABEL } from '@/lib/appointments';
 import { doseHint } from '@/lib/dose-hint';
 import { formatDate } from '@/lib/format';
@@ -12,6 +12,7 @@ import {
   ROUTE_OPTIONS,
   RX_LIMITS,
   TIMING_OPTIONS,
+  rxUpper,
   validatePrescription,
   type RxHeaderDraft,
   type RxItemDraft,
@@ -236,7 +237,7 @@ export function PrescriptionForm({
       .map((it, i) => ({
         id: it.key,
         position: i,
-        medicine: it.medicine.trim().toUpperCase(),
+        medicine: rxUpper(it.medicine),
         brand: it.brand.trim() || null,
         strength: it.strength.trim() || null,
         dose: it.dose.trim(),
@@ -380,7 +381,8 @@ export function PrescriptionForm({
 
           <ol className="space-y-4">
             {items.map((item, idx) => {
-              const clashes = findAllergyClashes(item.medicine, allergies);
+              // Generic name and brand, so a brand-only allergy entry is caught too.
+              const clashes = findAllergyClashes(allergyCheckText(item.medicine, item.brand), allergies);
               const invalid = (f: RxRequiredItemField) => showValidation && REQUIRED.includes(f) && !item[f].trim();
               const hint = doseHint(item.dose, item.strength, weightKg);
               const id = (f: string) => `rx-${idx}-${f}`;
@@ -392,7 +394,7 @@ export function PrescriptionForm({
                       <span className="flex items-baseline gap-2">
                         <span className="font-mono text-[13px] font-semibold text-[var(--accent)]">{idx + 1}.</span>
                         <span className="text-[14px] font-semibold text-[var(--ink)]">
-                          {item.medicine.trim() ? item.medicine.trim().toUpperCase() : 'Medicine'}
+                          {item.medicine.trim() ? rxUpper(item.medicine) : 'Medicine'}
                         </span>
                       </span>
                       <span className="flex items-center gap-1">
@@ -422,7 +424,6 @@ export function PrescriptionForm({
                         onChange={(v) => updateItem(item.key, { medicine: v })}
                         placeholder="e.g. PARACETAMOL"
                         maxLength={RX_LIMITS.medicine}
-                        uppercase
                       />
                       <Field
                         id={id('brand')}
@@ -458,7 +459,11 @@ export function PrescriptionForm({
                               <span className="font-semibold text-[var(--accent)]">{hint}</span> · check against the usual range
                             </>
                           ) : weightKg ? (
-                            `Weight ${weightKg} kg · write the dose in mg or ml to see mg/kg`
+                            // No hint when the dose can't be read with confidence (".5 ml",
+                            // "2,5 ml", "15 mg/kg", combination strengths): say so plainly.
+                            item.dose.trim()
+                              ? `Weight ${weightKg} kg · mg/kg not worked out for this dose, check it yourself`
+                              : `Weight ${weightKg} kg`
                           ) : (
                             'Weight not recorded: confirm it before weight-based dosing'
                           )}
@@ -513,7 +518,7 @@ export function PrescriptionForm({
                       </div>
                     </div>
 
-                    {allergiesNotKnown && item.medicine.trim() && (
+                    {allergiesNotKnown && (item.medicine.trim() || item.brand.trim()) && (
                       <div
                         role="note"
                         style={{ borderLeftColor: 'var(--ink)' }}
@@ -847,7 +852,6 @@ function Field({
   optional,
   invalid,
   maxLength,
-  uppercase,
   list,
   type = 'text',
   min,
@@ -862,7 +866,6 @@ function Field({
   optional?: boolean;
   invalid?: boolean;
   maxLength?: number;
-  uppercase?: boolean;
   list?: string;
   type?: 'text' | 'date';
   min?: string;
@@ -884,7 +887,7 @@ function Field({
         required={required}
         aria-invalid={invalid || undefined}
         autoComplete="off"
-        className={`${boxInput} ${uppercase ? 'uppercase placeholder:normal-case' : ''}`}
+        className={boxInput}
         style={invalidStyle(invalid)}
       />
     </div>

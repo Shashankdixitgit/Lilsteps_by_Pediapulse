@@ -65,6 +65,20 @@ export const FREQUENCY_SUGGESTIONS = [
 ] as const;
 export const DURATION_SUGGESTIONS = ['3 days', '5 days', '7 days', '10 days', '2 weeks', 'Until review'] as const;
 
+/**
+ * A generic name in capitals (IMC Regulations 2002 §1.5: "generic names,
+ * legibly and preferably in capital letters"). The micro sign is written
+ * out first, because "µg".toUpperCase() is the Greek capital "ΜG", which
+ * reads as MG (a thousandfold error): µg / μg → MCG.
+ */
+export function rxUpper(s: string): string {
+  return s
+    .trim()
+    .replace(/[\u00B5\u03BC]\s*g/gi, 'mcg')
+    .replace(/[\u00B5\u03BC]/g, 'mc')
+    .toUpperCase();
+}
+
 const tooLong = (v: string | undefined, max: number) => (v?.trim().length ?? 0) > max;
 
 /**

@@ -289,10 +289,20 @@ comment on table public.doctor_saved_medicines is
 -- The list is read per doctor, newest first.
 create index if not exists doctor_saved_medicines_doctor_created_idx
   on public.doctor_saved_medicines (doctor_id, created_at desc);
--- Saving the same row twice is a no-op for the doctor (the action reports "already saved").
+-- Saving the same row twice is a no-op for the doctor (the action reports
+-- "already saved"). Every field the doctor picks counts, so the same drug
+-- saved with another brand, duration, route or timing is a separate entry.
 create unique index if not exists doctor_saved_medicines_one_per_row_uidx
   on public.doctor_saved_medicines (
-    doctor_id, lower(medicine), coalesce(lower(strength), ''), coalesce(lower(dose), ''), coalesce(lower(frequency), '')
+    doctor_id,
+    lower(medicine),
+    coalesce(lower(brand), ''),
+    coalesce(lower(strength), ''),
+    coalesce(lower(dose), ''),
+    coalesce(lower(frequency), ''),
+    coalesce(lower(duration), ''),
+    coalesce(lower(route), ''),
+    coalesce(lower(timing), '')
   );
 
 alter table public.doctor_saved_medicines enable row level security;

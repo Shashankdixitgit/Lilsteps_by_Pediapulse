@@ -56,33 +56,55 @@ type RxItem = {
   duration: string | null;
   notes: string | null;
   position: number;
+  /** Migration 0055; absent or null on older prescriptions. */
+  brand?: string | null;
+  strength?: string | null;
+  route?: string | null;
+  timing?: string | null;
 };
+
+type RxForText = {
+  notes: string | null;
+  issued_at: string;
+  /** Migration 0055; absent or null on older prescriptions. */
+  diagnosis?: string | null;
+  prescription_items: RxItem[];
+};
+
+/** One prescription as plain-text lines for the parent's visit summary. */
+export function prescriptionLines(p: RxForText): string[] {
+  const lines: string[] = [];
+  if (p.diagnosis?.trim()) lines.push(`Diagnosis: ${p.diagnosis.trim()}`);
+  [...p.prescription_items]
+    .sort((a, b) => a.position - b.position)
+    .forEach((it) => {
+      const name = it.brand?.trim() ? `${it.medicine} (${it.brand.trim()})` : it.medicine;
+      // Item notes ("only if fever over 100°F") are part of the dose.
+      lines.push(
+        [name, it.strength, it.dose, it.route, it.frequency, it.timing, it.duration, it.notes]
+          .filter((x) => x && x.trim())
+          .join(' · '),
+      );
+    });
+  if (p.notes?.trim()) lines.push(`Note: ${p.notes.trim()}`);
+  return lines;
+}
 
 /** Plain-text list of every prescription issued for this appointment, or null. */
 export async function prescriptionText(
   supabase: SupabaseClient,
   appointmentId: string,
 ): Promise<string | null> {
+  // `*` so the 0055 columns are included once applied, and nothing breaks before.
   const { data } = await supabase
     .from('prescriptions')
-    .select('notes, issued_at, prescription_items(medicine, dose, frequency, duration, notes, position)')
+    .select('*, prescription_items(*)')
     .eq('appointment_id', appointmentId)
     .order('issued_at', { ascending: true })
-    .returns<{ notes: string | null; issued_at: string; prescription_items: RxItem[] }[]>();
+    .returns<RxForText[]>();
   if (!data || data.length === 0) return null;
 
-  const lines: string[] = [];
-  data.forEach((p) => {
-    [...p.prescription_items]
-      .sort((a, b) => a.position - b.position)
-      .forEach((it) => {
-        // Item notes ("after food", "only if fever over 100°F") are part of the dose.
-        lines.push(
-          [it.medicine, it.dose, it.frequency, it.duration, it.notes].filter((x) => x && x.trim()).join(' · '),
-        );
-      });
-    if (p.notes?.trim()) lines.push(`Note: ${p.notes.trim()}`);
-  });
+  const lines = data.flatMap(prescriptionLines);
   return lines.length ? lines.join('\n') : null;
 }
 

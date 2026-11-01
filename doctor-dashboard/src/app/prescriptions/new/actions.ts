@@ -5,6 +5,7 @@ import { syncConsultationPrescription } from '@/lib/consultations';
 import { todayIst } from '@/lib/format';
 import {
   RX_LIMITS,
+  rxUpper,
   validatePrescription,
   type RxHeaderDraft,
   type RxItemDraft,
@@ -110,7 +111,7 @@ export async function createPrescriptionAction(params: {
     // Generic names in capitals (IMC Regulations 2002 §1.5: "generic names,
     // legibly and preferably in capital letters"); the brand stays as typed.
     items: params.items.map((it) => ({
-      medicine: it.medicine.trim().toUpperCase(),
+      medicine: rxUpper(it.medicine),
       brand: clean(it.brand),
       strength: clean(it.strength),
       dose: it.dose.trim(),
@@ -176,7 +177,7 @@ export async function createPrescriptionAction(params: {
 
 /** Saves one medicine row to the signed-in doctor's list. RLS keeps it theirs. */
 export async function saveMedicineAction(item: RxItemDraft): Promise<{ error?: string; saved?: SavedMedicine }> {
-  const medicine = item.medicine.trim().toUpperCase();
+  const medicine = rxUpper(item.medicine);
   if (!medicine) return { error: 'Add the generic name before saving' };
   if (
     medicine.length > RX_LIMITS.medicine ||
