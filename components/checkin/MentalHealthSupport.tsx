@@ -19,7 +19,7 @@ export function objectPronoun(sex: string | null | undefined): string {
 
 /**
  * C2 (decided by Shashank, Claude's suggested default; wording pending
- * Dr Atish sign-off): what a parent sees when they raise a mental-health
+ * Dr Madhav sign-off): what a parent sees when they raise a mental-health
  * concern. 'concern': calm message + Tele-MANAS 14416 + Book a doctor.
  * 'crisis' (self-harm / suicide words): the 112 emergency card comes first.
  *

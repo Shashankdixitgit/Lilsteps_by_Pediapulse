@@ -46,7 +46,7 @@ export default function DietOlderScreen() {
       </View>
 
       {answers.bodyImage === 'Yes' ? (
-        // Gentle follow-up (C2 tone; wording pending Dr Atish sign-off).
+        // Gentle follow-up (C2 tone; wording pending Dr Madhav sign-off).
         <View style={styles.note} accessibilityLiveRegion="polite">
           <Ionicons name="heart-outline" size={18} color={AppColors.secondary} style={styles.noteIcon} />
           <View style={styles.noteText}>

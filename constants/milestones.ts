@@ -9,7 +9,7 @@
  * sensible school-age / teen checkpoints (self-care, learning, friendships,
  * feelings, activity, sleep, puberty).
  *
- * CLINICAL CONTENT: PENDING DOCTOR REVIEW (Dr Atish). Not shown to parents
+ * CLINICAL CONTENT: PENDING DOCTOR REVIEW (Dr Madhav). Not shown to parents
  * as "pending"; see MILESTONES_REVIEW below. Change the lists only with the
  * reviewing doctor's sign-off.
  *
@@ -21,7 +21,7 @@
 /** Review status of this file's clinical content. Internal only. */
 export const MILESTONES_REVIEW = {
   status: 'pending-doctor-review',
-  reviewer: 'Dr Atish',
+  reviewer: 'Dr Madhav',
   sources: ['CDC Learn the Signs. Act Early. (2022)', 'IAP developmental surveillance guidance'],
 } as const;
 

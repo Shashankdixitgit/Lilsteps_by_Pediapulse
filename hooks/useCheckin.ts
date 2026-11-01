@@ -85,7 +85,7 @@ const DANGER_LEVEL_REGEX = /\[DANGER_LEVEL:\s*([^\]]*)\]/;
 /**
  * 'emergency': a fit, blue lips or skin, can't be woken or severe breathing
  * difficulty: call 112 / go to hospital now. 'urgent': be seen today.
- * Pending Dr Atish sign-off (C5).
+ * Pending Dr Madhav sign-off (C5).
  */
 export type DangerLevel = 'emergency' | 'urgent';
 

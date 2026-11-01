@@ -56,7 +56,7 @@ maestro test .maestro --include-tags=parent,auth
   For now the signup flow stops at the OTP screen.
 - **`appId: host.exp.Exponent`** runs against Expo Go. Once you
   `npx expo run:ios` or `eas build` to get a real dev client, update the
-  `appId` in each flow to your bundle id (`com.pediapulse.lilsteps`).
+  `appId` in each flow to your bundle id (`com.lilstepsclinics.app`).
 - **testID** props: flows assume tab `id` props (`growth`, `records`,
   `index`) and form input `id` props (`name`, `phone`). Add `testID` to
   the relevant components if Maestro can't find them.
