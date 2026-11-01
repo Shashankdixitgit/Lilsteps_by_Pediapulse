@@ -17,6 +17,7 @@ type PrescriptionRow = {
     dose: string;
     frequency: string;
     duration: string | null;
+    notes: string | null;
     position: number;
   }[];
 };
@@ -32,7 +33,7 @@ export default async function PrescriptionsPage({
   let q = supabase
     .from('prescriptions')
     .select(
-      'id, issued_at, notes, child_id, appointment_id, children(id, name, dob, parents(name)), prescription_items(id, medicine, dose, frequency, duration, position)',
+      'id, issued_at, notes, child_id, appointment_id, children(id, name, dob, parents(name)), prescription_items(id, medicine, dose, frequency, duration, notes, position)',
     )
     .order('issued_at', { ascending: false });
 
@@ -40,10 +41,14 @@ export default async function PrescriptionsPage({
 
   const { data, error } = await q.returns<PrescriptionRow[]>();
 
-  const childName = data?.find((p) => p.children?.id === childFilter)?.children?.name;
+  // From the child row, so the heading is right even before anything is issued.
+  const { data: filteredChild } = childFilter
+    ? await supabase.from('children').select('name').eq('id', childFilter).maybeSingle<{ name: string }>()
+    : { data: null };
+  const childName = filteredChild?.name ?? data?.find((p) => p.children?.id === childFilter)?.children?.name;
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-12">
+    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-12 sm:px-8">
       {issued && (
         <Suspense>
           <FlashToast param="issued" message="Prescription issued — the parent can now see it in the app" />
@@ -90,13 +95,17 @@ export default async function PrescriptionsPage({
             return (
               <li
                 key={p.id}
-                className="fade-up grid grid-cols-[3.5rem_1fr] gap-6 border-t border-[var(--hairline)] pt-6"
+                className="fade-up grid grid-cols-[3.5rem_1fr] gap-3 border-t sm:gap-6 border-[var(--hairline)] pt-6"
                 style={{ animationDelay: `${idx * 60}ms` }}
               >
-                <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-4)]">
+                {/* A stable reference (start of the id), not the list position. */}
+                <div
+                  className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-4)]"
+                  title={`Prescription ${p.id}`}
+                >
                   Rx
                   <br />
-                  {String(idx + 1).padStart(3, '0')}
+                  {p.id.slice(0, 6)}
                 </div>
                 <div>
                   <div className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 border-b border-[var(--hairline)] pb-3">
@@ -145,13 +154,18 @@ export default async function PrescriptionsPage({
                               {it.dose} · {it.frequency}
                               {it.duration ? ` · ${it.duration}` : ''}
                             </div>
+                            {it.notes && (
+                              <div className="mt-1 whitespace-pre-line break-words text-[14px] leading-[1.5] text-[var(--ink-2)]">
+                                {it.notes}
+                              </div>
+                            )}
                           </div>
                         </li>
                       ))}
                     </ul>
                   )}
                   {p.notes && (
-                    <p className="mt-5 border-l-2 border-[var(--highlight)] bg-[var(--card-overlay)] py-3 px-4 font-display-italic text-[15px] leading-[1.55] text-[var(--ink-2)]">
+                    <p className="mt-5 whitespace-pre-line break-words border-l-2 border-[var(--highlight)] bg-[var(--card-overlay)] py-3 px-4 font-display-italic text-[15px] leading-[1.55] text-[var(--ink-2)]">
                       {p.notes}
                     </p>
                   )}

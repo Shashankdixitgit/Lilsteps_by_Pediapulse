@@ -25,7 +25,8 @@ function utcNoon(iso: string): Date {
 }
 
 export function isIsoDate(v: string | undefined): v is string {
-  return !!v && ISO_DATE.test(v) && !Number.isNaN(utcNoon(v).getTime());
+  // The round trip rejects impossible dates (2026-02-30 would roll to March).
+  return !!v && ISO_DATE.test(v) && !Number.isNaN(utcNoon(v).getTime()) && utcNoon(v).toISOString().slice(0, 10) === v;
 }
 
 export function isIsoMonth(v: string | undefined): v is string {

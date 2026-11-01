@@ -29,15 +29,22 @@ export function UnreadBadge() {
     void refresh();
   }, [refresh, pathname]);
 
+  // New messages and read receipts (read_at UPDATEs). Debounced: when a
+  // message lands in the thread the doctor has open, the thread marks it read
+  // a moment later, so recounting straight away would flash a stale badge.
   useEffect(() => {
     const supabase = createSupabaseBrowserClient();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const later = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => void refresh(), 1500);
+    };
     const channel = supabase
       .channel('dashboard-unread')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, () => {
-        void refresh();
-      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, later)
       .subscribe();
     return () => {
+      clearTimeout(timer);
       supabase.removeChannel(channel);
     };
   }, [refresh]);

@@ -11,8 +11,9 @@ function todayIso() {
 export function GenerateForm() {
   const [startDate, setStartDate] = useState(todayIso());
   const [days, setDays] = useState(7);
-  const [startHour, setStartHour] = useState(9);
-  const [endHour, setEndHour] = useState(17);
+  // Clinic hours: mornings 10–13, evenings 17–20.
+  const [startHour, setStartHour] = useState(10);
+  const [endHour, setEndHour] = useState(13);
   const [interval, setInterval] = useState<15 | 30 | 45 | 60>(30);
   const [skipSundays, setSkipSundays] = useState(true);
 
@@ -46,9 +47,28 @@ export function GenerateForm() {
         </p>
       </div>
 
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">Clinic hours</span>
+        {PRESETS.map((p) => (
+          <button
+            key={p.label}
+            type="button"
+            aria-pressed={startHour === p.start && endHour === p.end}
+            onClick={() => {
+              setStartHour(p.start);
+              setEndHour(p.end);
+            }}
+            className={`editorial-btn-ghost btn-sm ${startHour === p.start && endHour === p.end ? '!border-[var(--ink)] !bg-[var(--accent-pale)]' : ''}`}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
-        <Field label="Start date">
+        <Field label="Start date" htmlFor="gen-start-date">
           <input
+            id="gen-start-date"
             type="date"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
@@ -56,8 +76,9 @@ export function GenerateForm() {
             className="editorial-input"
           />
         </Field>
-        <Field label="Days to generate">
+        <Field label="Days to generate" htmlFor="gen-days">
           <input
+            id="gen-days"
             type="number"
             min={1}
             max={30}
@@ -66,8 +87,9 @@ export function GenerateForm() {
             className="editorial-input"
           />
         </Field>
-        <Field label="Start hour (24h)">
+        <Field label="Start hour (24h)" htmlFor="gen-start-hour">
           <input
+            id="gen-start-hour"
             type="number"
             min={0}
             max={23}
@@ -76,8 +98,9 @@ export function GenerateForm() {
             className="editorial-input"
           />
         </Field>
-        <Field label="End hour (24h)">
+        <Field label="End hour (24h)" htmlFor="gen-end-hour">
           <input
+            id="gen-end-hour"
             type="number"
             min={1}
             max={24}
@@ -86,8 +109,9 @@ export function GenerateForm() {
             className="editorial-input"
           />
         </Field>
-        <Field label="Slot length">
+        <Field label="Slot length" htmlFor="gen-interval">
           <select
+            id="gen-interval"
             value={interval}
             onChange={(e) => setInterval(parseInt(e.target.value, 10) as 15 | 30 | 45 | 60)}
             className="editorial-input"
@@ -113,6 +137,7 @@ export function GenerateForm() {
 
       {feedback && (
         <p
+          role={feedback.kind === 'err' ? 'alert' : 'status'}
           className={`border-l-2 pl-3 font-mono text-[11px] uppercase tracking-[0.12em] ${
             feedback.kind === 'ok'
               ? 'border-[var(--accent)] text-[var(--accent)]'
@@ -132,12 +157,22 @@ export function GenerateForm() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+const PRESETS = [
+  { label: 'Morning 10–13', start: 10, end: 13 },
+  { label: 'Evening 17–20', start: 17, end: 20 },
+];
+
+function Field({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
+  const cls = 'font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]';
   return (
     <div>
-      <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
-        {label}
-      </label>
+      {htmlFor ? (
+        <label htmlFor={htmlFor} className={cls}>
+          {label}
+        </label>
+      ) : (
+        <div className={cls}>{label}</div>
+      )}
       <div className="mt-1">{children}</div>
     </div>
   );

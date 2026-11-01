@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import { loginAction, type LoginState } from './actions';
 
-export function LoginForm({ initialError }: { initialError: string | null }) {
+export function LoginForm({ initialError, next }: { initialError: string | null; next?: string }) {
   const [state, formAction, pending] = useActionState<LoginState, FormData>(
     loginAction,
     initialError ? { error: initialError } : null,
@@ -11,6 +11,7 @@ export function LoginForm({ initialError }: { initialError: string | null }) {
 
   return (
     <form action={formAction} className="space-y-7 fade-up" style={{ animationDelay: '80ms' }}>
+      {next && <input type="hidden" name="next" value={next} />}
       <div>
         <label
           htmlFor="email"
@@ -48,7 +49,7 @@ export function LoginForm({ initialError }: { initialError: string | null }) {
       </div>
 
       {state?.error && (
-        <p className="border-l-2 border-[var(--alert)] pl-3 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--alert)]">
+        <p role="alert" className="border-l-2 border-[var(--alert)] pl-3 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--alert)]">
           {state.error}
         </p>
       )}

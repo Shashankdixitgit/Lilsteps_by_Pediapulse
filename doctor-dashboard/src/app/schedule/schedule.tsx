@@ -4,7 +4,6 @@ import {
   KIND_LABEL,
   KIND_STYLE,
   SLOT_MINUTES,
-  VIEW_LABEL,
   addDays,
   dayOfMonth,
   dayTitle,
@@ -20,8 +19,10 @@ import {
   type EventKind,
 } from '@/lib/calendar';
 import { UrgencyBadge } from '../urgency-badge';
+import { DateJump } from './date-jump';
 import { GridScroller } from './grid-scroller';
 import { NowLine } from './now-line';
+import { ViewMenu } from './view-menu';
 
 export type CalEvent = {
   id: string;
@@ -127,7 +128,10 @@ export function Schedule({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <ViewMenu nav={nav} href={href} />
+              <ViewMenu
+                view={nav.view}
+                links={([1, 3, 7] as CalendarView[]).map((v) => ({ view: v, href: href({ view: v }) }))}
+              />
               <Link href={href({ anchor: today })} className="editorial-btn-ghost btn-sm">
                 Today
               </Link>
@@ -140,6 +144,12 @@ export function Schedule({
                 </Link>
               </div>
             </div>
+          </div>
+
+          {/* Below lg the left rail is hidden: a date picker and the colour key instead. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-[var(--hairline)] px-4 py-2.5 sm:px-5 lg:hidden">
+            <DateJump value={nav.anchor} today={today} view={nav.view} />
+            <Legend compact />
           </div>
 
           {/* Narrow screens: the next visit, then an agenda list. */}
@@ -264,33 +274,6 @@ function Stat({ label, value }: { label: string; value: number }) {
       <dd className="font-display text-[26px] leading-none text-[var(--ink)]">{value}</dd>
       <dt className="mt-1 text-[11px] leading-tight text-[var(--ink-3)]">{label}</dt>
     </div>
-  );
-}
-
-function ViewMenu({ nav, href }: { nav: Nav; href: (p: Partial<Nav>) => string }) {
-  const views: CalendarView[] = [1, 3, 7];
-  return (
-    <details className="relative hidden md:block [&_summary::-webkit-details-marker]:hidden">
-      <summary className="editorial-btn-ghost btn-sm list-none" aria-label={`View: ${VIEW_LABEL[nav.view]}`}>
-        {VIEW_LABEL[nav.view]}
-        <span aria-hidden className="text-[10px] text-[var(--ink-3)]">▾</span>
-      </summary>
-      <ul className="absolute right-0 z-40 mt-2 w-36 rounded-xl border border-[var(--hairline-strong)] bg-[var(--card)] p-1 shadow-[2px_2px_0_var(--ink)]">
-        {views.map((v) => (
-          <li key={v}>
-            <Link
-              href={href({ view: v })}
-              aria-current={v === nav.view ? 'true' : undefined}
-              className={`block rounded-lg px-3 py-2 text-[13.5px] ${
-                v === nav.view ? 'bg-[var(--accent-pale)] font-semibold text-[var(--accent)]' : 'text-[var(--ink-2)] hover:bg-[var(--paper-soft)]'
-              }`}
-            >
-              {VIEW_LABEL[v]}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </details>
   );
 }
 
@@ -522,7 +505,23 @@ function MiniMonth({
   );
 }
 
-function Legend({ className }: { className?: string }) {
+function Legend({ className, compact }: { className?: string; compact?: boolean }) {
+  if (compact) {
+    return (
+      <ul aria-label="Colours" className={`flex flex-wrap gap-x-3 gap-y-1 ${className ?? ''}`}>
+        {ORDERED_KINDS.map((k) => (
+          <li key={k} className="flex items-center gap-1.5 text-[11.5px] text-[var(--ink-2)]">
+            <span
+              aria-hidden
+              className="h-3 w-3 rounded-[3px] border-l-[3px]"
+              style={{ background: KIND_STYLE[k].bg, borderLeftColor: KIND_STYLE[k].bar }}
+            />
+            {KIND_LABEL[k]}
+          </li>
+        ))}
+      </ul>
+    );
+  }
   return (
     <div className={className}>
       <Eyebrow>Colours</Eyebrow>

@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { fetchAllergiesNotKnown, fetchConcerns, noAllergiesLabel } from '@/lib/appointments';
 import { parseVisitNotes, severityLabel } from '@/lib/consultations';
 import { getCurrentDoctor, hasVideoLink } from '@/lib/doctor';
-import { computeAge, dateStamp, formatClock, formatDate, formatDateTime, formatSlotTime, nowIstTime, todayIst } from '@/lib/format';
+import { computeAge, dateStamp, formatClock, formatDate, formatDateTime, formatDayShort, formatSlotTime, nowIstTime, todayIst } from '@/lib/format';
 import { parentContact } from '@/lib/parent';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { vaccineBucket } from '@/lib/vaccines';
@@ -12,6 +12,7 @@ import { FlashToast } from '../../flash-toast';
 import { LateBadge, UrgencyBadge } from '../../urgency-badge';
 import { VideoLinkBanner } from '../../video-link-banner';
 import { OnboardingAnswersList, onboardingAnswersEyebrow, type OnboardingAnswers } from './onboarding-answers';
+import { CancelConsultButton } from './cancel-consult-button';
 import { OpenChatButton } from './open-chat-button';
 import { VisitNotesForm } from './visit-notes';
 
@@ -46,7 +47,7 @@ type PrescriptionRow = {
   id: string;
   issued_at: string;
   notes: string | null;
-  prescription_items: { id: string; medicine: string; dose: string; frequency: string; duration: string | null; position: number }[];
+  prescription_items: { id: string; medicine: string; dose: string; frequency: string; duration: string | null; notes: string | null; position: number }[];
 };
 
 type HealthNoteRow = {
@@ -163,7 +164,7 @@ export default async function ConsultationPage({
     fetchConcerns(supabase, [appointment.id]),
     supabase.from('health_notes').select('id, category, content, severity, noted_at').eq('child_id', child.id).order('noted_at', { ascending: false }).limit(HEALTH_NOTES_LIMIT).returns<HealthNoteRow[]>(),
     fetchAllergiesNotKnown(supabase, child.id),
-    supabase.from('prescriptions').select('id, issued_at, notes, prescription_items(id, medicine, dose, frequency, duration, position)').eq('appointment_id', appointment.id).order('issued_at', { ascending: true }).returns<PrescriptionRow[]>(),
+    supabase.from('prescriptions').select('id, issued_at, notes, prescription_items(id, medicine, dose, frequency, duration, notes, position)').eq('appointment_id', appointment.id).order('issued_at', { ascending: true }).returns<PrescriptionRow[]>(),
     // The full check-in conversation behind the summary. Needs a doctor
     // SELECT policy on checkin_messages; without one this is simply empty.
     appointment.ai_summary_id
@@ -216,7 +217,7 @@ export default async function ConsultationPage({
   const lastMeasured = growth?.[0]?.measured_at ?? null;
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-10">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-8">
       {issued && (
         <Suspense>
           <FlashToast param="issued" message={`Prescription issued to ${firstName}'s parent`} />
@@ -272,6 +273,15 @@ export default async function ConsultationPage({
           <Link href={`/prescriptions?child=${child.id}`} className="editorial-btn-ghost">
             Past prescriptions
           </Link>
+          {appointment.status === 'upcoming' && (
+            <span className="flex flex-wrap items-center gap-3 sm:ml-auto">
+              <CancelConsultButton
+                appointmentId={appointment.id}
+                childFirstName={firstName}
+                when={`${formatDayShort(appointment.date)}, ${formatSlotTime(appointment.time)}`}
+              />
+            </span>
+          )}
         </div>
       </header>
 
@@ -378,6 +388,7 @@ export default async function ConsultationPage({
               <>
                 {(overdueVaccines.length > 0 || upcomingVaccines.length > 0 || yearlyVaccines.length > 0 || otherVaccines.length > 0) && (
                   <Table
+                    stackOnPhone
                     head={['Vaccine', 'Dose', 'Status']}
                     rows={[
                       ...overdueVaccines.map((v) => [v.vaccine_name, v.dose_label, <b key="s">Overdue · due {formatDate(v.scheduled_date)}</b>]),
@@ -394,6 +405,7 @@ export default async function ConsultationPage({
                 {upcomingVaccines.length > UPCOMING_PREVIEW && (
                   <Fold label={`Show ${upcomingVaccines.length - UPCOMING_PREVIEW} later doses`}>
                     <Table
+                      stackOnPhone
                       head={['Vaccine', 'Dose', 'Status']}
                       rows={upcomingVaccines.slice(UPCOMING_PREVIEW).map((v) => [v.vaccine_name, v.dose_label, `Due ${formatDate(v.scheduled_date)}`])}
                     />
@@ -402,6 +414,7 @@ export default async function ConsultationPage({
                 {doneVaccines.length > 0 && (
                   <Fold label={`Show ${doneVaccines.length} given`}>
                     <Table
+                      stackOnPhone
                       head={['Vaccine', 'Dose', 'Given']}
                       rows={doneVaccines.map((v) => [
                         v.vaccine_name,
@@ -489,10 +502,15 @@ export default async function ConsultationPage({
                               · {it.dose} · {it.frequency}
                               {it.duration ? ` · ${it.duration}` : ''}
                             </span>
+                            {it.notes && (
+                              <span className="block whitespace-pre-line break-words text-[13px] text-[var(--ink-2)]">
+                                {it.notes}
+                              </span>
+                            )}
                           </li>
                         ))}
                     </ul>
-                    {p.notes && <p className="mt-1 text-[13px] text-[var(--ink-3)]">Note: {p.notes}</p>}
+                    {p.notes && <p className="mt-1 whitespace-pre-line break-words text-[13px] text-[var(--ink-3)]">Note: {p.notes}</p>}
                   </div>
                 ))}
               </div>
@@ -616,14 +634,41 @@ function Table({
   head,
   rows,
   compact,
+  stackOnPhone,
   className,
 }: {
   head?: string[];
   rows: React.ReactNode[][];
   compact?: boolean;
+  /** Below sm each row becomes a small stack (name, then the rest) instead of
+   *  three squeezed columns. */
+  stackOnPhone?: boolean;
   className?: string;
 }) {
   const pad = compact ? 'px-3 py-2' : 'px-4 py-2.5';
+  if (stackOnPhone) {
+    return (
+      <>
+        <ul className={`divide-y divide-[var(--hairline)] rounded-xl border border-[var(--hairline)] sm:hidden ${className ?? ''}`}>
+          {rows.map((r, i) => (
+            <li key={i} className="px-4 py-2.5 text-[14px] leading-[1.5]">
+              <div className="text-[var(--ink)]">
+                {r[0]} {r[1] ? <span className="text-[var(--ink-3)]">· {r[1]}</span> : null}
+              </div>
+              {r.slice(2).map((cell, j) => (
+                <div key={j} className="text-[13px] text-[var(--ink-2)]">
+                  {cell}
+                </div>
+              ))}
+            </li>
+          ))}
+        </ul>
+        <div className="hidden sm:block">
+          <Table head={head} rows={rows} compact={compact} className={className} />
+        </div>
+      </>
+    );
+  }
   return (
     <div className={`overflow-x-auto rounded-xl border border-[var(--hairline)] ${className ?? ''}`}>
       <table className="w-full border-collapse text-left text-[14px]">

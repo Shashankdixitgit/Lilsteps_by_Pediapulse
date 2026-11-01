@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextRequest, NextResponse } from 'next/server';
+import { safeNext } from '@/lib/safe-next';
 
 /**
  * Refresh the auth session on every request and gate all routes except
@@ -40,8 +41,12 @@ export async function proxy(req: NextRequest) {
   if (isPublicVideo) return res;
 
   if (!user && !isLoginRoute) {
+    // Remember where the doctor was going; sign-in sends them back there.
     const url = req.nextUrl.clone();
+    const back = path + req.nextUrl.search;
     url.pathname = '/login';
+    url.search = '';
+    if (back !== '/') url.searchParams.set('next', back);
     return NextResponse.redirect(url);
   }
 
@@ -62,9 +67,8 @@ export async function proxy(req: NextRequest) {
   }
 
   if (user && isLoginRoute) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/';
-    return NextResponse.redirect(url);
+    const target = safeNext(req.nextUrl.searchParams.get('next'));
+    return NextResponse.redirect(new URL(target, req.nextUrl.origin));
   }
 
   return res;

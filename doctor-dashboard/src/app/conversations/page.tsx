@@ -2,9 +2,10 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { fetchUrgentChildIds } from '@/lib/appointments';
 import { getCurrentDoctor } from '@/lib/doctor';
-import { timeAgo, todayIst } from '@/lib/format';
+import { computeAge, timeAgo, todayIst } from '@/lib/format';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { UrgencyBadge } from '../urgency-badge';
+import { InboxRealtime } from './inbox-realtime';
 import { chatParentLabel } from './parent-label';
 
 type ConversationRow = {
@@ -68,7 +69,8 @@ export default async function ConversationsPage() {
   );
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-12">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-12 sm:px-8">
+      <InboxRealtime />
       <header className="mb-10 fade-up">
         <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
           Inbox
@@ -111,7 +113,7 @@ export default async function ConversationsPage() {
             >
               <Link
                 href={`/conversations/${c.id}`}
-                className={`group grid grid-cols-[3rem_1fr_auto] items-start gap-6 py-6 transition-colors hover:bg-[var(--card-overlay)] ${
+                className={`group grid grid-cols-[2.5rem_1fr_auto] items-start gap-3 py-6 sm:grid-cols-[3rem_1fr_auto] sm:gap-6 transition-colors hover:bg-[var(--card-overlay)] ${
                   urgent ? 'border-l-[3px] border-l-[var(--ink)] bg-[var(--paper-soft)] pl-4' : 'px-0'
                 }`}
               >
@@ -119,10 +121,16 @@ export default async function ConversationsPage() {
                   {String(idx + 1).padStart(3, '0')}
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-baseline gap-3">
-                    <span className="font-display-italic text-[26px] leading-tight text-[var(--ink)]">
+                  <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                    <span className="font-display-italic text-[22px] leading-tight text-[var(--ink)] sm:text-[26px]">
                       {c.children?.name ?? 'Unknown'}
                     </span>
+                    {/* Age tells apart two children with the same name. */}
+                    {c.children?.dob && (
+                      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
+                        {computeAge(c.children.dob)}
+                      </span>
+                    )}
                     {unread > 0 && (
                       <span className="rounded-full bg-[var(--ink)] px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-[var(--paper)]">
                         {unread} new

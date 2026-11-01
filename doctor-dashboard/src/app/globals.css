@@ -20,7 +20,7 @@
   --ink: #0b1632;
   --ink-2: #3b3f55;
   --ink-3: #65687b;
-  --ink-4: #a4a5b2;
+  --ink-4: #696b7d; /* >=4.5:1 on paper, paper-soft and card (WCAG AA) */
   --hairline: rgba(11, 22, 50, 0.1);
   --hairline-strong: rgba(11, 22, 50, 0.22);
 
@@ -42,11 +42,6 @@
   --coral: #e0533a;        /* now line, urgent */
   --amber: #d98a1c;        /* see in 1–2 days */
   --mint: #1f8a6e;         /* booked directly (flent green) */
-
-  /* Type ramp — pulled from next/font CSS vars set in layout.tsx */
-  --font-display: var(--font-inter), system-ui, sans-serif;
-  --font-sans: var(--font-inter), system-ui, sans-serif;
-  --font-mono: var(--font-inter), system-ui, sans-serif;
 }
 
 @theme inline {
@@ -63,9 +58,11 @@
   --color-accent-pale: var(--accent-pale);
   --color-alert: var(--alert);
   --color-highlight: var(--highlight);
-  --font-display: var(--font-display);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
+  /* Type ramp — Inter from next/font (layout.tsx sets --font-inter). Set
+     directly here, never var(--font-sans) → itself. */
+  --font-display: var(--font-inter), system-ui, sans-serif;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-mono: var(--font-inter), system-ui, sans-serif;
 }
 
 * {
@@ -160,6 +157,11 @@ body {
 .editorial-input:focus {
   outline: none;
   border-bottom-color: var(--ink);
+}
+.editorial-input:focus-visible {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 2px;
+  border-radius: 2px;
 }
 
 /* Buttons — sentence case, rounded, ink outline with a hard offset shadow

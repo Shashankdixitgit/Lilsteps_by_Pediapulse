@@ -3,6 +3,8 @@
 import { useRef, useState, useTransition } from 'react';
 import { sendMessageAction } from './actions';
 
+const MAX_MESSAGE = 4000;
+
 export function Composer({ conversationId }: { conversationId: string }) {
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -14,13 +16,19 @@ export function Composer({ conversationId }: { conversationId: string }) {
     const content = draft.trim();
     if (!content) return;
     setError(null);
-    setDraft('');
     startTransition(async () => {
-      const result = await sendMessageAction(conversationId, content);
+      // Keep the draft until the send succeeds: a dropped connection rejects
+      // the server action, and the doctor must not lose what they typed.
+      let result: { error?: string };
+      try {
+        result = await sendMessageAction(conversationId, content);
+      } catch {
+        result = { error: "Couldn't send. Check your connection and try again." };
+      }
       if (result.error) {
         setError(result.error);
-        setDraft(content);
       } else {
+        setDraft('');
         textareaRef.current?.focus();
       }
     });
@@ -41,6 +49,9 @@ export function Composer({ conversationId }: { conversationId: string }) {
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             placeholder="A reply, in your own words…"
+            aria-label="Reply"
+            maxLength={MAX_MESSAGE}
+            readOnly={pending}
             rows={2}
             className="editorial-input resize-none"
             onKeyDown={(e) => {
@@ -50,8 +61,13 @@ export function Composer({ conversationId }: { conversationId: string }) {
               }
             }}
           />
-          <div className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-4)]">
-            ⌘/Ctrl + Enter to send
+          <div className="mt-1.5 flex justify-between gap-3 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-4)]">
+            <span>⌘/Ctrl + Enter to send</span>
+            {draft.length > 3500 && (
+              <span aria-live="polite" className={draft.length >= MAX_MESSAGE ? 'text-[var(--alert)]' : undefined}>
+                {draft.length} / {MAX_MESSAGE}
+              </span>
+            )}
           </div>
         </div>
         <button
@@ -63,7 +79,7 @@ export function Composer({ conversationId }: { conversationId: string }) {
         </button>
       </div>
       {error && (
-        <p className="border-l-2 border-[var(--alert)] pl-3 pb-3 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--alert)]">
+        <p role="alert" className="border-l-2 border-[var(--alert)] pl-3 pb-3 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--alert)]">
           {error}
         </p>
       )}

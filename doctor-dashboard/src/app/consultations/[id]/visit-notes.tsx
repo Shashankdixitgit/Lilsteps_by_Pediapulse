@@ -50,6 +50,8 @@ export function VisitNotesForm({ appointmentId, status, initial, childFirstName,
   const [pending, startTransition] = useTransition();
   const [busy, setBusy] = useState<VisitOutcome | null>(null);
   const closed = status === 'completed' || status === 'no_show';
+  // A visit can't be missed before it starts (the server refuses it too).
+  const notStarted = !closed && slotInFuture(slotDate, slotTime);
 
   // Restore an unsent draft for an open visit (client-only, after hydration).
   useEffect(() => {
@@ -62,7 +64,7 @@ export function VisitNotesForm({ appointmentId, status, initial, childFirstName,
   if (status === 'cancelled') {
     return (
       <p className="text-[15px] text-[var(--ink-3)]">
-        The parent cancelled this appointment, so there is nothing to record.
+        This consult was cancelled, so there is nothing to record.
       </p>
     );
   }
@@ -137,13 +139,26 @@ export function VisitNotesForm({ appointmentId, status, initial, childFirstName,
       )}
 
       <div className="flex flex-wrap items-center justify-end gap-3 border-t border-[var(--hairline)] pt-6">
+        {notStarted && (
+          <span id="no-show-hint" className="mr-auto text-[12px] text-[var(--ink-3)]">
+            No-show opens {relativeDayLabel(slotDate)?.toLowerCase() ?? `on ${formatDayShort(slotDate)}`} at{' '}
+            {formatSlotTime(slotTime)}, when the visit starts.
+          </span>
+        )}
         {closed ? (
           <button type="button" onClick={() => submit('update')} disabled={pending} className="editorial-btn">
             {busy === 'update' ? 'Saving…' : 'Update notes'}
           </button>
         ) : (
           <>
-            <button type="button" onClick={() => submit('no_show')} disabled={pending} className="editorial-btn-ghost">
+            <button
+              type="button"
+              onClick={() => submit('no_show')}
+              disabled={pending || notStarted}
+              title={notStarted ? "Available once the visit's start time has passed" : undefined}
+              aria-describedby={notStarted ? 'no-show-hint' : undefined}
+              className="editorial-btn-ghost"
+            >
               {busy === 'no_show' ? 'Saving…' : 'No-show'}
             </button>
             <button type="button" onClick={() => submit('completed')} disabled={pending} className="editorial-btn">

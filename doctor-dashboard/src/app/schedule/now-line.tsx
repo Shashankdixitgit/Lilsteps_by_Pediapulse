@@ -27,10 +27,15 @@ export function NowLine({ startHour, endHour, hourPx }: { startHour: number; end
   if (now === null || now < startHour * 60 || now > endHour * 60) return null;
   const top = ((now - startHour * 60) / 60) * hourPx;
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-x-0 z-20" style={{ top }}>
-      <div className="relative h-[2px] bg-[var(--coral)]">
-        <span className="absolute -left-[5px] -top-[4px] h-[10px] w-[10px] rounded-full bg-[var(--coral)]" />
-      </div>
-    </div>
+    <>
+      {/* The line runs under the visit chips (z-10) so it never strikes
+          through a child's name; only the dot sits above them. */}
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 z-[5] h-[2px] bg-[var(--coral)]" style={{ top }} />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute -left-[5px] z-20 h-[10px] w-[10px] rounded-full bg-[var(--coral)]"
+        style={{ top: top - 4 }}
+      />
+    </>
   );
 }

@@ -73,7 +73,7 @@ function closedDayLabel(ts: string): string {
 function ClosedWhen({ closedAt, date, time }: { closedAt: string | null; date: string; time: string }) {
   const slotDay = relativeDayLabel(date)?.toLowerCase() ?? formatDayShort(date);
   return (
-    <div className="flex flex-col">
+    <div className="hidden flex-col sm:flex">
       {closedAt ? (
         <>
           <span className="text-[14px] text-[var(--ink)]">Closed {closedDayLabel(closedAt)}</span>
@@ -112,8 +112,9 @@ function SummaryBadge({ ready }: { ready: boolean }) {
   );
 }
 
-// min-w keeps columns readable on narrow screens; the table scrolls sideways instead.
-const COLS = 'min-w-[44rem] grid-cols-[2.5rem_9rem_minmax(0,1fr)_8rem_7rem]';
+// From sm up: a five-column grid (min-w keeps it readable; it scrolls sideways
+// on small tablets). Phones get a stacked row instead.
+const COLS = 'sm:grid sm:min-w-[44rem] sm:grid-cols-[2.5rem_9rem_minmax(0,1fr)_8rem_7rem]';
 
 // How far back unclosed visits stay in "Needs closing" before they drop off.
 const OPEN_VISIT_LOOKBACK_DAYS = 30;
@@ -222,7 +223,10 @@ export default async function QueuePage({
     fetchConcerns(supabase, [...new Set(allRows.map((r) => r.id))]),
     fetchUrgencies(supabase, allRows),
   ]);
-  const overdue = rows.filter((a) => a.date < today);
+  // Newest first: yesterday's unclosed visit is the one the doctor remembers.
+  const overdue = rows
+    .filter((a) => a.date < today)
+    .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`));
   // Urgent visits first within today (R2-11): an urgent 3-week-old used to sit
   // below a routine visit just because its slot was later. The rows arrive
   // ordered by date and time, and the sort is stable, so that order holds
@@ -293,9 +297,7 @@ export default async function QueuePage({
         <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
           Queue · {today_str}
         </div>
-        <h1 className="mt-2 font-display text-[40px] leading-tight text-[var(--ink)]">
-          Today&apos;s Consultations
-        </h1>
+        <h1 className="mt-2 font-display text-[40px] leading-tight text-[var(--ink)]">Schedule</h1>
       </header>
 
       {!hasVideoLink(doctor) && <VideoLinkBanner className="mt-8" />}
@@ -382,7 +384,7 @@ function QueueTable({
 }) {
   return (
     <section className="mt-10 fade-up">
-      <div className="flex items-baseline justify-between">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="font-display text-[20px] text-[var(--ink)]">{title}</h2>
         <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
           {hint}
@@ -398,7 +400,7 @@ function QueueTable({
         <div className="mt-5 overflow-x-auto rounded-xl border border-[var(--hairline)] bg-[var(--card)]">
           {/* Column headers */}
           <div
-            className={`grid ${COLS} items-center gap-4 border-b border-[var(--hairline)] bg-[var(--paper-soft)] px-6 py-3 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]`}
+            className={`hidden ${COLS} items-center gap-4 border-b border-[var(--hairline)] bg-[var(--paper-soft)] px-6 py-3 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]`}
           >
             <span>#</span>
             <span>{closed ? 'Closed' : 'When'}</span>
@@ -420,22 +422,41 @@ function QueueTable({
               <Link
                 key={appt.id}
                 href={`/consultations/${appt.id}`}
-                className={`grid ${COLS} items-center gap-4 border-b border-[var(--hairline)] px-6 py-4 transition-colors last:border-b-0 hover:bg-[var(--paper-soft)] ${
+                className={`block ${COLS} items-center gap-4 border-b border-[var(--hairline)] px-4 py-3.5 transition-colors sm:px-6 sm:py-4 last:border-b-0 hover:bg-[var(--paper-soft)] ${
                   flagged ? 'border-l-[3px] border-l-[var(--ink)] bg-[var(--paper-soft)]' : ''
                 } ${closed ? 'text-[var(--ink-3)]' : ''}`}
               >
-                <span className="font-mono text-[12px] text-[var(--ink-4)]">
+                {/* Phone: when + status on one line, then the patient and concern. */}
+                <div className="sm:hidden">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[13px] text-[var(--ink-2)]">
+                      {closed && appt.closedAt
+                        ? `Closed ${closedDayLabel(appt.closedAt)} · ${formatClock(appt.closedAt)}`
+                        : `${when.date} · ${when.time}`}
+                    </span>
+                    {closed ? <ClosedBadge status={appt.status} /> : <SummaryBadge ready={appt.summary_ready} />}
+                  </div>
+                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="truncate text-[16px] font-medium text-[var(--ink)]">{child?.name ?? 'Unknown'}</span>
+                    {child && <span className="text-[12px] text-[var(--ink-3)]">{computeAge(child.dob)}</span>}
+                    {!closed && <UrgencyBadge urgency={urgency} className="shrink-0" />}
+                    {!closed && lateIds?.has(appt.id) && <LateBadge className="shrink-0" />}
+                  </div>
+                  {concern && <div className="truncate text-[13px] text-[var(--ink-3)]">{concern}</div>}
+                </div>
+
+                <span className="hidden font-mono text-[12px] text-[var(--ink-4)] sm:inline">
                   {String(idx + 1).padStart(2, '0')}
                 </span>
                 {closed ? (
                   <ClosedWhen closedAt={appt.closedAt ?? null} date={appt.date} time={appt.time} />
                 ) : (
-                  <div className="flex flex-col">
+                  <div className="hidden flex-col sm:flex">
                     <span className="text-[14px] text-[var(--ink)]">{when.date}</span>
                     <span className="font-mono text-[12px] text-[var(--ink-3)]">{when.time}</span>
                   </div>
                 )}
-                <div className="min-w-0">
+                <div className="hidden min-w-0 sm:block">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-[16px] font-medium text-[var(--ink)]">
                       {child?.name ?? 'Unknown'}
@@ -450,12 +471,12 @@ function QueueTable({
                     <div className="truncate text-[13px] text-[var(--ink-3)]">{concern}</div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--ink-3)]">
+                <div className="hidden items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--ink-3)] sm:flex">
                   <span>{child ? computeAge(child.dob) : '—'}</span>
                   <span className="text-[var(--hairline-strong)]">·</span>
                   <span>{child?.sex ?? '—'}</span>
                 </div>
-                <div className="flex flex-col items-end gap-1 text-right">
+                <div className="hidden flex-col items-end gap-1 text-right sm:flex">
                   {closed ? <ClosedBadge status={appt.status} /> : <SummaryBadge ready={appt.summary_ready} />}
                 </div>
               </Link>

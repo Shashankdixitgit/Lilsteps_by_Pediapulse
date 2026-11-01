@@ -2,6 +2,7 @@
 
 import { redirect } from 'next/navigation';
 import { syncConsultationPrescription } from '@/lib/consultations';
+import { RX_LIMITS } from '@/lib/prescription-limits';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 /** Shown by the form as a link to Settings; keep the wording in sync. */
@@ -31,6 +32,20 @@ export async function createPrescriptionAction(params: {
     if (!item.medicine.trim() || !item.dose.trim() || !item.frequency.trim()) {
       return { error: 'Each medicine needs name, dose, and frequency' };
     }
+    if (
+      item.medicine.trim().length > RX_LIMITS.medicine ||
+      item.dose.trim().length > RX_LIMITS.dose ||
+      item.frequency.trim().length > RX_LIMITS.frequency ||
+      (item.duration?.trim().length ?? 0) > RX_LIMITS.duration ||
+      (item.notes?.trim().length ?? 0) > RX_LIMITS.itemNotes
+    ) {
+      return {
+        error: `Keep each medicine short: name up to ${RX_LIMITS.medicine} characters, dose, frequency and duration up to ${RX_LIMITS.dose}, special instructions up to ${RX_LIMITS.itemNotes}.`,
+      };
+    }
+  }
+  if ((params.notes?.trim().length ?? 0) > RX_LIMITS.notes) {
+    return { error: `Notes can be up to ${RX_LIMITS.notes} characters.` };
   }
 
   const supabase = await createSupabaseServerClient();
@@ -59,6 +74,21 @@ export async function createPrescriptionAction(params: {
     return { error: REGISTRATION_MISSING_ERROR, needsRegistration: true };
   }
 
+  // RLS checks the doctor and the child but not the appointment: only this
+  // doctor's own, still-valid visit for this child may carry the prescription.
+  if (params.appointmentId) {
+    const { data: visit } = await supabase
+      .from('appointments')
+      .select('id, status')
+      .eq('id', params.appointmentId)
+      .eq('doctor_id', doctorAuth.doctor_id)
+      .eq('child_id', params.childId)
+      .maybeSingle<{ id: string; status: string }>();
+    if (!visit || visit.status === 'cancelled' || visit.status === 'awaiting_payment') {
+      return { error: 'This visit is not one of yours for this child, so the prescription cannot be attached to it.' };
+    }
+  }
+
   if (params.appointmentId && !params.confirmAnother) {
     const { count } = await supabase
       .from('prescriptions')
@@ -75,7 +105,7 @@ export async function createPrescriptionAction(params: {
       child_id: params.childId,
       doctor_id: doctorAuth.doctor_id,
       appointment_id: params.appointmentId ?? null,
-      notes: params.notes ?? null,
+      notes: params.notes?.trim() || null,
     })
     .select('id')
     .single();
@@ -120,7 +150,11 @@ export async function createPrescriptionAction(params: {
           channel: 'sms',
           template: 'prescription_issued',
           params: { doctor: doctor?.name ?? 'your doctor' },
-          recipient: { parent_id: child.parent_id, child_id: params.childId },
+          recipient: {
+            parent_id: child.parent_id,
+            child_id: params.childId,
+            ...(params.appointmentId ? { appointment_id: params.appointmentId } : {}),
+          },
         },
       })
       .catch(() => {

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useState, useTransition } from 'react';
 import { findAllergyClashes, type AllergyInput } from '@/lib/allergy-clash';
 import { ALLERGIES_NOT_KNOWN_LABEL } from '@/lib/appointments';
+import { RX_LIMITS } from '@/lib/prescription-limits';
 import { createPrescriptionAction, type PrescriptionItemInput } from './actions';
 
 interface Props {
@@ -114,6 +115,7 @@ export function PrescriptionForm({ childId, childName, appointmentId, allergies,
                 value={item.medicine}
                 onChange={(v) => updateItem(idx, { medicine: v })}
                 placeholder="e.g. Paracetamol"
+                maxLength={RX_LIMITS.medicine}
                 invalid={invalid('medicine')}
               />
               <FieldInput
@@ -121,6 +123,7 @@ export function PrescriptionForm({ childId, childName, appointmentId, allergies,
                 value={item.dose}
                 onChange={(v) => updateItem(idx, { dose: v })}
                 placeholder="e.g. 5ml / 250mg"
+                maxLength={RX_LIMITS.dose}
                 invalid={invalid('dose')}
               />
               <FieldInput
@@ -128,6 +131,7 @@ export function PrescriptionForm({ childId, childName, appointmentId, allergies,
                 value={item.frequency}
                 onChange={(v) => updateItem(idx, { frequency: v })}
                 placeholder="e.g. 3 times a day"
+                maxLength={RX_LIMITS.frequency}
                 invalid={invalid('frequency')}
               />
               <FieldInput
@@ -135,6 +139,7 @@ export function PrescriptionForm({ childId, childName, appointmentId, allergies,
                 value={item.duration ?? ''}
                 onChange={(v) => updateItem(idx, { duration: v })}
                 placeholder="e.g. 5 days"
+                maxLength={RX_LIMITS.duration}
               />
             </div>
 
@@ -171,10 +176,15 @@ export function PrescriptionForm({ childId, childName, appointmentId, allergies,
             )}
 
             <div className="mt-6">
-              <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
+              <label
+                htmlFor={`rx-item-notes-${idx}`}
+                className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]"
+              >
                 Special instructions
               </label>
               <textarea
+                id={`rx-item-notes-${idx}`}
+                maxLength={RX_LIMITS.itemNotes}
                 value={item.notes ?? ''}
                 onChange={(e) => updateItem(idx, { notes: e.target.value })}
                 rows={2}
@@ -196,10 +206,12 @@ export function PrescriptionForm({ childId, childName, appointmentId, allergies,
       </div>
 
       <div>
-        <label className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
+        <label htmlFor="rx-notes" className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
           Doctor&apos;s note to {childName.split(' ')[0]}&apos;s parent
         </label>
         <textarea
+          id="rx-notes"
+          maxLength={RX_LIMITS.notes}
           value={notes}
           onChange={(e) => {
             setError(null);
@@ -266,12 +278,14 @@ function FieldInput({
   onChange,
   placeholder,
   invalid,
+  maxLength,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   invalid?: boolean;
+  maxLength?: number;
 }) {
   return (
     <label className="block">
@@ -283,6 +297,7 @@ function FieldInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        maxLength={maxLength}
         aria-invalid={invalid || undefined}
         className="editorial-input mt-1"
         // Inline so it wins over the unlayered .editorial-input rule.
