@@ -74,8 +74,8 @@ export async function createPrescriptionAction(params: {
     return { error: REGISTRATION_MISSING_ERROR, needsRegistration: true };
   }
 
-  // RLS checks the doctor and the child but not the appointment: only this
-  // doctor's own, still-valid visit for this child may carry the prescription.
+  // Friendlier refusal before the RPC (which checks the same, 0050): only
+  // this doctor's own upcoming or completed visit for this child.
   if (params.appointmentId) {
     const { data: visit } = await supabase
       .from('appointments')
@@ -84,7 +84,7 @@ export async function createPrescriptionAction(params: {
       .eq('doctor_id', doctorAuth.doctor_id)
       .eq('child_id', params.childId)
       .maybeSingle<{ id: string; status: string }>();
-    if (!visit || visit.status === 'cancelled' || visit.status === 'awaiting_payment') {
+    if (!visit || (visit.status !== 'upcoming' && visit.status !== 'completed')) {
       return { error: 'This visit is not one of yours for this child, so the prescription cannot be attached to it.' };
     }
   }
@@ -99,35 +99,30 @@ export async function createPrescriptionAction(params: {
     }
   }
 
-  const { data: prescription, error: prescErr } = await supabase
-    .from('prescriptions')
-    .insert({
+  // Header and items in one transaction (create_prescription, migration
+  // 0050). It re-checks the doctor, the visit, the registration number and
+  // the field limits, and freezes the doctor's name / registration number /
+  // qualifications on the prescription.
+  const { data: prescriptionId, error: rxErr } = await supabase.rpc('create_prescription', {
+    header: {
       child_id: params.childId,
-      doctor_id: doctorAuth.doctor_id,
       appointment_id: params.appointmentId ?? null,
       notes: params.notes?.trim() || null,
-    })
-    .select('id')
-    .single();
-
-  if (prescErr || !prescription) {
-    return { error: prescErr?.message ?? 'Failed to create prescription' };
-  }
-
-  const { error: itemsErr } = await supabase.from('prescription_items').insert(
-    params.items.map((it, idx) => ({
-      prescription_id: prescription.id,
+    },
+    items: params.items.map((it) => ({
       medicine: it.medicine.trim(),
       dose: it.dose.trim(),
       frequency: it.frequency.trim(),
       duration: it.duration?.trim() || null,
       notes: it.notes?.trim() || null,
-      position: idx,
     })),
-  );
+  });
 
-  if (itemsErr) {
-    return { error: `Items: ${itemsErr.message}` };
+  if (rxErr || !prescriptionId) {
+    if (rxErr?.message === REGISTRATION_MISSING_ERROR) {
+      return { error: REGISTRATION_MISSING_ERROR, needsRegistration: true };
+    }
+    return { error: rxErr?.message ?? 'Failed to create prescription' };
   }
 
   // Notify the parent that a prescription was issued.

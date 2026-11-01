@@ -192,7 +192,12 @@ export default async function ConversationPage({
             View prescriptions
           </Link>
           <Link
-            href={`/prescriptions/new?child=${child?.id ?? ''}${consult ? `&appointment=${consult.id}` : ''}`}
+            // A no-show visit can't carry a prescription (0050); the chat alone can.
+            href={`/prescriptions/new?child=${child?.id ?? ''}${
+              consult && (consult.status === 'upcoming' || consult.status === 'completed')
+                ? `&appointment=${consult.id}`
+                : ''
+            }`}
             className="btn-peach"
           >
             Issue prescription

@@ -267,9 +267,12 @@ export default async function ConsultationPage({
             </a>
           )}
           <OpenChatButton appointmentId={appointment.id} />
-          <Link href={`/prescriptions/new?child=${child.id}&appointment=${appointment.id}`} className="btn-peach">
-            {prescriptions.length > 0 ? 'Issue another prescription' : 'Issue prescription'}
-          </Link>
+          {/* Only for a real visit: create_prescription (0050) refuses no-show and cancelled ones. */}
+          {(appointment.status === 'upcoming' || appointment.status === 'completed') && (
+            <Link href={`/prescriptions/new?child=${child.id}&appointment=${appointment.id}`} className="btn-peach">
+              {prescriptions.length > 0 ? 'Issue another prescription' : 'Issue prescription'}
+            </Link>
+          )}
           <Link href={`/prescriptions?child=${child.id}`} className="editorial-btn-ghost">
             Past prescriptions
           </Link>

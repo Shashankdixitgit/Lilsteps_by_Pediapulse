@@ -37,8 +37,8 @@ export default async function NewPrescriptionPage({
     ? await supabase.from('doctor_auth').select('doctor_id').eq('id', user.id).maybeSingle<{ doctor_id: string }>()
     : { data: null };
 
-  // A prescription may only attach to this doctor's own visit for this child
-  // (RLS checks the doctor and child, not the appointment).
+  // A prescription may only attach to this doctor's own upcoming or completed
+  // visit for this child (create_prescription refuses anything else, 0050).
   if (appointmentId) {
     const { data: ownVisit } = doctorAuth
       ? await supabase
@@ -47,7 +47,7 @@ export default async function NewPrescriptionPage({
           .eq('id', appointmentId)
           .eq('doctor_id', doctorAuth.doctor_id)
           .eq('child_id', child.id)
-          .not('status', 'in', '(cancelled,awaiting_payment)')
+          .in('status', ['upcoming', 'completed'])
           .maybeSingle<{ id: string }>()
       : { data: null };
     if (!ownVisit) notFound();
