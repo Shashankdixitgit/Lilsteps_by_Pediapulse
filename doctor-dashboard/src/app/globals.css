@@ -255,3 +255,10 @@ body {
     animation: none;
   }
 }
+
+/* New-prescription form: example text is a quiet hint, not content. */
+.rx-form ::placeholder {
+  font-size: 0.8125rem;
+  color: var(--ink-4);
+  opacity: 0.65;
+}

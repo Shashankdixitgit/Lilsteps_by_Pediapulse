@@ -255,7 +255,7 @@ export function PrescriptionForm({
   const diagnosisInvalid = showValidation && !header.diagnosis.trim();
 
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,25rem)] fade-up" style={{ animationDelay: '60ms' }}>
+    <div className="rx-form grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,25rem)] fade-up" style={{ animationDelay: '60ms' }}>
       <div className="min-w-0 space-y-6">
         {patientHeader}
 
