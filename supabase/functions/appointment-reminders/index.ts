@@ -15,6 +15,13 @@
 // payment that is refund_failed, or stuck owing a refund for 30+ minutes,
 // is emailed to the team once.
 //
+// And, after the reminders, the Care Plan sync (_shared/carePlan.ts
+// syncCarePlans): the Razorpay webhook has no subscription.* events, so up
+// to 50 plans per run are fetched from Razorpay (longest-unchecked first,
+// 45 s budget) and applied like a webhook would be: renewals, failed
+// renewals, cancellations, revived subscriptions. Its own try/catch: it can
+// never stop or fail the reminders.
+//
 // Rejects any caller without a server key.
 //
 // Deploy: `supabase functions deploy appointment-reminders --no-verify-jwt --project-ref ahikfefphptmtivwukpv`
@@ -24,6 +31,17 @@ import { jsonResponse } from '../_shared/cors.ts';
 import { createAdminClient, isServerCaller } from '../_shared/supabase.ts';
 import { consultStart, startsAtKey } from '../_shared/schedule.ts';
 import { sweepRefundAlerts } from '../_shared/refundAlerts.ts';
+import { syncCarePlans } from '../_shared/carePlan.ts';
+
+/** Care Plan sync (after the reminders, so a slow Razorpay never delays them). Never throws. */
+async function carePlanSync(admin: ReturnType<typeof createAdminClient>) {
+  try {
+    return await syncCarePlans(admin);
+  } catch (e) {
+    console.error(`[appointment-reminders] care plan sync: ${(e as Error).message}`);
+    return { error: 'sync failed' };
+  }
+}
 
 interface AppointmentRow {
   id: string;
@@ -71,7 +89,8 @@ Deno.serve(async (req) => {
 
   if (error) {
     console.error(`[appointment-reminders] query failed: ${error.message}`);
-    return jsonResponse({ error: 'Query failed' }, 500);
+    const carePlans = await carePlanSync(admin);
+    return jsonResponse({ error: 'Query failed', refundAlerts, carePlans }, 500);
   }
 
   const results: Array<{ id: string; template: string; ok: boolean; error?: string }> = [];
@@ -121,5 +140,6 @@ Deno.serve(async (req) => {
     }
   }
 
-  return jsonResponse({ ok: true, dispatched: results.length, results, refundAlerts });
+  const carePlans = await carePlanSync(admin);
+  return jsonResponse({ ok: true, dispatched: results.length, results, refundAlerts, carePlans });
 });

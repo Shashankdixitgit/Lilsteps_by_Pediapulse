@@ -1,0 +1,10 @@
+0054: last_synced_at is a nullable timestamptz                           => timestamp with time zone YES
+0054: rows from before 0054 start never-synced                           => 0
+0054: queue index is partial on a subscription id                        => true
+sweep: order and selection                                               => sub_Q3,sub_Q2,sub_Q5,sub_Q1
+sweep: a stamped row goes to the back                                    => sub_Q2,sub_Q5,sub_Q1,sub_Q3
+Limit
+  ->  Index Scan using care_plans_sync_queue_idx on care_plans
+rls parent: reads last_synced_at of own plan only                        => 1 0
+rls parent: cannot set last_synced_at                                    => permission denied for table care_plans
+0054: applies twice => OK

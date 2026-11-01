@@ -28,6 +28,12 @@
 // row is reopened with Razorpay's status, otherwise it is cancelled at
 // Razorpay at once and the team refunds the charge (see applySubscription).
 //
+// Without subscription webhooks (they are not enabled on the Razorpay
+// webhook), the same path is driven by syncCarePlans: a 15-minute sweep in
+// appointment-reminders that fetches each live subscription (and each one
+// ended here in the last few days, so a late payment is still caught) and
+// applies it — see "Sync" below. use_plan syncs the caller's own plan first.
+//
 // Team alerts (ALERT_EMAIL): free consult owed, a subscription we couldn't
 // cancel, a revived subscription, a charge of the wrong amount.
 //
@@ -171,8 +177,8 @@ export function createSubscription(input: {
   });
 }
 
-export function fetchSubscription(id: string): Promise<RazorpaySubscription> {
-  return razorpayCall('GET', `/subscriptions/${encodeURIComponent(id)}`);
+export function fetchSubscription(id: string, opts: { timeoutMs?: number } = {}): Promise<RazorpaySubscription> {
+  return razorpayCall('GET', `/subscriptions/${encodeURIComponent(id)}`, undefined, opts);
 }
 
 /** atCycleEnd: stop renewing, keep the paid month. Otherwise ends now. */
@@ -808,6 +814,108 @@ export async function endPlansForDeletedAccount(
     }
     await markEndedLocally(admin, row);
     summary.ended++;
+  }
+  return summary;
+}
+
+// ── Sync (no subscription webhooks) ────────────────────────────────────────
+
+/** Plans asked about per sweep run. */
+export const SYNC_BATCH = 50;
+/** A sweep run stops starting new fetches after this long (Razorpay timeouts are 15 s each). */
+export const SYNC_BUDGET_MS = 45_000;
+/**
+ * Plans ended HERE are still checked for this long: a subscription we
+ * dropped while its first-payment page was open ('created' can't be
+ * cancelled at Razorpay) can still be paid until that page expires (2 h).
+ * Without the webhook only the sweep can see that and run the revived
+ * logic (applySubscription → handleRevived).
+ */
+export const SYNC_ENDED_WINDOW_MS = 3 * 86_400_000;
+
+export interface SyncOptions extends Pick<ApplyOptions, 'notify' | 'alert'> {
+  /** Shorter Razorpay timeout (use_plan: a parent is waiting). */
+  timeoutMs?: number;
+}
+
+/**
+ * Ask Razorpay about one plan and apply the answer through
+ * applySubscription (the webhook's path): status and dates, a paid month
+ * when Razorpay counts more paid months than we have recorded (once: one
+ * period per plan and start), the failed / cancelled emails (one per
+ * plan_key), and the revived-subscription alert / reopen. last_synced_at is
+ * stamped first, even if Razorpay then fails. Throws what Razorpay throws.
+ */
+export async function syncPlan(
+  admin: SupabaseClient,
+  row: Pick<PlanRow, 'id' | 'razorpay_subscription_id'>,
+  opts: SyncOptions = {},
+): Promise<ApplyResult | null> {
+  if (!row.razorpay_subscription_id) return null;
+  await admin.from('care_plans').update({ last_synced_at: new Date().toISOString() }).eq('id', row.id);
+  const sub = await fetchSubscription(row.razorpay_subscription_id, { timeoutMs: opts.timeoutMs });
+  // A direct fetch is "now" (the status check does the same).
+  return await applySubscription(admin, sub, nowUnix(), { notify: opts.notify, alert: opts.alert });
+}
+
+export interface SyncSummary {
+  checked: number;
+  /** Status changed, a month recorded, or a revived subscription handled. */
+  changed: number;
+  periodsRecorded: number;
+  errors: Array<{ planId: string; error: string }>;
+  /** Not reached this run (time budget); they are first next run. */
+  deferred: number;
+  skipped?: 'razorpay_not_configured';
+}
+
+/**
+ * The 15-minute sweep: every live plan (created / authenticated / active /
+ * pending / halted / paused — a plan set to end at the month's end is still
+ * 'active' until Razorpay ends it, so it is included) and every plan ended
+ * in the last SYNC_ENDED_WINDOW_MS, with a Razorpay subscription id; at
+ * most `limit`, longest-unchecked first. One plan failing (Razorpay error,
+ * unknown id) never stops the others. Never throws for a single plan.
+ */
+export async function syncCarePlans(
+  admin: SupabaseClient,
+  opts: SyncOptions & { limit?: number; budgetMs?: number; now?: () => number } = {},
+): Promise<SyncSummary> {
+  const summary: SyncSummary = { checked: 0, changed: 0, periodsRecorded: 0, errors: [], deferred: 0 };
+  if (!Deno.env.get('RAZORPAY_KEY_ID') || !Deno.env.get('RAZORPAY_KEY_SECRET')) {
+    summary.skipped = 'razorpay_not_configured';
+    return summary;
+  }
+  const now = opts.now ?? Date.now;
+  const started = now();
+  const endedSince = new Date(started - SYNC_ENDED_WINDOW_MS).toISOString();
+  const { data, error } = await admin
+    .from('care_plans')
+    .select('id, razorpay_subscription_id, status, last_synced_at')
+    .not('razorpay_subscription_id', 'is', null)
+    .or(`status.in.(${LIVE_STATUSES.join(',')}),ended_at.gte.${endedSince}`)
+    .order('last_synced_at', { ascending: true, nullsFirst: true })
+    .order('created_at', { ascending: true })
+    .limit(opts.limit ?? SYNC_BATCH);
+  if (error) throw new Error(`care plan sync: ${error.message}`);
+  const rows = (data ?? []) as Array<Pick<PlanRow, 'id' | 'razorpay_subscription_id' | 'status'>>;
+
+  for (let i = 0; i < rows.length; i++) {
+    if (now() - started > (opts.budgetMs ?? SYNC_BUDGET_MS)) {
+      summary.deferred = rows.length - i;
+      break;
+    }
+    const row = rows[i];
+    summary.checked++;
+    try {
+      const r = await syncPlan(admin, row, opts);
+      if (r?.statusChanged || r?.periodCreated || r?.revived) summary.changed++;
+      if (r?.periodCreated) summary.periodsRecorded++;
+    } catch (e) {
+      const msg = (e as Error).message;
+      console.error(`[care-plan] sync ${row.id} (${row.razorpay_subscription_id}): ${msg}`);
+      summary.errors.push({ planId: row.id, error: msg });
+    }
   }
   return summary;
 }

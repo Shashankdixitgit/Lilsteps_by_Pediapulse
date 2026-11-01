@@ -45,6 +45,9 @@
 //          Meet room and the confirmation email follow exactly as after a
 //          payment (afterConsultConfirmed). 'no_credit' / 'no_plan': the
 //          hold stays, so the family can still pay ₹449 for it.
+//          First the parent's live plan is synced from Razorpay (one GET,
+//          5 s limit, failures ignored): with no subscription webhooks, a
+//          renewal charged minutes ago is recorded before a credit is used.
 //        Cancelling a plan consult (action cancel) answers
 //        {refund: 'not_paid', plan: 'returned' | 'rebook_owed' | 'expired'} or
 //        {refund: 'none', late: true, plan: 'used'} (_shared/consultCancel.ts).
@@ -93,6 +96,10 @@ import {
 } from '../_shared/razorpay.ts';
 import { isAllowedReturnUrl } from '../razorpay-return/allow.ts';
 import { inBackground, notifyParent, parentContact } from '../_shared/parentNotify.ts';
+import { livePlan, syncPlan } from '../_shared/carePlan.ts';
+
+/** use_plan waits this long at most for Razorpay before using what we have. */
+const USE_PLAN_SYNC_TIMEOUT_MS = 5_000;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MINUTE = 60 * 1000;
@@ -490,6 +497,13 @@ async function usePlan(admin: any, appt: Appointment): Promise<Response> {
   if (appt.status === 'upcoming') {
     const { data } = await admin.from('appointments').select('paid_with_plan').eq('id', appt.id).maybeSingle();
     return jsonResponse(data?.paid_with_plan ? { state: 'paid', plan: true } : { state: 'paid' });
+  }
+  // This parent's plan only. Best effort: Razorpay down → use what we have.
+  try {
+    const plan = await livePlan(admin, appt.parent_id);
+    if (plan) await syncPlan(admin, plan, { timeoutMs: USE_PLAN_SYNC_TIMEOUT_MS });
+  } catch (e) {
+    console.warn(`[consult-payment] use_plan plan sync ${appt.parent_id}: ${(e as Error).message}`);
   }
   const { data, error } = await admin.rpc('confirm_consult_with_plan', {
     p_appointment_id: appt.id,

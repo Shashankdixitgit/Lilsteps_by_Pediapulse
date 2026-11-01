@@ -1,11 +1,11 @@
 #!/bin/bash
-# Throwaway Postgres checks for the Care Plan migration (0053).
+# Throwaway Postgres checks for the Care Plan migrations (0053, 0054).
 #   PGBIN=/opt/homebrew/opt/postgresql@16/bin tests/sql/run.sh
 #   (UPDATE_EXPECTED=1 rewrites the expected output after a reviewed change)
 # Starts a private cluster in $TMPDIR, applies supabase/migrations/00*.sql on
 # top of stubs.sql (Supabase's auth / storage / cron / roles, minimal), runs
-# 0053_care_plan.sql and the two-session race for the last credit, compares
-# with 0053_care_plan.expected, and stops the cluster.
+# 0053_care_plan.sql and the two-session race for the last credit, then
+# 0054_care_plan_sync.sql, compares with the .expected files, and stops the cluster.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 ROOT=$(cd "$HERE/../.." && pwd)
@@ -51,12 +51,25 @@ wait
   echo "race: active uses in the month $($P -d t -At -c "select count(*) from care_plan_credit_uses where period_id = '9b000000-0000-0000-0000-000000000001' and status = 'active'")"
 } >> "$DIR/out.txt"
 
-if [ "${UPDATE_EXPECTED:-}" = 1 ]; then cp "$DIR/out.txt" "$HERE/0053_care_plan.expected"; echo "expected file updated"; exit 0; fi
-if diff -u "$HERE/0053_care_plan.expected" "$DIR/out.txt"; then
-  echo "PASS: $(wc -l < "$DIR/out.txt" | tr -d ' ') checks match 0053_care_plan.expected"
-else
-  echo "FAIL: output differs from 0053_care_plan.expected"; exit 1
+# 0054: the Care Plan sync queue (same database, after the 0053 checks).
+$P -d t -f "$HERE/0054_care_plan_sync.sql" > "$DIR/out54.txt" 2>&1
+$P -d t -1 -f "$ROOT/supabase/migrations/0054_care_plan_sync.sql" >/dev/null 2>&1 \
+  && echo "0054: applies twice => OK" >> "$DIR/out54.txt" || echo "0054: applies twice => FAILED" >> "$DIR/out54.txt"
+
+if [ "${UPDATE_EXPECTED:-}" = 1 ]; then
+  cp "$DIR/out.txt" "$HERE/0053_care_plan.expected"; cp "$DIR/out54.txt" "$HERE/0054_care_plan_sync.expected"
+  echo "expected files updated"; exit 0
 fi
+fail=0
+for n in 0053_care_plan:out 0054_care_plan_sync:out54; do
+  exp=${n%%:*}; out=${n##*:}
+  if diff -u "$HERE/$exp.expected" "$DIR/$out.txt"; then
+    echo "PASS: $(wc -l < "$DIR/$out.txt" | tr -d ' ') checks match $exp.expected"
+  else
+    echo "FAIL: output differs from $exp.expected"; fail=1
+  fi
+done
+exit $fail
 
 # The Deno race tests against this same database (DENO=path, else deno on PATH).
 DENO=${DENO:-$(command -v deno || true)}
