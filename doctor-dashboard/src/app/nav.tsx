@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { SignOutButton } from './sign-out-button';
+import { NavLink } from './nav-link';
 import { UnreadBadge } from './unread-badge';
 
 export async function DashboardNav() {
@@ -58,16 +59,5 @@ export async function DashboardNav() {
         </div>
       </div>
     </nav>
-  );
-}
-
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="link-underline text-[14px] font-medium text-[var(--ink-2)] hover:text-[var(--ink)]"
-    >
-      {children}
-    </Link>
   );
 }
