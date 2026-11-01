@@ -98,3 +98,77 @@ Deno.test('cancel: nothing changes for a cancelled, past or changed booking', as
   assertEquals(c.f.tables.appointments[0].status, 'upcoming');
   assertEquals(calls.length, 0);
 });
+
+// ── Care Plan consults (0053): the credit rule instead of money ─────────────
+
+/** A plan consult: an active credit use; return_plan_credit faked like the SQL (0053). */
+function planSetup(when = FAR, monthOver = false) {
+  const appt = { id: 'a1', parent_id: 'u1', status: 'upcoming', ...when, last_rescheduled_by: null, rescheduled_at: null };
+  const rpcCalls: string[] = [];
+  const tables: any = {
+    appointments: [{ ...appt, paid_with_plan: true }],
+    payments: [],
+    notification_log: [],
+    care_plan_credit_uses: [{ id: 'u_1', appointment_id: 'a1', status: 'active' }],
+  };
+  const f = fakeAdmin(tables, {
+    rpc: (name, args) => {
+      rpcCalls.push(name);
+      const use = tables.care_plan_credit_uses.find((u: any) => u.appointment_id === args.p_appointment_id);
+      if (!use) return 'none';
+      if (use.status !== 'active') return use.status;
+      use.status = monthOver ? 'rebook_owed' : 'returned';
+      return use.status;
+    },
+  });
+  return { f, appt, rpcCalls };
+}
+
+Deno.test('plan cancel: parent, 2 h or more before → the consult goes back to the plan, no money moves', async () => {
+  const calls = stubRazorpay();
+  const { f, appt, rpcCalls } = planSetup();
+  assertEquals(await cancelConsult(f.client, appt, { by: 'parent' }), { done: true, refund: 'not_paid', plan: 'returned' });
+  assertEquals(rpcCalls, ['return_plan_credit']);
+  assertEquals(f.tables.care_plan_credit_uses[0].status, 'returned');
+  assertEquals(f.tables.appointments[0].status, 'cancelled');
+  assertEquals(calls.length, 0, 'no Razorpay call');
+});
+
+Deno.test('plan cancel: parent, under 2 h → the plan consult is used', async () => {
+  stubRazorpay();
+  const { f, appt, rpcCalls } = planSetup(soon());
+  assertEquals(await cancelConsult(f.client, appt, { by: 'parent' }), { done: true, refund: 'none', late: true, plan: 'used' });
+  assertEquals(rpcCalls, []);
+  assertEquals(f.tables.care_plan_credit_uses[0].status, 'active');
+});
+
+Deno.test('plan cancel: doctor, even under 2 h → back to the plan', async () => {
+  stubRazorpay();
+  const { f, appt } = planSetup(soon());
+  assertEquals(await cancelConsult(f.client, appt, { by: 'doctor' }), { done: true, refund: 'not_paid', plan: 'returned' });
+});
+
+Deno.test('plan cancel: parent under 2 h after the doctor moved it in the last 24 h → back to the plan', async () => {
+  stubRazorpay();
+  const { f, appt } = planSetup(soon());
+  const moved = { ...appt, last_rescheduled_by: 'doctor', rescheduled_at: new Date(Date.now() - 3600_000).toISOString() };
+  assertEquals(await cancelConsult(f.client, moved, { by: 'parent' }), { done: true, refund: 'not_paid', plan: 'returned' });
+});
+
+Deno.test('plan cancel: doctor cancels after the plan month ended → a free consult is owed (team emailed)', async () => {
+  stubRazorpay();
+  const { f, appt } = planSetup(FAR, true);
+  assertEquals(await cancelConsult(f.client, appt, { by: 'doctor' }), { done: true, refund: 'not_paid', plan: 'rebook_owed' });
+  assertEquals(f.tables.care_plan_credit_uses[0].status, 'rebook_owed');
+});
+
+Deno.test('plan cancel: an unpaid hold never touches plan credits', async () => {
+  stubRazorpay();
+  const { f, appt, rpcCalls } = planSetup();
+  f.tables.appointments[0].status = 'awaiting_payment';
+  assertEquals(await cancelConsult(f.client, { ...appt, status: 'awaiting_payment' }, { by: 'parent' }), {
+    done: true,
+    refund: 'not_paid',
+  });
+  assertEquals(rpcCalls, []);
+});

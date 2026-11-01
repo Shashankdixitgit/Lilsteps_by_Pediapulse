@@ -22,6 +22,14 @@
 //   refund.processed        → payment refunded
 //   refund.failed           → payment refund_failed (needs a person: the
 //                             team is emailed once, refundAlerts.ts)
+//   subscription.authenticated / activated / charged / pending / halted /
+//   cancelled / completed   → Care Plan (_shared/carePlan.ts): mirror the
+//                             subscription's status and dates on care_plans
+//                             (older events never overwrite newer ones; the
+//                             event's created_at orders them); charged
+//                             records the paid month (3 consults) once.
+//                             A subscription that matches no plan of ours is
+//                             logged and recorded with unmatched = true.
 //
 // Deploy: supabase functions deploy razorpay-webhook --no-verify-jwt
 // Secrets: RAZORPAY_WEBHOOK_SECRET, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET.
@@ -29,6 +37,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { createAdminClient } from '../_shared/supabase.ts';
 import { finalizePaidLink, verifyWebhookSignature } from '../_shared/razorpay.ts';
+import { applySubscription } from '../_shared/carePlan.ts';
 import { inBackground } from '../_shared/parentNotify.ts';
 import { alertRefundProblem } from '../_shared/refundAlerts.ts';
 
@@ -39,9 +48,21 @@ interface Applied {
   linkId?: string | null;
   paymentId?: string | null;
   refundId?: string | null;
+  subscriptionId?: string | null;
   amount?: number | null;
   unmatched?: boolean;
 }
+
+/** Subscription events this webhook applies (subscribe to these in Razorpay). */
+export const SUBSCRIPTION_EVENTS = [
+  'subscription.authenticated',
+  'subscription.activated',
+  'subscription.charged',
+  'subscription.pending',
+  'subscription.halted',
+  'subscription.cancelled',
+  'subscription.completed',
+];
 
 Deno.serve(async (req) => {
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
@@ -71,7 +92,7 @@ Deno.serve(async (req) => {
 
   let applied: Applied;
   try {
-    applied = await handle(admin, event, body?.payload ?? {});
+    applied = await handle(admin, event, body?.payload ?? {}, eventTime(body));
   } catch (e) {
     console.error(`[razorpay-webhook] ${event} ${eventId}: ${(e as Error).message}`);
     return new Response('Retry', { status: 500 });
@@ -84,6 +105,7 @@ Deno.serve(async (req) => {
       link_id: applied.linkId ?? null,
       payment_id: applied.paymentId ?? null,
       refund_id: applied.refundId ?? null,
+      subscription_id: applied.subscriptionId ?? null,
       amount_paise: applied.amount ?? null,
       unmatched: applied.unmatched ?? false,
     });
@@ -119,8 +141,39 @@ async function paymentRowForLink(admin: any, link: any): Promise<{ id: string } 
   return null;
 }
 
-async function handle(admin: any, event: string, payload: any): Promise<Applied> {
+/** The event's own time (unix seconds): top-level created_at, else the payload's, else now. */
+function eventTime(body: any): number {
+  for (const v of [body?.created_at, body?.payload?.created_at]) {
+    const n = Number(v);
+    if (Number.isFinite(n) && n > 1_500_000_000) return Math.floor(n);
+  }
+  return Math.floor(Date.now() / 1000);
+}
+
+async function handle(admin: any, event: string, payload: any, at: number): Promise<Applied> {
   const now = new Date().toISOString();
+
+  if (SUBSCRIPTION_EVENTS.includes(event)) {
+    const sub = payload.subscription?.entity;
+    if (!sub?.id) return {};
+    const payment = payload.payment?.entity;
+    const charge =
+      event === 'subscription.charged' && payment?.id
+        ? { paymentId: String(payment.id), amount: Number(payment.amount) || null }
+        : null;
+    const r = await applySubscription(admin, sub, at, { charge });
+    if (!r.matched) {
+      console.error(`[razorpay-webhook] UNMATCHED SUBSCRIPTION ${sub.id} (${event}) — not one of our Care Plans; a person must check it`);
+    } else {
+      console.log(`[razorpay-webhook] ${event} ${sub.id} → ${r.status}${r.stale ? ' (stale, ignored)' : ''}${r.periodCreated ? ', month recorded' : ''}`);
+    }
+    return {
+      subscriptionId: sub.id,
+      paymentId: payment?.id ?? null,
+      amount: charge?.amount ?? null,
+      unmatched: !r.matched,
+    };
+  }
 
   if (event === 'payment_link.paid') {
     const link = payload.payment_link?.entity;

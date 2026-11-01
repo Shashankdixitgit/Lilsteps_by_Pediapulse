@@ -4,6 +4,7 @@
     "@/lib/support": "./stubs/support.ts",
     "expo-linking": "./stubs/expo-linking.ts",
     "expo-web-browser": "./stubs/expo-web-browser.ts",
-    "react-native": "./stubs/react-native.ts"
+    "react-native": "./stubs/react-native.ts",
+    "@/lib/consultPayment": "../../lib/consultPayment.ts"
   }
 }

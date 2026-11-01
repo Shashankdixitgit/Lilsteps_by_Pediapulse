@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
 import {
+  bookWithCarePlan,
   cancelConsult,
+  CONSULT_PRICE_LABEL,
   findOwnHold,
   payForConsult,
   type PaymentState,
@@ -26,6 +28,12 @@ const keyOf = (t: HoldTarget) => `${t.childId}|${t.doctorId}|${t.date}|${t.time}
  * paid. A retry for the same target reuses the held booking; a new target
  * drops the old hold first. Anything else leaves a calm `notice`: not
  * finished (slot still held, Pay again), or ran out (slot released).
+ *
+ * `checkoutWithPlan(book, target)` holds the slot the same way, then books
+ * it with one of this month's Care Plan consults (no payment page). If the
+ * plan has none left (another booking took the last one a moment ago), the
+ * hold is kept and a calm notice offers ₹449 instead: `checkout` for the
+ * same target then reuses that hold.
  *
  * `resumeFor(target)` looks for a hold this parent already has on that slot
  * (the screen was closed mid-payment) so the screen can offer "Finish
@@ -84,6 +92,51 @@ export function useConsultCheckout() {
     return true;
   }
 
+  /** The hold for this target: reused, or made with `book` (an old target's hold is dropped first). */
+  async function holdFor(book: () => Promise<{ id: string }>, target: HoldTarget) {
+    const key = keyOf(target);
+    if (held.current && held.current.key !== key) {
+      // The parent picked another time: give the old slot back.
+      await cancelConsult(held.current.id).catch(() => undefined);
+      held.current = null;
+      setAwaitingPayment(false);
+    }
+    if (!held.current) {
+      const appt = await book();
+      held.current = { id: appt.id, key, sentToPayment: false };
+    }
+    return held.current;
+  }
+
+  async function checkoutWithPlan(book: () => Promise<{ id: string }>, target: HoldTarget): Promise<string | null> {
+    setPaying(true);
+    setNotice(null);
+    try {
+      const h = await holdFor(book, target);
+      const result = await bookWithCarePlan(h.id);
+      if (result.state === 'paid') {
+        held.current = null;
+        setAwaitingPayment(false);
+        return h.id;
+      }
+      if (result.state === 'no_credit' || result.state === 'no_plan') {
+        // The slot stays held for a moment: paying for it reuses the hold.
+        setNotice(
+          result.state === 'no_credit'
+            ? `Your plan consults for this month are used up. You can book this one for ${CONSULT_PRICE_LABEL}.`
+            : `Your Care Plan has no consults to use right now. You can book this one for ${CONSULT_PRICE_LABEL}.`,
+        );
+        return null;
+      }
+      held.current = null;
+      setAwaitingPayment(false);
+      setNotice(endedText('expired'));
+      return null;
+    } finally {
+      setPaying(false);
+    }
+  }
+
   async function checkout(
     book: () => Promise<{ id: string }>,
     target: HoldTarget,
@@ -93,18 +146,7 @@ export function useConsultCheckout() {
     setNotice(null);
     let redirecting = false;
     try {
-      const key = keyOf(target);
-      if (held.current && held.current.key !== key) {
-        // The parent picked another time: give the old slot back.
-        await cancelConsult(held.current.id).catch(() => undefined);
-        held.current = null;
-        setAwaitingPayment(false);
-      }
-      if (!held.current) {
-        const appt = await book();
-        held.current = { id: appt.id, key, sentToPayment: false };
-      }
-      const h = held.current;
+      const h = await holdFor(book, target);
       h.sentToPayment = true;
       const result = await payForConsult(h.id, label);
       if (result.state === 'redirecting') {
@@ -146,5 +188,5 @@ export function useConsultCheckout() {
     }
   }
 
-  return { checkout, resumeFor, adoptHold, releaseHold, paying, notice, awaitingPayment };
+  return { checkout, checkoutWithPlan, resumeFor, adoptHold, releaseHold, paying, notice, awaitingPayment };
 }

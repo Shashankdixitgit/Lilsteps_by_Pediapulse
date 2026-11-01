@@ -38,3 +38,19 @@ export function LateBadge({ className }: { className?: string }) {
     </span>
   );
 }
+
+/**
+ * The family booked this consult with their LilSteps Care Plan (0053,
+ * appointments.paid_with_plan) instead of paying ₹449. Doctors see only
+ * that, never an amount.
+ */
+export function CarePlanBadge({ className }: { className?: string }) {
+  return (
+    <span
+      title="Booked with the family's Care Plan"
+      className={`inline-flex items-center whitespace-nowrap rounded-full border border-[var(--accent)] bg-[var(--accent-pale)] px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--accent)] ${className ?? ''}`}
+    >
+      Care Plan
+    </span>
+  );
+}

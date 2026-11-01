@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth';
 import { appointmentEnded } from '@/components/consult/appointmentFormat';
-import { cancelConsult, type RefundOutcome } from '@/lib/consultPayment';
+import { type CancelOutcome, cancelConsult } from '@/lib/consultPayment';
 
 export interface AppointmentRow {
   id: string;
@@ -25,6 +25,8 @@ export interface AppointmentRow {
   created_at: string;
   /** Times this consult was moved with Reschedule (0051, max 3). */
   reschedule_count?: number;
+  /** Booked with a Care Plan consult instead of ₹449 (0053). */
+  paid_with_plan?: boolean;
   /** Set on a follow-up the doctor booked (0051): the earlier visit it comes from. */
   followup_of?: string | null;
   // joined
@@ -163,7 +165,7 @@ export function useAppointments(childId: string | null) {
    * more before the start. The release_appointment_slot trigger (0015)
    * re-opens the time slot.
    */
-  async function cancelAppointment(appointmentId: string): Promise<{ refund: RefundOutcome; late?: boolean }> {
+  async function cancelAppointment(appointmentId: string): Promise<CancelOutcome> {
     const result = await cancelConsult(appointmentId);
     await fetch();
     return result;

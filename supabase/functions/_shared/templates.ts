@@ -26,7 +26,11 @@ export type TemplateKey =
   | 'vaccine_overdue'
   | 'new_message'
   | 'checkin_summary_ready'
-  | 'followup_payment_request';
+  | 'followup_payment_request'
+  | 'care_plan_started'
+  | 'care_plan_renewed'
+  | 'care_plan_payment_failed'
+  | 'care_plan_cancelled';
 
 const TEMPLATES: Record<TemplateKey, RenderedTemplate> = {
   appointment_confirmation: {
@@ -83,6 +87,22 @@ const TEMPLATES: Record<TemplateKey, RenderedTemplate> = {
     body:
       'LilSteps: {{doctor}} booked a follow-up on {{date}} at {{time}}. Pay in the app to confirm it.',
   },
+  care_plan_started: {
+    subject: 'Your Care Plan has started',
+    body: 'LilSteps: Your Care Plan has started. You have 3 video consults to use this month.',
+  },
+  care_plan_renewed: {
+    subject: 'Your Care Plan has renewed',
+    body: 'LilSteps: Your Care Plan renewed. You have 3 video consults to use this month.',
+  },
+  care_plan_payment_failed: {
+    subject: 'Care Plan payment did not go through',
+    body: 'LilSteps: The payment for your Care Plan did not go through. Open the app to check your plan.',
+  },
+  care_plan_cancelled: {
+    subject: 'Your Care Plan was cancelled',
+    body: 'LilSteps: Your Care Plan was cancelled. Open the app to see until when you can use it.',
+  },
 };
 
 /**
@@ -90,7 +110,14 @@ const TEMPLATES: Record<TemplateKey, RenderedTemplate> = {
  * server). The notify endpoint refuses them, so nobody can mail a family a
  * link of their own choosing under the LilSteps name.
  */
-export const SERVER_ONLY_TEMPLATES: readonly string[] = ['followup_payment_request'];
+export const SERVER_ONLY_TEMPLATES: readonly string[] = [
+  'followup_payment_request',
+  // Billing news must only ever come from Razorpay's own word (webhook / fetch).
+  'care_plan_started',
+  'care_plan_renewed',
+  'care_plan_payment_failed',
+  'care_plan_cancelled',
+];
 
 export const TEMPLATE_KEYS = Object.keys(TEMPLATES) as TemplateKey[];
 
@@ -207,6 +234,10 @@ const REFUND_LINES: Record<string, string> = {
   not_paid: 'Nothing was charged for this booking.',
   failed:
     "We couldn't start your refund automatically. Our team will process it by hand — reply to this email if you have any questions.",
+  plan_returned: 'This consult has gone back to your Care Plan, so you can use it for another booking this month.',
+  plan_used: 'As it was cancelled less than 2 hours before the start, this Care Plan consult counts as used.',
+  plan_rebook:
+    'Your Care Plan month has ended, so this consult could not go back to the plan. We will book a free consult for you — our team will be in touch.',
 };
 
 // Subjects are generic on purpose: no child name, doctor or time (they show
@@ -223,7 +254,15 @@ function emailParts(key: string, p: Record<string, string>): EmailParts | null {
         subject: 'Your LilSteps consult is booked',
         heading: 'Your consult is booked',
         when,
-        lines: [`${child}'s video consult with ${doctor} is confirmed.`, videoLine, 'Need to change plans? You can cancel from the app. Cancelling 2 hours or more before the start gets a full refund.'],
+        lines: [
+          p.plan === 'yes'
+            ? `${child}'s video consult with ${doctor} is confirmed, using one of your Care Plan consults.`
+            : `${child}'s video consult with ${doctor} is confirmed.`,
+          videoLine,
+          p.plan === 'yes'
+            ? 'Need to change plans? You can cancel from the app. Cancelling 2 hours or more before the start gives the consult back to your plan.'
+            : 'Need to change plans? You can cancel from the app. Cancelling 2 hours or more before the start gets a full refund.',
+        ],
       };
     case 'appointment_cancelled': {
       const byDoctor = p.by === 'doctor';
@@ -320,6 +359,51 @@ function emailParts(key: string, p: Record<string, string>): EmailParts | null {
         subject: 'You have a new message',
         heading: 'You have a new message',
         lines: [`${doctor} sent you a message. Open the LilSteps app to read and reply.`],
+      };
+    // Care Plan: billing news only. Generic subjects; never a child's name,
+    // a doctor or anything about health.
+    case 'care_plan_started':
+      return {
+        subject: 'Your LilSteps Care Plan has started',
+        heading: 'Your Care Plan has started',
+        lines: [
+          `Thank you for subscribing. Your Care Plan (${p.price || '₹999'} a month) includes 3 video consults each billing month, for any child on your account.`,
+          p.until ? `This month runs until ${p.until}. The plan renews on its own each month until you cancel.` : 'The plan renews on its own each month until you cancel.',
+          'To use it, book a consult in the LilSteps app and choose “Use a plan consult”. After the 3 included consults, consults are ₹449 as usual. Unused consults do not carry over.',
+          'You can cancel any time from Profile → Care Plan. It then stays active until the end of the month you have paid for.',
+        ],
+      };
+    case 'care_plan_renewed':
+      return {
+        subject: 'Your LilSteps Care Plan has renewed',
+        heading: 'Your Care Plan has renewed',
+        lines: [
+          `We received this month’s payment (${p.price || '₹999'}). You have 3 video consults to use${p.until ? ` until ${p.until}` : ' this month'}.`,
+          'You can cancel any time from Profile → Care Plan in the app.',
+        ],
+      };
+    case 'care_plan_payment_failed':
+      return {
+        subject: 'Your LilSteps Care Plan payment did not go through',
+        heading: 'Your plan payment did not go through',
+        lines: [
+          p.status === 'halted'
+            ? 'We tried a few times but could not collect this month’s Care Plan payment, so the plan is paused. No new plan consults are added until a payment goes through.'
+            : 'We could not collect this month’s Care Plan payment. Razorpay will try again over the next few days.',
+          'Please check the card or UPI account you subscribed with. You can see your plan, or subscribe again, from Profile → Care Plan in the app.',
+          'Consults you have already booked are not affected.',
+        ],
+      };
+    case 'care_plan_cancelled':
+      return {
+        subject: 'Your LilSteps Care Plan was cancelled',
+        heading: p.until ? 'Your Care Plan will not renew' : 'Your Care Plan has ended',
+        lines: [
+          p.until
+            ? `Your Care Plan has been cancelled and will not renew. You can keep using the consults left this month until ${p.until}.`
+            : 'Your Care Plan has ended and will not renew. Nothing more will be charged.',
+          'Consults you have already booked stay booked. You can subscribe again any time from Profile → Care Plan in the app.',
+        ],
       };
     case 'checkin_summary_ready':
       return {
