@@ -8,7 +8,7 @@
 //
 // Deploy: `supabase functions deploy vaccine-reminders --no-verify-jwt --project-ref ahikfefphptmtivwukpv`
 
-import { notifyParent } from '../_shared/parentNotify.ts';
+import { MAX_ATTEMPTS, notifyParent } from '../_shared/parentNotify.ts';
 import { jsonResponse } from '../_shared/cors.ts';
 import { createAdminClient, isServerCaller } from '../_shared/supabase.ts';
 
@@ -54,15 +54,15 @@ Deno.serve(async (req) => {
   for (const v of data ?? []) {
     if (!v.children) continue;
 
-    // Idempotency: one reminder per vaccination row.
-    const { count } = await admin
+    // Idempotency: one reminder per vaccination row; failed / skipped runs
+    // stop retrying after MAX_ATTEMPTS (no new row every run).
+    const { data: tries } = await admin
       .from('notification_log')
-      .select('id', { count: 'exact', head: true })
+      .select('status')
       .eq('template', template)
       .eq('child_id', v.child_id)
-      .eq('payload->>vaccinationId', v.id)
-      .eq('status', 'sent');
-    if ((count ?? 0) > 0) {
+      .eq('payload->>vaccinationId', v.id);
+    if ((tries ?? []).some((t) => t.status === 'sent') || (tries ?? []).length >= MAX_ATTEMPTS) {
       results.push({ id: v.id, ok: true });
       continue;
     }

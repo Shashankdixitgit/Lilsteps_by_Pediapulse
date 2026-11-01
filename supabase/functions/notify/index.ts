@@ -39,8 +39,8 @@
 // deno-lint-ignore-file no-explicit-any
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
 import { type Channel, dispatch, isChannel, type Recipient, smsEnabled } from '../_shared/notify.ts';
-import { parentContact } from '../_shared/parentNotify.ts';
-import { isTemplateKey } from '../_shared/templates.ts';
+import { canReceiveEmail, firstName, parentContact } from '../_shared/parentNotify.ts';
+import { DOCTOR_EMAIL_TEMPLATES, isTemplateKey } from '../_shared/templates.ts';
 import { createAdminClient, getCaller } from '../_shared/supabase.ts';
 
 const RATE_LIMIT_PER_HOUR = 20;
@@ -149,6 +149,9 @@ Deno.serve(async (req) => {
     if (channel !== 'email') {
       return jsonResponse({ error: 'Doctors can only be notified by email' }, 400);
     }
+    if (!(DOCTOR_EMAIL_TEMPLATES as readonly string[]).includes(body.template)) {
+      return jsonResponse({ error: 'This message cannot be sent to a doctor' }, 400);
+    }
   }
 
   if (appointmentId) {
@@ -198,8 +201,23 @@ Deno.serve(async (req) => {
     recipient.phone = contact.phone;
     recipient.email = contact.email;
     recipient.expo_push_token = contact.expo_push_token;
-    if (!params.parent && contact.name) params.parent = contact.name.trim().split(/\s+/)[0].slice(0, 40);
+    if (contact.name) params.parent = firstName(contact.name) ?? params.parent;
+    // A doctor sender is named from the database, never from the request.
+    if (callerDoctorId) {
+      const { data: d } = await admin.from('doctors').select('name').eq('id', callerDoctorId).maybeSingle();
+      if (d?.name) params.doctor = String(d.name);
+    }
   } else {
+    // To a doctor: the caller's own words are ignored; every value comes
+    // from the database (parent's first name, doctor's name, child's name).
+    for (const k of Object.keys(params)) delete params[k];
+    const [{ data: me }, { data: d }] = await Promise.all([
+      admin.from('parents').select('name').eq('id', caller.id).maybeSingle(),
+      admin.from('doctors').select('name').eq('id', doctorId!).maybeSingle(),
+    ]);
+    const parentFirst = firstName(me?.name ?? undefined);
+    if (parentFirst) params.parent = parentFirst;
+    if (d?.name) params.doctor = String(d.name);
     const { data: link } = await admin
       .from('doctor_auth')
       .select('id')
@@ -208,11 +226,13 @@ Deno.serve(async (req) => {
       .maybeSingle<{ id: string }>();
     if (link?.id) {
       const { data: du } = await admin.auth.admin.getUserById(link.id);
-      recipient.email = du?.user?.email ?? undefined;
+      const email = du?.user?.email?.toLowerCase();
+      // Test doctor logins (@lilsteps.dev) and domains without mail get nothing.
+      recipient.email = email && (await canReceiveEmail(email)) ? email : undefined;
     }
   }
 
-  if (childId && !params.child) {
+  if (childId) {
     const { data: child } = await admin.from('children').select('name').eq('id', childId).maybeSingle();
     if (child?.name) params.child = String(child.name).slice(0, MAX_PARAM_LENGTH);
   }
@@ -241,13 +261,22 @@ Deno.serve(async (req) => {
     .select('id')
     .single();
 
+  // 23505: this one-off booking message is already queued or sent (0046
+  // unique index) — another caller got there first, so it counts as sent.
+  if (qErr?.code === '23505') return jsonResponse({ ok: true, duplicate: true });
   if (qErr || !queued) {
     console.error('[notify] log insert failed', qErr?.message);
     return jsonResponse({ error: 'Could not send notification' }, 500);
   }
 
   const result = address
-    ? await dispatch({ channel, template: body.template, params, recipient })
+    ? await dispatch({
+        channel,
+        template: body.template,
+        params,
+        recipient,
+        audience: doctorId ? 'doctor' : 'parent',
+      })
     : { ok: false, error: `No ${channel} contact on record`, notConfigured: true };
 
   const status = result.ok ? 'sent' : result.notConfigured ? 'skipped' : 'failed';

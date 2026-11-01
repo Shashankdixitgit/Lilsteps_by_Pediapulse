@@ -61,7 +61,7 @@ const SECTIONS: readonly LegalSection[] = [
   {
     heading: 'Your account',
     bullets: [
-      'You sign in with your mobile number and a one-time code. Keep your phone secure and do not share the code.',
+      'You sign in with your email address and a password, or a one-time code we email you. Keep your email account secure and do not share your password or codes.',
       'Keep your details and your child’s details accurate and up to date.',
       'Tell us straight away if you think someone else has used your account.',
     ],

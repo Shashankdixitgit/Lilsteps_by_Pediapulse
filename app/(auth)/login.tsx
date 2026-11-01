@@ -1,5 +1,5 @@
 /**
- * Sign in. Email + password, or a 6-digit code emailed to the parent
+ * Sign in. Email + password, or a code emailed to the parent
  * (SMS is off until DLT is done; the phone screen is kept behind PHONE_AUTH).
  */
 import { router } from 'expo-router';
@@ -15,12 +15,14 @@ import {
   EmailField,
   FooterPrompt,
   PasswordField,
+  ResendLink,
   TermsLine,
 } from '@/components/auth/AuthShared';
 import { PhoneLoginScreen } from '@/components/auth/PhoneLoginScreen';
 import { GradientButton } from '@/components/gradient-button';
 import {
   demoCredentials,
+  isEmailCode,
   isValidEmail,
   normaliseEmail,
   PHONE_AUTH,
@@ -39,7 +41,7 @@ export default function LoginScreen() {
 }
 
 function EmailLoginScreen() {
-  const { signInWithPassword, sendLoginCode, resendSignupCode, verifyEmailCode } = useAuth();
+  const { signInWithPassword, sendLoginCode, resendSignupCode, verifyEmailCode, updatePassword } = useAuth();
 
   const [email, setEmail] = useState(DEMO?.email ?? '');
   const [password, setPassword] = useState(DEMO?.password ?? '');
@@ -48,7 +50,6 @@ function EmailLoginScreen() {
   const [codeKind, setCodeKind] = useState<EmailCodeKind | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   function go(isNewUser: boolean) {
     if (isNewUser) {
@@ -82,7 +83,6 @@ function EmailLoginScreen() {
     const r = await signInWithPassword(e, password);
     setLoading(false);
     if (r.needsCode) {
-      setNotice(null);
       setCode('');
       setCodeKind('signup');
       return;
@@ -100,31 +100,44 @@ function EmailLoginScreen() {
     if (!e) return;
     setLoading(true);
     setError(null);
-    const r = codeKind === 'signup' ? await resendSignupCode(e) : await sendLoginCode(e);
+    const r = await sendLoginCode(e);
     setLoading(false);
     if (r.error) {
       setError(r.error);
       return;
     }
     setCode('');
-    if (codeKind) setNotice('We sent a new code.');
-    else setCodeKind('email');
+    setCodeKind('email');
+  }
+
+  /** From the code screen; true when a new code went out (starts the cooldown). */
+  async function handleResend(): Promise<boolean> {
+    setError(null);
+    const e = normaliseEmail(email);
+    const r = codeKind === 'signup' ? await resendSignupCode(e) : await sendLoginCode(e);
+    if (r.error) setError(r.error);
+    return !r.error;
   }
 
   async function handleVerify() {
     if (loading || !codeKind) return;
-    if (code.length !== 6) {
-      setError('Please enter the 6-digit code');
+    if (!isEmailCode(code)) {
+      setError('Please enter the code from the email');
       return;
     }
     setLoading(true);
     setError(null);
     const r = await verifyEmailCode(email, code, codeKind);
-    setLoading(false);
     if (r.error) {
+      setLoading(false);
       setError(r.error);
       return;
     }
+    // Finishing an unconfirmed sign-up: set the password typed here, so an
+    // account someone else pre-registered with this address can't keep
+    // their password.
+    if (codeKind === 'signup' && password) await updatePassword(password);
+    setLoading(false);
     go(r.isNewUser);
   }
 
@@ -134,13 +147,12 @@ function EmailLoginScreen() {
         title="Check your email"
         subtitle={
           codeKind === 'signup'
-            ? `Your account isn't confirmed yet. We sent a 6-digit code to ${normaliseEmail(email)}`
-            : `We sent a 6-digit code to ${normaliseEmail(email)}`
+            ? `Your account isn't confirmed yet. We sent a code to ${normaliseEmail(email)}. It expires in 10 minutes.`
+            : `If an account exists for ${normaliseEmail(email)}, we've sent a code to it. It expires in 10 minutes.`
         }
         onBack={() => {
           setCodeKind(null);
           setError(null);
-          setNotice(null);
         }}
       >
         <View style={authStyles.fields}>
@@ -149,7 +161,7 @@ function EmailLoginScreen() {
         <AuthError message={error} />
         <GradientButton label="Verify" loading={loading} onPress={handleVerify} style={authStyles.submitButton} />
         <View style={authStyles.links}>
-          <AuthLink center label={notice ?? "Didn't receive it? Resend code"} onPress={handleSendCode} />
+          <ResendLink onResend={handleResend} />
         </View>
       </AuthScreen>
     );

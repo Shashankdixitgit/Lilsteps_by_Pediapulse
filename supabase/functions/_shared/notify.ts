@@ -36,6 +36,8 @@ export interface NotifyInput {
   template: string; // see templates.ts
   params?: Record<string, string>;
   recipient: Recipient;
+  /** Email wording for a parent (default) or a doctor. */
+  audience?: 'parent' | 'doctor';
 }
 
 export interface DispatchResult {
@@ -99,8 +101,9 @@ async function sendTemplateEmail(
   to: string,
   template: string,
   params: Record<string, string>,
+  audience: 'parent' | 'doctor',
 ): Promise<DispatchResult> {
-  const msg = renderEmail(template, params);
+  const msg = renderEmail(template, params, audience);
   return sendEmail({ to, subject: msg.subject, text: msg.text, html: msg.html });
 }
 
@@ -156,7 +159,7 @@ export async function dispatch(input: NotifyInput): Promise<DispatchResult> {
 
     case 'email':
       if (!input.recipient.email) return { ok: false, error: 'Missing email' };
-      return sendTemplateEmail(input.recipient.email, input.template, input.params ?? {});
+      return sendTemplateEmail(input.recipient.email, input.template, input.params ?? {}, input.audience ?? 'parent');
 
     case 'push':
       if (!input.recipient.expo_push_token) {

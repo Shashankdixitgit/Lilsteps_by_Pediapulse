@@ -1,5 +1,5 @@
 /**
- * Forgot password: a 6-digit code is emailed, then the parent chooses a new
+ * Forgot password: a code is emailed, then the parent chooses a new
  * password. Checking the code signs them in, so they land in the app.
  */
 import { router, useLocalSearchParams } from 'expo-router';
@@ -8,15 +8,15 @@ import { View } from 'react-native';
 
 import {
   AuthError,
-  AuthLink,
   AuthScreen,
   authStyles,
   CodeField,
   EmailField,
   PasswordField,
+  ResendLink,
 } from '@/components/auth/AuthShared';
 import { GradientButton } from '@/components/gradient-button';
-import { isValidEmail, normaliseEmail, passwordProblem, useAuth } from '@/context/auth';
+import { isEmailCode, isValidEmail, normaliseEmail, passwordProblem, useAuth } from '@/context/auth';
 import { dbg } from '@/lib/debug';
 
 export default function ForgotPasswordScreen() {
@@ -32,7 +32,6 @@ export default function ForgotPasswordScreen() {
   const [verified, setVerified] = useState<{ isNewUser: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   async function handleSend() {
     if (loading) return;
@@ -49,14 +48,21 @@ export default function ForgotPasswordScreen() {
       setError(r.error);
       return;
     }
-    if (step === 'reset') setNotice('We sent a new code.');
     setStep('reset');
+  }
+
+  /** True when a new code went out (starts the cooldown). */
+  async function handleResend(): Promise<boolean> {
+    setError(null);
+    const r = await sendPasswordResetCode(email);
+    if (r.error) setError(r.error);
+    return !r.error;
   }
 
   async function handleReset() {
     if (loading) return;
-    if (!verified && code.length !== 6) {
-      setError('Please enter the 6-digit code');
+    if (!verified && !isEmailCode(code)) {
+      setError('Please enter the code from the email');
       return;
     }
     const problem = passwordProblem(password);
@@ -91,11 +97,14 @@ export default function ForgotPasswordScreen() {
     return (
       <AuthScreen
         title="Choose a new password"
-        subtitle={`If ${normaliseEmail(email)} has a LilSteps account, we sent it a 6-digit code.`}
+        subtitle={
+          verified
+            ? 'Code accepted. Choose your new password.'
+            : `If ${normaliseEmail(email)} has a LilSteps account, we sent it a code. It expires in 10 minutes.`
+        }
         onBack={() => {
           setStep('email');
           setError(null);
-          setNotice(null);
         }}
       >
         <View style={authStyles.fields}>
@@ -106,7 +115,7 @@ export default function ForgotPasswordScreen() {
         <GradientButton label="Save new password" loading={loading} onPress={handleReset} style={authStyles.submitButton} />
         {verified ? null : (
           <View style={authStyles.links}>
-            <AuthLink center label={notice ?? "Didn't receive it? Resend code"} onPress={handleSend} />
+            <ResendLink onResend={handleResend} />
           </View>
         )}
       </AuthScreen>
@@ -114,7 +123,7 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <AuthScreen title="Forgot your password?" subtitle="We'll email you a 6-digit code to set a new one.">
+    <AuthScreen title="Forgot your password?" subtitle="We'll email you a code to set a new one.">
       <View style={authStyles.fields}>
         <EmailField value={email} onChangeText={setEmail} onSubmit={handleSend} returnKeyType="go" />
       </View>

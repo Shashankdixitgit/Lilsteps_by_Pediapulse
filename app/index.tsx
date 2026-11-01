@@ -12,7 +12,7 @@ import { GradientButton } from '@/components/gradient-button';
 import { Sprout } from '@/components/mascot/Sprout';
 import { HeroBackdrop, HeroBadge, heroCardStyle } from '@/components/ui/HeroCard';
 import { AppColors, FontFamily, ForestRamp, Radius } from '@/constants/theme';
-import { useAuth } from '@/context/auth';
+import { PHONE_AUTH, useAuth } from '@/context/auth';
 import { dbg } from '@/lib/debug';
 import { WEB_DEMO } from '@/lib/webDemo';
 import { typography } from '@/styles/global';
@@ -30,7 +30,14 @@ export default function SplashScreen() {
     if (loading || hasNavigated.current) return;
     if (session && hasChildren !== null) {
       hasNavigated.current = true;
-      const target = hasChildren ? '/(tabs)' : '/(onboarding)/parent-details';
+      // Signed up by phone and no email yet: ask for one first, so booking
+      // emails reach them and they can sign in again while SMS is off.
+      const needsEmail = !PHONE_AUTH && !session.user.email;
+      const target = needsEmail
+        ? '/(auth)/add-email'
+        : hasChildren
+          ? '/(tabs)'
+          : '/(onboarding)/parent-details';
       dbg.nav(`Splash → ${target}`);
       router.replace(target as '/(tabs)');
     }

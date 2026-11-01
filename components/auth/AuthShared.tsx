@@ -4,7 +4,7 @@
  * and the error line. Layout and copy match the original phone screens.
  */
 import { router } from 'expo-router';
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -12,6 +12,7 @@ import { Sprout } from '@/components/mascot/Sprout';
 import { HeaderIconButton } from '@/components/ScreenHeader';
 import { TextInputField } from '@/components/text-input-field';
 import { AppColors } from '@/constants/theme';
+import { EMAIL_CODE_LENGTH } from '@/context/auth';
 import { layout, typography } from '@/styles/global';
 
 export function AuthScreen({
@@ -74,8 +75,9 @@ export function AuthError({ message }: { message: string | null }) {
 }
 
 /**
- * The 6-digit email code. On web the field takes focus when it appears
- * (native uses autoFocus), as the phone screens did (R2-17).
+ * The email code (6 digits by default; up to 10 if Auth is set that way).
+ * On web the field takes focus when it appears (native uses autoFocus), as
+ * the phone screens did (R2-17).
  */
 export function CodeField({
   value,
@@ -96,11 +98,11 @@ export function CodeField({
   return (
     <TextInputField
       label="Code from the email"
-      placeholder="6-digit code"
+      placeholder="Code from the email"
       keyboardType="number-pad"
       textContentType="oneTimeCode"
       autoComplete="one-time-code"
-      maxLength={6}
+      maxLength={EMAIL_CODE_LENGTH.max}
       value={value}
       onChangeText={(text) => onChangeText(text.replace(/[^0-9]/g, ''))}
       returnKeyType="go"
@@ -197,6 +199,59 @@ export function AuthLink({ label, onPress, center }: { label: string; onPress: (
   );
 }
 
+/** Seconds to wait between "Resend code" taps (Supabase allows one email a minute). */
+export const RESEND_COOLDOWN_S = 60;
+
+/**
+ * "Didn't receive it? Resend code", then "You can resend in 42 s" for a
+ * minute after each send (and right after the first code goes out), so
+ * repeated taps can't hit Supabase's per-minute email limit.
+ */
+export function ResendLink({ onResend }: { onResend: () => Promise<boolean> }) {
+  const [left, setLeft] = useState(RESEND_COOLDOWN_S);
+  const [busy, setBusy] = useState(false);
+  const [sentAgain, setSentAgain] = useState(false);
+  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (left <= 0) return;
+    timer.current = setInterval(() => setLeft((n) => Math.max(0, n - 1)), 1000);
+    return () => {
+      if (timer.current) clearInterval(timer.current);
+    };
+  }, [left > 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function tap() {
+    if (busy || left > 0) return;
+    setBusy(true);
+    const ok = await onResend();
+    setBusy(false);
+    if (ok) {
+      setSentAgain(true);
+      setLeft(RESEND_COOLDOWN_S);
+    }
+  }
+
+  const label =
+    left > 0
+      ? `${sentAgain ? 'We sent a new code. ' : ''}You can resend in ${left} s`
+      : busy
+        ? 'Sending…'
+        : "Didn't receive it? Resend code";
+  return (
+    <Pressable
+      onPress={tap}
+      disabled={busy || left > 0}
+      style={styles.centerLink}
+      accessibilityRole="button"
+      accessibilityState={{ disabled: busy || left > 0 }}
+      hitSlop={10}
+    >
+      <Text style={[styles.resendText, left > 0 || busy ? styles.resendWaiting : null]}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export function TermsLine({ verb }: { verb: 'continuing' | 'signing up' }) {
   return (
     <Text style={styles.termsText}>
@@ -283,6 +338,10 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
     color: AppColors.secondary,
+  },
+  resendWaiting: {
+    fontFamily: 'Inter_500Medium',
+    color: AppColors.muted,
   },
   termsText: {
     fontFamily: 'Inter_400Regular',

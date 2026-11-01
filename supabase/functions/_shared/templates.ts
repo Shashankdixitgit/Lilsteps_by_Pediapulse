@@ -112,6 +112,22 @@ const BRAND = '#49378f';
 const INK = '#0b1632';
 const SURFACE = '#ebe9ff';
 
+/**
+ * Every value that came from the database or a caller: no control
+ * characters (CR / LF could inject mail headers), single spaces, capped.
+ */
+export function cleanParam(v: string | undefined): string {
+  return (v ?? '')
+    .replace(/[\r\n\u0000-\u001f\u007f]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+function cleanParams(params: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(Object.entries(params).map(([k, v]) => [k, cleanParam(String(v ?? ''))]));
+}
+
 function escapeHtml(v: string): string {
   return v
     .replace(/&/g, '&amp;')
@@ -157,6 +173,8 @@ const REFUND_LINES: Record<string, string> = {
     "We couldn't start your refund automatically. Our team will process it by hand — reply to this email if you have any questions.",
 };
 
+// Subjects are generic on purpose: no child name, doctor or time (they show
+// in inbox previews and provider logs). Details go in the body only.
 function emailParts(key: string, p: Record<string, string>): EmailParts | null {
   const child = p.child || 'your child';
   const doctor = p.doctor || 'your doctor';
@@ -166,7 +184,7 @@ function emailParts(key: string, p: Record<string, string>): EmailParts | null {
   switch (key) {
     case 'appointment_confirmation':
       return {
-        subject: `Booked: ${child}'s consult with ${doctor}`,
+        subject: 'Your LilSteps consult is booked',
         heading: 'Your consult is booked',
         when,
         lines: [`${child}'s video consult with ${doctor} is confirmed.`, videoLine, 'Need to change plans? You can cancel from the app. Cancelling 2 hours or more before the start gets a full refund.'],
@@ -174,7 +192,7 @@ function emailParts(key: string, p: Record<string, string>): EmailParts | null {
     case 'appointment_cancelled': {
       const byDoctor = p.by === 'doctor';
       return {
-        subject: `Cancelled: ${child}'s consult with ${doctor}`,
+        subject: 'Your LilSteps consult was cancelled',
         heading: 'Your consult was cancelled',
         when,
         lines: [
@@ -187,41 +205,41 @@ function emailParts(key: string, p: Record<string, string>): EmailParts | null {
     }
     case 'appointment_rescheduled':
       return {
-        subject: `New time: ${child}'s consult with ${doctor}`,
+        subject: 'Your LilSteps consult has a new time',
         heading: 'Your consult has a new time',
         when,
         lines: [`${child}'s video consult with ${doctor} has moved to the time below.`, videoLine],
       };
     case 'appointment_reminder_24h':
       return {
-        subject: `Tomorrow: ${child}'s consult with ${doctor}`,
+        subject: 'Reminder: your LilSteps consult',
         heading: 'Your consult is tomorrow',
         when,
-        lines: [videoLine],
+        lines: [`${child}'s video consult with ${doctor}.`, videoLine],
       };
     case 'appointment_reminder_1h':
       return {
-        subject: `Starting soon: ${child}'s consult with ${doctor}`,
+        subject: 'Reminder: your LilSteps consult starts soon',
         heading: 'Your consult starts soon',
         when,
-        lines: ['Find a quiet spot with good internet.', videoLine],
+        lines: [`${child}'s video consult with ${doctor}.`, 'Find a quiet spot with good internet.', videoLine],
       };
     case 'prescription_issued':
       return {
-        subject: `New prescription from ${doctor}`,
+        subject: 'A new prescription is ready',
         heading: 'A new prescription is ready',
         lines: [`${doctor} has issued a prescription for ${child}. Open the LilSteps app to view or download it.`],
       };
     case 'vaccine_due_soon':
       return {
-        subject: `${p.vaccine || 'A vaccine'} is due for ${child}`,
+        subject: 'A vaccine is due',
         heading: 'A vaccine is due soon',
         when: p.date ? `${formatEmailDate(p.date)}` : undefined,
         lines: [`${p.vaccine || 'A vaccine'} is due for ${child}. You can book a slot or mark it as given in the LilSteps app.`],
       };
     case 'new_message':
       return {
-        subject: `New message from ${doctor}`,
+        subject: 'You have a new message',
         heading: 'You have a new message',
         lines: [`${doctor} sent you a message. Open the LilSteps app to read and reply.`],
       };
@@ -236,15 +254,50 @@ function emailParts(key: string, p: Record<string, string>): EmailParts | null {
   }
 }
 
+/** Templates a doctor may receive, with doctor wording. */
+export const DOCTOR_EMAIL_TEMPLATES = ['new_message', 'checkin_summary_ready'] as const;
+
+function doctorEmailParts(key: string, p: Record<string, string>): EmailParts | null {
+  const child = p.child || 'a patient';
+  switch (key) {
+    case 'new_message':
+      return {
+        subject: 'New message in LilSteps',
+        heading: 'A parent sent you a message',
+        lines: [`${p.parent || 'A parent'} sent you a message about ${child}. Open the LilSteps dashboard to read and reply.`],
+      };
+    case 'checkin_summary_ready':
+      return {
+        subject: 'A check-in summary is ready',
+        heading: 'A check-in summary is ready',
+        lines: [`An AI check-in summary for ${child} is ready in the LilSteps dashboard, before the consult.`],
+      };
+    default:
+      return null;
+  }
+}
+
 /** Subject, plain text and branded HTML for an email notification. */
-export function renderEmail(key: string, params: Record<string, string>): RenderedEmail {
-  const parts = emailParts(key, params) ?? {
+export function renderEmail(
+  key: string,
+  rawParams: Record<string, string>,
+  audience: 'parent' | 'doctor' = 'parent',
+): RenderedEmail {
+  const params = cleanParams(rawParams);
+  const parts = (audience === 'doctor' ? doctorEmailParts(key, params) : emailParts(key, params)) ?? {
     subject: 'An update from LilSteps',
     heading: 'An update from LilSteps',
     lines: ['Open the LilSteps app to see what changed.'],
   };
-  const greeting = params.parent ? `Hi ${params.parent},` : 'Hello,';
-  const footer = 'Questions? Just reply to this email. — The LilSteps team';
+  const greeting =
+    audience === 'doctor'
+      ? params.doctor
+        ? `Hello ${params.doctor},`
+        : 'Hello Doctor,'
+      : params.parent
+        ? `Hi ${params.parent},`
+        : 'Hello,';
+  const footer = 'Questions? Reply to this email and it reaches the LilSteps team.';
 
   const text = [
     greeting,

@@ -13,7 +13,7 @@
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { createMeetForAppointment, type MeetAppointment } from './meet.ts';
-import { alreadyNotified, notifyParent } from './parentNotify.ts';
+import { alreadyNotified, inBackground, notifyParent } from './parentNotify.ts';
 
 /** ₹449 per consult. The only place the price is set; the app never sends it. */
 export const CONSULT_PRICE_PAISE = 44900;
@@ -229,9 +229,12 @@ export async function finalizePaidLink(
 }
 
 /**
- * Confirmation email (once per consult: notification_log + the 0046 unique
- * index stop a second one) and the per-consult Meet link (idempotent: an
- * existing link is reused). Best effort — the consult is booked either way.
+ * After a consult is confirmed: the per-consult Meet link first (idempotent:
+ * an existing link is reused), then the confirmation email (once per
+ * consult: notification_log + the 0046 unique index stop a second one).
+ * The email runs in the background so a slow mail server never delays the
+ * webhook or the app's status check. Best effort — the consult is booked
+ * either way.
  */
 export async function afterConsultConfirmed(admin: SupabaseClient, appointmentId: string): Promise<void> {
   try {
@@ -242,22 +245,26 @@ export async function afterConsultConfirmed(admin: SupabaseClient, appointmentId
       .maybeSingle();
     if (!appt || appt.status !== 'upcoming') return;
 
-    if (!(await alreadyNotified(admin, appointmentId, 'appointment_confirmation'))) {
-      await notifyParent(admin, {
-        parentId: appt.parent_id,
-        childId: appt.child_id,
-        appointmentId: appt.id,
-        template: 'appointment_confirmation',
-        params: {
-          doctor: (appt as any).doctors?.name ?? 'your doctor',
-          child: (appt as any).children?.name ?? '',
-          date: appt.date,
-          time: String(appt.time).slice(0, 5),
-        },
-      });
-    }
-
     await createMeetForAppointment(admin, appt as unknown as MeetAppointment);
+
+    inBackground(
+      'razorpay confirm email',
+      (async () => {
+        if (await alreadyNotified(admin, appointmentId, 'appointment_confirmation')) return;
+        await notifyParent(admin, {
+          parentId: appt.parent_id,
+          childId: appt.child_id,
+          appointmentId: appt.id,
+          template: 'appointment_confirmation',
+          params: {
+            doctor: (appt as any).doctors?.name ?? 'your doctor',
+            child: (appt as any).children?.name ?? '',
+            date: appt.date,
+            time: String(appt.time).slice(0, 5),
+          },
+        });
+      })(),
+    );
   } catch (e) {
     console.error(`[razorpay] after-confirm for ${appointmentId}: ${(e as Error).message}`);
   }

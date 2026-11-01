@@ -84,7 +84,8 @@ Deno.serve(async (req) => {
 
     for (const template of templates) {
       // Idempotency: one of each reminder per consult, on any channel (the
-      // 0046 unique index also stops a second run racing this one).
+      // 0046 unique index also stops a second run racing this one); failed or
+      // skipped sends stop after MAX_ATTEMPTS tries instead of every run.
       if (await alreadyNotified(admin, appt.id, template)) {
         results.push({ id: appt.id, template, ok: true });
         continue;

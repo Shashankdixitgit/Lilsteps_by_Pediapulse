@@ -52,7 +52,7 @@ import {
   verifyLinkCallbackSignature,
 } from '../_shared/razorpay.ts';
 import { isAllowedReturnUrl } from '../razorpay-return/allow.ts';
-import { notifyParent, parentContact } from '../_shared/parentNotify.ts';
+import { inBackground, notifyParent, parentContact } from '../_shared/parentNotify.ts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MINUTE = 60 * 1000;
@@ -376,8 +376,11 @@ async function cancel(admin: any, appt: Appointment, by: 'parent' | 'doctor'): P
   }
 
   const outcome = await cancelRefund(admin, appt, payments, by);
-  // A booked consult (not an unpaid hold) gets a cancellation email.
-  if (appt.status === 'upcoming') await emailCancellation(admin, appt, by, outcome.refund);
+  // A booked consult (not an unpaid hold) gets a cancellation email, sent in
+  // the background: the cancel answer never waits for (or fails on) email.
+  if (appt.status === 'upcoming') {
+    inBackground('cancel email', emailCancellation(admin, appt, by, outcome.refund));
+  }
   return jsonResponse(outcome);
 }
 

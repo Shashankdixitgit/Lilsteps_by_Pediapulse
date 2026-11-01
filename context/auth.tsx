@@ -6,8 +6,18 @@ import { WEB_DEMO } from '@/lib/webDemo';
 import { analytics, crash } from '@/lib/observability';
 import { haptic } from '@/components/ui/useMotion';
 
-/** Which email code is being checked: sign-up, sign-in, or password reset. */
-export type EmailCodeKind = 'signup' | 'email' | 'recovery';
+/** Which email code is being checked: sign-up, sign-in, password reset, or adding an email. */
+export type EmailCodeKind = 'signup' | 'email' | 'recovery' | 'email_change';
+
+/**
+ * Email codes: Supabase sends 6 digits by default (6–10 is configurable in
+ * Auth settings), so the code field accepts any length in that range.
+ */
+export const EMAIL_CODE_LENGTH = { min: 6, max: 10 } as const;
+
+export function isEmailCode(token: string): boolean {
+  return new RegExp(`^\\d{${EMAIL_CODE_LENGTH.min},${EMAIL_CODE_LENGTH.max}}$`).test(token);
+}
 
 interface SignInResult {
   error: string | null;
@@ -44,6 +54,8 @@ interface AuthState {
   verifyEmailCode: (email: string, token: string, kind: EmailCodeKind) => Promise<SignInResult>;
   /** Set a new password for the signed-in parent (after a reset code). */
   updatePassword: (password: string) => Promise<{ error: string | null }>;
+  /** Signed-in parent with no email (phone sign-up): email a code to add this address. */
+  addEmail: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshHasChildren: () => Promise<void>;
 }
@@ -128,13 +140,22 @@ const AUTH_COPY = {
   // SMS sign-in has no password.
   passwordPolicy: "This test account couldn't be created because its password doesn't meet the sign-in rules. Please tell the LilSteps team.",
   emailFailed: "We couldn't send the email right now. Please try again in a few minutes.",
+  emailRateLimit: 'Too many emails right now — try again in a few minutes.',
+  alreadyExists: 'This email already has an account. Sign in or reset your password.',
+  pwned: 'This password has appeared in a data breach elsewhere. Please choose a different one.',
   badEmail: "That email address doesn't look right. Please check it.",
   wrongPassword: "That email and password don't match. Try again, or sign in with a code instead.",
   weakPassword: 'Choose a stronger password: at least 8 characters, with upper-case and lower-case letters and a number.',
   samePassword: 'Your new password must be different from the old one.',
-  noAccount: "We couldn't find an account with that email. Check it, or sign up.",
   emailCodeBad: "That code didn't work. Check the latest email, or tap Resend code for a new one.",
 } as const;
+
+/** "No such account" answers to a sign-in code request: shown to the parent as sent anyway. */
+export function isNoAccountError(error: unknown): boolean {
+  const e = error as Partial<AuthError> & { message?: string };
+  const code = (e?.code ?? '').toString();
+  return code === 'otp_disabled' || code === 'user_not_found' || /signups not allowed for otp|user not found/i.test(e?.message ?? '');
+}
 
 /**
  * Plain-English text for an email sign-in error. Provider text is never
@@ -153,9 +174,15 @@ export function emailAuthErrorText(
     return AUTH_COPY.offline;
   }
   if (status === 429 || code.startsWith('over_') || /rate limit|too many|security purposes/.test(msg)) {
-    return AUTH_COPY.rateLimit;
+    // Sending steps hit the email limits; sign-in / code checks hit request limits.
+    return step === 'signup' || step === 'send' ? AUTH_COPY.emailRateLimit : AUTH_COPY.rateLimit;
+  }
+  if (code === 'user_already_exists' || code === 'email_exists' || /already (registered|exists)/.test(msg)) {
+    return AUTH_COPY.alreadyExists;
   }
   if (code === 'same_password') return AUTH_COPY.samePassword;
+  const reasons = (e as { reasons?: string[] })?.reasons ?? [];
+  if (reasons.includes('pwned') || /pwned|breach|compromised/.test(msg)) return AUTH_COPY.pwned;
   if (code === 'weak_password' || /password should|password must|weak password|password.*(characters|contain)/.test(msg)) {
     return AUTH_COPY.weakPassword;
   }
@@ -164,9 +191,6 @@ export function emailAuthErrorText(
   }
   if (step === 'password' && (code === 'invalid_credentials' || /invalid login credentials/.test(msg))) {
     return AUTH_COPY.wrongPassword;
-  }
-  if (step === 'send' && (code === 'otp_disabled' || code === 'user_not_found' || /signups not allowed for otp|user not found/.test(msg))) {
-    return AUTH_COPY.noAccount;
   }
   if (step === 'verify' && (code === 'otp_expired' || /token|otp|expired|invalid/.test(msg))) {
     return AUTH_COPY.emailCodeBad;
@@ -451,9 +475,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) {
       dbg.authError('signInWithPassword', error);
       if (error.code === 'email_not_confirmed') {
-        // Finish the sign-up: send a fresh code and ask for it.
-        const resent = await resendSignupCode(email);
-        return { error: resent.error, isNewUser: false, needsCode: !resent.error };
+        // Finish the sign-up: send a fresh code and ask for it. If a code went
+        // out under a minute ago, Supabase refuses a new one — the earlier
+        // code still works, so go to the code screen anyway.
+        await resendSignupCode(email);
+        return { error: null, isNewUser: false, needsCode: true };
       }
       return { error: emailAuthErrorText(error, 'password'), isNewUser: false, needsCode: false };
     }
@@ -469,6 +495,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
     if (error) {
       dbg.authError('sendLoginCode', error);
+      // Don't reveal which addresses have accounts: an unknown email gets the
+      // same "if an account exists, we've sent a code" screen.
+      if (isNoAccountError(error)) return { error: null };
       return { error: emailAuthErrorText(error, 'send') };
     }
     analytics.track('auth_email_code_sent');
@@ -502,8 +531,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function verifyEmailCode(rawEmail: string, token: string, kind: EmailCodeKind): Promise<SignInResult> {
     const email = normaliseEmail(rawEmail);
     dbg.auth('verifyEmailCode', { email, kind, tokenLength: token.length });
-    if (!/^\d{6}$/.test(token)) {
-      return { error: 'Enter the 6-digit code from the email.', isNewUser: false };
+    if (!isEmailCode(token)) {
+      return { error: 'Enter the code from the email.', isNewUser: false };
     }
     const { data, error } = await supabase.auth.verifyOtp({ email, token, type: kind });
     if (error) {
@@ -513,6 +542,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     analytics.track('auth_email_code_verified', { kind });
     return afterSignIn(data.user, { email });
+  }
+
+  async function addEmail(rawEmail: string): Promise<{ error: string | null }> {
+    const email = normaliseEmail(rawEmail);
+    dbg.auth('addEmail', { email });
+    // Sends the "Change email address" template (a code) to the new address;
+    // verifyEmailCode(…, 'email_change') then attaches it to this account.
+    const { error } = await supabase.auth.updateUser({ email });
+    if (error) {
+      dbg.authError('addEmail', error);
+      return { error: emailAuthErrorText(error, 'signup') };
+    }
+    return { error: null };
   }
 
   async function updatePassword(password: string): Promise<{ error: string | null }> {
@@ -578,6 +620,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sendPasswordResetCode,
         verifyEmailCode,
         updatePassword,
+        addEmail,
         signOut,
         refreshHasChildren,
       }}

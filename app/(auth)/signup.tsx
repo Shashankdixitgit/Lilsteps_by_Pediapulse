@@ -1,6 +1,6 @@
 /**
- * Create an account: name, email and password, confirmed with a 6-digit
- * code emailed to the parent (SMS is off until DLT is done; the phone
+ * Create an account: name, email and password, confirmed with a code
+ * emailed to the parent (SMS is off until DLT is done; the phone
  * screen is kept behind PHONE_AUTH).
  */
 import { router } from 'expo-router';
@@ -9,13 +9,13 @@ import { View } from 'react-native';
 
 import {
   AuthError,
-  AuthLink,
   AuthScreen,
   authStyles,
   CodeField,
   EmailField,
   FooterPrompt,
   PasswordField,
+  ResendLink,
   TermsLine,
 } from '@/components/auth/AuthShared';
 import { PhoneSignupScreen } from '@/components/auth/PhoneSignupScreen';
@@ -23,6 +23,7 @@ import { GradientButton } from '@/components/gradient-button';
 import { TextInputField } from '@/components/text-input-field';
 import {
   demoCredentials,
+  isEmailCode,
   isValidEmail,
   normaliseEmail,
   passwordProblem,
@@ -39,7 +40,7 @@ export default function SignupScreen() {
 }
 
 function EmailSignupScreen() {
-  const { signUpWithEmail, resendSignupCode, verifyEmailCode } = useAuth();
+  const { signUpWithEmail, resendSignupCode, verifyEmailCode, updatePassword } = useAuth();
 
   // Web demo: filled in, with a fresh test account for each tester.
   const [demo] = useState(() => (WEB_DEMO ? demoCredentials(randomDemoPhone()) : null));
@@ -50,7 +51,6 @@ function EmailSignupScreen() {
   const [step, setStep] = useState<'details' | 'code'>('details');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   /** New parent: stamp the name they typed onto the parents row, then onboarding. */
   async function finish(isNewUser: boolean) {
@@ -98,7 +98,6 @@ function EmailSignupScreen() {
     if (r.needsCode) {
       setLoading(false);
       setCode('');
-      setNotice(null);
       setStep('code');
       return;
     }
@@ -106,20 +105,18 @@ function EmailSignupScreen() {
     setLoading(false);
   }
 
-  async function handleResend() {
-    if (loading) return;
-    setLoading(true);
+  /** True when a new code went out (starts the cooldown). */
+  async function handleResend(): Promise<boolean> {
     setError(null);
     const r = await resendSignupCode(email);
-    setLoading(false);
     if (r.error) setError(r.error);
-    else setNotice('We sent a new code.');
+    return !r.error;
   }
 
   async function handleVerify() {
     if (loading) return;
-    if (code.length !== 6) {
-      setError('Please enter the 6-digit code');
+    if (!isEmailCode(code)) {
+      setError('Please enter the code from the email');
       return;
     }
     setLoading(true);
@@ -130,6 +127,11 @@ function EmailSignupScreen() {
       setError(r.error);
       return;
     }
+    // Someone may have registered this address earlier with their own
+    // password; proving the code means this person owns the inbox, so the
+    // password typed here becomes the account's password.
+    const pw = await updatePassword(password);
+    if (pw.error) dbg.authError('Signup: set password after code', pw.error);
     await finish(r.isNewUser);
     setLoading(false);
   }
@@ -138,7 +140,7 @@ function EmailSignupScreen() {
     return (
       <AuthScreen
         title="Check your email"
-        subtitle={`We sent a 6-digit code to ${normaliseEmail(email)}. If this email already has an account, sign in instead.`}
+        subtitle={`We sent a code to ${normaliseEmail(email)}. It expires in 10 minutes.`}
         onBack={() => {
           setStep('details');
           setError(null);
@@ -151,7 +153,7 @@ function EmailSignupScreen() {
         <AuthError message={error} />
         <GradientButton label="Verify" loading={loading} onPress={handleVerify} style={authStyles.submitButton} />
         <View style={authStyles.links}>
-          <AuthLink center label={notice ?? "Didn't receive it? Resend code"} onPress={handleResend} />
+          <ResendLink onResend={handleResend} />
         </View>
       </AuthScreen>
     );

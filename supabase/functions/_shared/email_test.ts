@@ -1,9 +1,17 @@
 // deno test supabase/functions/_shared/email_test.ts
 import { assert, assertEquals, assertStringIncludes } from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { type EmailMessage, sendEmail, type SmtpConfig, smtpConfig } from './email.ts';
+import { DOCTOR_EMAIL_TEMPLATES } from './templates.ts';
 import { formatEmailDate, formatEmailTime, renderEmail } from './templates.ts';
 
-const CONFIG: SmtpConfig = { host: 'smtp.gmail.com', port: 465, user: 'dev@lilstepsclinics.com', pass: 'x', from: 'LilSteps <dev@lilstepsclinics.com>' };
+const CONFIG: SmtpConfig = {
+  host: 'smtp.gmail.com',
+  port: 465,
+  user: 'dev@lilstepsclinics.com',
+  pass: 'x',
+  from: 'LilSteps <dev@lilstepsclinics.com>',
+  replyTo: 'dev@lilstepsclinics.com',
+};
 
 Deno.test('sendEmail hands the message to the transport', async () => {
   const sent: Array<{ config: SmtpConfig; msg: EmailMessage }> = [];
@@ -33,6 +41,7 @@ Deno.test('smtpConfig reads the secrets, defaulting to port 465', () => {
   const c = smtpConfig((k) => env[k]);
   assertEquals(c?.port, 465);
   assertEquals(c?.from, 'LilSteps <dev@lilstepsclinics.com>');
+  assertEquals(c?.replyTo, 'dev@lilstepsclinics.com');
   assertEquals(smtpConfig(() => undefined), null);
 });
 
@@ -47,7 +56,7 @@ Deno.test('booking confirmation email', () => {
   const e = renderEmail('appointment_confirmation', {
     parent: 'Priya', child: 'Myra', doctor: 'Dr. Madhav', date: '2026-11-03', time: '10:00',
   });
-  assertEquals(e.subject, "Booked: Myra's consult with Dr. Madhav");
+  assertEquals(e.subject, 'Your LilSteps consult is booked');
   assertStringIncludes(e.text, 'Hi Priya,');
   assertStringIncludes(e.text, 'Tuesday, 3 November at 10:00 am (India time)');
   assertStringIncludes(e.html, 'Tuesday, 3 November at 10:00 am');
@@ -70,6 +79,63 @@ Deno.test('every notification template renders; params are HTML-escaped', () => 
     const e = renderEmail(key, { child: '<b>Myra</b>', doctor: 'Dr. "X" & Co', date: '2026-11-03', time: '09:00', vaccine: 'MMR' });
     assert(e.subject.length > 0, key);
     assert(!e.html.includes('<b>Myra</b>'), `${key} html not escaped`);
-    assert(e.text.includes('The LilSteps team'), key);
+    assert(e.text.includes('reaches the LilSteps team'), key);
   }
+});
+
+// ── Review regressions ────────────────────────────────────────────────────────
+
+const ALL_KEYS = ['appointment_confirmation', 'appointment_cancelled', 'appointment_rescheduled', 'appointment_reminder_24h',
+  'appointment_reminder_1h', 'prescription_issued', 'vaccine_due_soon', 'new_message', 'checkin_summary_ready'];
+
+Deno.test('R1: CR/LF in a child name cannot add mail headers', async () => {
+  const evil = 'Myra\r\nBcc: attacker@evil.example\r\n\u0000X';
+  for (const key of ALL_KEYS) {
+    for (const audience of ['parent', 'doctor'] as const) {
+      const e = renderEmail(key, { child: evil, doctor: evil, parent: evil, vaccine: evil, date: '2026-11-03', time: '10:00' }, audience);
+      assert(!/[\r\n]/.test(e.subject), `${key}/${audience} subject has a line break`);
+      assert(!/[\r\u0000]/.test(e.text), `${key}/${audience} text has control chars`);
+      assert(!e.text.includes('\nBcc:'), `${key}/${audience} text starts a header line`);
+    }
+  }
+  // The sender refuses header values with line breaks even if a template slipped.
+  const never = () => Promise.reject(new Error('must not send'));
+  const msg = { to: 'priya@example.com', subject: 'Hi', text: 't', html: 'h' };
+  assertEquals((await sendEmail({ ...msg, subject: 'Hi\r\nBcc: x@evil.example' }, { config: CONFIG, transport: never })).ok, false);
+  assertEquals((await sendEmail({ ...msg, to: 'priya@example.com\r\nBcc: x@evil.example' }, { config: CONFIG, transport: never })).ok, false);
+  assertEquals((await sendEmail(msg, { config: { ...CONFIG, from: 'LilSteps\n<x@y.z>' }, transport: never })).ok, false);
+});
+
+Deno.test('R2: subjects never carry the child, doctor or time', () => {
+  for (const key of ALL_KEYS) {
+    const e = renderEmail(key, { child: 'Myra', doctor: 'Dr. Madhav', parent: 'Priya', vaccine: 'MMR', date: '2026-11-03', time: '10:00' });
+    for (const secret of ['Myra', 'Madhav', 'MMR', '10:00', 'November', 'Priya']) {
+      assert(!e.subject.includes(secret), `${key} subject leaks "${secret}": ${e.subject}`);
+    }
+    assertStringIncludes(e.text, key === 'vaccine_due_soon' ? 'MMR' : key.startsWith('appointment') ? 'Dr. Madhav' : '');
+  }
+});
+
+Deno.test('R3: doctor emails use doctor wording; only allow-listed templates', () => {
+  assertEquals([...DOCTOR_EMAIL_TEMPLATES].sort(), ['checkin_summary_ready', 'new_message']);
+  const summary = renderEmail('checkin_summary_ready', { child: 'Myra', doctor: 'Dr. Madhav' }, 'doctor');
+  assert(!summary.text.includes('Your symptom summary'), 'parent wording sent to a doctor');
+  assertStringIncludes(summary.text, 'Hello Dr. Madhav,');
+  assertStringIncludes(summary.text, 'dashboard');
+  const msg = renderEmail('new_message', { child: 'Myra', parent: 'Priya', doctor: 'Dr. Madhav' }, 'doctor');
+  assertStringIncludes(msg.text, 'Priya sent you a message about Myra');
+  assert(!msg.text.includes('Open the LilSteps app to read'), 'parent wording sent to a doctor');
+});
+
+Deno.test('R9: a stalled SMTP server times out and the send is aborted', async () => {
+  let aborted = false;
+  const stall = (_c: SmtpConfig, _m: EmailMessage, signal: AbortSignal) =>
+    new Promise<void>(() => signal.addEventListener('abort', () => (aborted = true)));
+  const t0 = performance.now();
+  const r = await sendEmail({ to: 'priya@example.com', subject: 's', text: 't', html: 'h' }, { config: CONFIG, transport: stall, timeoutMs: 150 });
+  const took = performance.now() - t0;
+  assertEquals(r.ok, false);
+  assertStringIncludes(r.error ?? '', 'timed out');
+  assert(aborted, 'transport was not told to abort');
+  assert(took < 1000, `took ${took} ms`);
 });
