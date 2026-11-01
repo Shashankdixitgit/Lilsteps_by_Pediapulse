@@ -6,6 +6,7 @@ import { AiCheckinHeroCard } from '@/components/consult/AiCheckinHeroCard';
 import { AppointmentCard } from '@/components/consult/AppointmentCard';
 import { ConsultHistoryItem } from '@/components/consult/ConsultHistoryItem';
 import { ConversationListItem } from '@/components/consult/ConversationListItem';
+import { FollowUpDueCard } from '@/components/consult/FollowUpDueCard';
 import { CancelNotice, cancelLabel, useCancelAppointment } from '@/components/consult/useCancelAppointment';
 import { DoctorCardCompact } from '@/components/consult/DoctorCardCompact';
 import { EmptyStateCard } from '@/components/consult/EmptyStateCard';
@@ -25,6 +26,7 @@ export default function ConsultScreen() {
   const { doctors, loading: loadingDocs } = useDoctors();
   const {
     upcoming,
+    followUpsDue,
     cancelAppointment,
     loading: loadingAppts,
     refetch: refetchAppts,
@@ -83,7 +85,21 @@ export default function ConsultScreen() {
       <View style={styles.section}>
         <Text style={typography.headingSM}>Upcoming</Text>
         <CancelNotice notice={cancelNotice} />
-        {loadingAppts && upcoming.length === 0 ? (
+        {/* Follow-ups the doctor booked: not booked until the family pays (0051). */}
+        {followUpsDue.map((f) => (
+          <FollowUpDueCard
+            key={f.id}
+            appointmentId={f.id}
+            childId={f.child_id}
+            doctorId={f.doctor_id}
+            doctorName={f.doctors?.name ?? 'Doctor'}
+            date={f.date}
+            time={f.time}
+            holdExpiresAt={f.hold_expires_at ?? null}
+            onSettled={refetchAppts}
+          />
+        ))}
+        {loadingAppts && upcoming.length === 0 && followUpsDue.length === 0 ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={AppColors.primary} />
           </View>
@@ -113,9 +129,9 @@ export default function ConsultScreen() {
               />
             );
           })
-        ) : (
+        ) : followUpsDue.length === 0 ? (
           <EmptyStateCard icon="calendar-outline" title="No upcoming appointments" />
-        )}
+        ) : null}
       </View>
 
       <View style={styles.section}>

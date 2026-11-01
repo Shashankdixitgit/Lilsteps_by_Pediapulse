@@ -26,14 +26,26 @@ export async function sendMessageAction(
 
   if (error) return { error: error.message };
 
-  // Notify the parent. Fire-and-forget — don't block the UI on it.
-  const { data: convo } = await supabase
-    .from('conversations')
-    .select('parent_id, doctors(name)')
-    .eq('id', conversationId)
-    .maybeSingle<{ parent_id: string; doctors: { name: string } | null }>();
+  // Notify the parent. Fire-and-forget — don't block the UI on it. One SMS
+  // per burst: skip it when the doctor already wrote in this thread in the
+  // last 10 minutes (that message's SMS already brought the parent here).
+  const since = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const [{ data: convo }, { count: recent }] = await Promise.all([
+    supabase
+      .from('conversations')
+      .select('parent_id, doctors(name)')
+      .eq('id', conversationId)
+      .maybeSingle<{ parent_id: string; doctors: { name: string } | null }>(),
+    supabase
+      .from('messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('conversation_id', conversationId)
+      .eq('sender', 'doctor')
+      .gte('created_at', since),
+  ]);
 
-  if (convo) {
+  // `recent` includes the message just sent.
+  if (convo && (recent ?? 0) <= 1) {
     supabase.functions
       .invoke('notify', {
         body: {
@@ -50,4 +62,19 @@ export async function sendMessageAction(
 
   revalidatePath(`/conversations/${conversationId}`);
   return {};
+}
+
+/**
+ * Marks the parent's messages in this thread read. The page does this when it
+ * renders, but a message that arrives while the thread is open (realtime
+ * refresh) needs it too, or the unread badge counts a message already on screen.
+ */
+export async function markThreadReadAction(conversationId: string): Promise<void> {
+  const supabase = await createSupabaseServerClient();
+  await supabase
+    .from('messages')
+    .update({ read_at: new Date().toISOString() })
+    .eq('conversation_id', conversationId)
+    .eq('sender', 'parent')
+    .is('read_at', null);
 }

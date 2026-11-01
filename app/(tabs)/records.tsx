@@ -132,7 +132,7 @@ export default function RecordsScreen() {
     if (!search.trim()) return prescriptions;
     const q = search.trim().toLowerCase();
     return prescriptions.filter((p) =>
-      p.doctors?.name?.toLowerCase().includes(q) ||
+      (p.doctor_name ?? p.doctors?.name)?.toLowerCase().includes(q) ||
       p.prescription_items?.some((i) => i.medicine.toLowerCase().includes(q)),
     );
   }, [prescriptions, search, showPrescriptions]);
@@ -425,7 +425,7 @@ function PrescriptionCard({
       : itemCount === 1
         ? firstMedicine ?? '1 medicine'
         : `${firstMedicine} + ${itemCount - 1} more`;
-  const title = prescription.doctors?.name ?? 'Doctor';
+  const title = prescription.doctor_name ?? prescription.doctors?.name ?? 'Doctor';
   const meta = `Prescription · ${issuedDate} · ${summary}`;
 
   return (

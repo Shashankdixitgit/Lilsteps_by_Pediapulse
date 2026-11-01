@@ -1,6 +1,18 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { fetchConcerns, fetchUrgencies, type Urgency } from '@/lib/appointments';
+import {
+  SLOT_MINUTES,
+  daysFrom,
+  eventKind,
+  isIsoDate,
+  isIsoMonth,
+  minutesToLabel,
+  parseView,
+  rangeStart,
+  shiftMonth,
+  timeToMinutes,
+} from '@/lib/calendar';
 import { getCurrentDoctor, hasVideoLink } from '@/lib/doctor';
 import {
   computeAge,
@@ -18,6 +30,7 @@ import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { FlashToast } from './flash-toast';
 import { LateBadge, UrgencyBadge } from './urgency-badge';
 import { VideoLinkBanner } from './video-link-banner';
+import { Schedule, type CalEvent, type NextUp } from './schedule/schedule';
 
 type QueueRow = {
   id: string;
@@ -26,6 +39,7 @@ type QueueRow = {
   status: string;
   summary_ready: boolean;
   ai_summary_id: string | null;
+  meet_link: string | null;
   children: { id: string; name: string; dob: string; sex: string } | null;
   parents: { name: string | null } | null;
 };
@@ -34,7 +48,7 @@ type QueueRow = {
 type ClosedRow = QueueRow & { closedAt: string | null };
 
 const QUEUE_SELECT =
-  'id, date, time, status, summary_ready, ai_summary_id, children(id, name, dob, sex), parents(name)';
+  'id, date, time, status, summary_ready, ai_summary_id, meet_link, children(id, name, dob, sex), parents(name)';
 
 const CLOSED_LABEL: Record<string, string> = {
   completed: 'Completed',
@@ -59,7 +73,7 @@ function closedDayLabel(ts: string): string {
 function ClosedWhen({ closedAt, date, time }: { closedAt: string | null; date: string; time: string }) {
   const slotDay = relativeDayLabel(date)?.toLowerCase() ?? formatDayShort(date);
   return (
-    <div className="flex flex-col">
+    <div className="hidden flex-col sm:flex">
       {closedAt ? (
         <>
           <span className="text-[14px] text-[var(--ink)]">Closed {closedDayLabel(closedAt)}</span>
@@ -69,18 +83,6 @@ function ClosedWhen({ closedAt, date, time }: { closedAt: string | null; date: s
       <span className={closedAt ? 'mt-1 text-[12px] text-[var(--ink-3)]' : 'text-[14px] text-[var(--ink)]'}>
         Booked for {slotDay}, {formatSlotTime(time)}
       </span>
-    </div>
-  );
-}
-
-function StatCard({ label, value, hint }: { label: string; value: number; hint: string }) {
-  return (
-    <div className="rounded-xl border border-[var(--hairline)] bg-[var(--card)] p-6">
-      <div className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
-        {label}
-      </div>
-      <div className="mt-3 font-display text-[40px] leading-none text-[var(--ink)]">{value}</div>
-      <div className="mt-2 text-[13px] text-[var(--ink-3)]">{hint}</div>
     </div>
   );
 }
@@ -110,8 +112,9 @@ function SummaryBadge({ ready }: { ready: boolean }) {
   );
 }
 
-// min-w keeps columns readable on narrow screens; the table scrolls sideways instead.
-const COLS = 'min-w-[44rem] grid-cols-[2.5rem_9rem_minmax(0,1fr)_8rem_7rem]';
+// From sm up: a five-column grid (min-w keeps it readable; it scrolls sideways
+// on small tablets). Phones get a stacked row instead.
+const COLS = 'sm:grid sm:min-w-[44rem] sm:grid-cols-[2.5rem_9rem_minmax(0,1fr)_8rem_7rem]';
 
 // How far back unclosed visits stay in "Needs closing" before they drop off.
 const OPEN_VISIT_LOOKBACK_DAYS = 30;
@@ -122,9 +125,9 @@ const CLOSED_LOOKBACK_DAYS = 7;
 export default async function QueuePage({
   searchParams,
 }: {
-  searchParams: Promise<{ closed?: string }>;
+  searchParams: Promise<{ closed?: string; d?: string; v?: string; m?: string }>;
 }) {
-  const { closed } = await searchParams;
+  const { closed, d, v, m } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const doctor = await getCurrentDoctor(supabase);
   if (!doctor) redirect('/login');
@@ -132,13 +135,25 @@ export default async function QueuePage({
   // would still say "yesterday" until 5:30am IST.
   const today = todayIst();
 
+  // Calendar position: ?d= anchor day, ?v= 1 / 3 / 7 days, ?m= mini-calendar month.
+  const view = parseView(v);
+  const anchor = isIsoDate(d) ? d : today;
+  const days = daysFrom(rangeStart(anchor, view), view);
+  const miniMonth = isIsoMonth(m) ? m : anchor.slice(0, 7);
+
   // Only live visits: completed / no-show / cancelled drop out of the queue.
   // Closed visits from the last 7 days stay visible under "Recently closed".
   // A visit can be closed before its booked date, so "recent" is judged by
   // when it was closed (consultations.created_at: the row is written only
   // when the visit is closed) as well as by the booked date.
   const closedSince = `${istDatePlus(-CLOSED_LOOKBACK_DAYS)}T00:00:00+05:30`;
-  const [{ data, error }, { data: closedByDate }, { data: recentConsults }] = await Promise.all([
+  const [
+    { data, error },
+    { data: closedByDate },
+    { data: recentConsults },
+    { data: inRange },
+    { data: monthBookings },
+  ] = await Promise.all([
     supabase
       .from('appointments')
       .select(QUEUE_SELECT)
@@ -161,6 +176,28 @@ export default async function QueuePage({
       .select('appointment_id, created_at')
       .gte('created_at', closedSince)
       .returns<{ appointment_id: string; created_at: string }[]>(),
+    // Visits in the calendar's days. Open and closed ones, plus follow-ups
+    // the doctor booked that wait for the family to pay (0051). Any other
+    // unpaid hold is not a consult yet, and a cancelled one is gone.
+    supabase
+      .from('appointments')
+      .select(QUEUE_SELECT)
+      .eq('doctor_id', doctor.doctorId)
+      .gte('date', days[0])
+      .lte('date', days[days.length - 1])
+      .or('status.in.(upcoming,completed,no_show),and(status.eq.awaiting_payment,followup_of.not.is.null)')
+      .order('date', { ascending: true })
+      .order('time', { ascending: true })
+      .returns<QueueRow[]>(),
+    // Days with an open booking, for the dots on the mini calendar.
+    supabase
+      .from('appointments')
+      .select('date')
+      .eq('doctor_id', doctor.doctorId)
+      .eq('status', 'upcoming')
+      .gte('date', `${miniMonth}-01`)
+      .lt('date', `${shiftMonth(miniMonth, 1)}-01`)
+      .returns<{ date: string }[]>(),
   ]);
 
   const closedAtByAppt = new Map((recentConsults ?? []).map((c) => [c.appointment_id, c.created_at]));
@@ -181,12 +218,16 @@ export default async function QueuePage({
   const recentlyClosed: ClosedRow[] = [...(closedByDate ?? []), ...(closedEarly ?? [])]
     .map((r) => ({ ...r, closedAt: closedAtByAppt.get(r.id) ?? null }))
     .sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
-  const allRows = [...rows, ...recentlyClosed];
+  const rangeRows = inRange ?? [];
+  const allRows = [...rows, ...recentlyClosed, ...rangeRows];
   const [concerns, urgencies] = await Promise.all([
-    fetchConcerns(supabase, allRows.map((r) => r.id)),
+    fetchConcerns(supabase, [...new Set(allRows.map((r) => r.id))]),
     fetchUrgencies(supabase, allRows),
   ]);
-  const overdue = rows.filter((a) => a.date < today);
+  // Newest first: yesterday's unclosed visit is the one the doctor remembers.
+  const overdue = rows
+    .filter((a) => a.date < today)
+    .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`));
   // Urgent visits first within today (R2-11): an urgent 3-week-old used to sit
   // below a routine visit just because its slot was later. The rows arrive
   // ordered by date and time, and the sort is stable, so that order holds
@@ -203,6 +244,48 @@ export default async function QueuePage({
   const today_str = formatDayLong(new Date().toISOString()).toUpperCase();
   const todayReady = todays.filter((a) => a.summary_ready).length;
 
+  const nowMinutes = timeToMinutes(now);
+  const toEvent = (r: QueueRow): CalEvent => ({
+    id: r.id,
+    date: r.date,
+    start: timeToMinutes(r.time),
+    childName: r.children?.name ?? 'Unknown',
+    parentName: r.parents?.name?.trim() || null,
+    concern: concerns.get(r.id) ?? null,
+    kind: eventKind(r.status, urgencies.get(r.id), !!r.ai_summary_id),
+    status: r.status,
+    late: lateIds.has(r.id),
+    needsClosing: r.status === 'upcoming' && r.date < today,
+  });
+  const events = rangeRows.map(toEvent);
+
+  // Next up: the first open visit that has not ended yet (today's in-progress
+  // slot counts), then the few after it.
+  const ahead = rows.filter(
+    (r) => r.date > today || (r.date === today && timeToMinutes(r.time) + SLOT_MINUTES > nowMinutes),
+  );
+  const whenLabel = (r: QueueRow): string => {
+    const start = timeToMinutes(r.time);
+    if (r.date === today) {
+      const diff = start - nowMinutes;
+      if (diff <= 0) return 'In progress now';
+      if (diff < 60) return `Starts in ${diff} min`;
+      return `Today · ${minutesToLabel(start)}`;
+    }
+    return `${relativeDayLabel(r.date) ?? formatDayShort(r.date)} · ${minutesToLabel(start)}`;
+  };
+  const nextUp: NextUp | null = ahead[0]
+    ? {
+        event: toEvent(ahead[0]),
+        urgency: urgencies.get(ahead[0].id),
+        when: whenLabel(ahead[0]),
+        // Per-appointment Calendar-event Meet link, else the doctor's permanent room.
+        meetLink: ahead[0].meet_link ?? doctor.defaultMeetLink ?? null,
+      }
+    : null;
+  const after = ahead.slice(1, 4).map((r) => ({ event: toEvent(r), when: whenLabel(r) }));
+  const bookedDays = new Set((monthBookings ?? []).map((b) => b.date));
+
   return (
     <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-12 sm:px-8">
       {closed && (
@@ -215,19 +298,24 @@ export default async function QueuePage({
         <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
           Queue · {today_str}
         </div>
-        <h1 className="mt-2 font-display text-[40px] leading-tight text-[var(--ink)]">
-          Today&apos;s Consultations
-        </h1>
+        <h1 className="mt-2 font-display text-[40px] leading-tight text-[var(--ink)]">Schedule</h1>
       </header>
 
       {!hasVideoLink(doctor) && <VideoLinkBanner className="mt-8" />}
 
-      {/* Summary stats */}
-      <section className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3 fade-up">
-        <StatCard label="Today" value={todays.length} hint="Consultations scheduled today" />
-        <StatCard label="Summary ready" value={todayReady} hint="Today, with AI pre-visit notes" />
-        <StatCard label="Upcoming" value={later.length} hint="Booked for later days" />
-      </section>
+      {!error && (
+        <Schedule
+          today={today}
+          nowMinutes={nowMinutes}
+          days={days}
+          nav={{ anchor, view, month: miniMonth }}
+          events={events}
+          bookedDays={bookedDays}
+          nextUp={nextUp}
+          later={after}
+          stats={{ today: todays.length, ready: todayReady, upcoming: later.length }}
+        />
+      )}
 
       {error && (
         <div className="mt-10 rounded-xl border border-[var(--hairline-strong)] border-l-2 border-l-[var(--ink)] bg-[var(--card)] px-5 py-4 font-mono text-[13px] text-[var(--ink)]">
@@ -246,25 +334,6 @@ export default async function QueuePage({
               urgencies={urgencies}
             />
           )}
-          <QueueTable
-            title="Today"
-            hint={`${todays.length} scheduled`}
-            rows={todays}
-            concerns={concerns}
-            urgencies={urgencies}
-            lateIds={lateIds}
-            emptyTitle="No appointments today"
-            emptyBody="New bookings for today appear here as parents schedule them."
-          />
-          <QueueTable
-            title="Upcoming"
-            hint={`${later.length} booked`}
-            rows={later}
-            concerns={concerns}
-            urgencies={urgencies}
-            emptyTitle="Nothing booked yet"
-            emptyBody="Bookings for later days appear here."
-          />
           {recentlyClosed.length > 0 && (
             <QueueTable
               title="Recently closed"
@@ -316,7 +385,7 @@ function QueueTable({
 }) {
   return (
     <section className="mt-10 fade-up">
-      <div className="flex items-baseline justify-between">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="font-display text-[20px] text-[var(--ink)]">{title}</h2>
         <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
           {hint}
@@ -332,7 +401,7 @@ function QueueTable({
         <div className="mt-5 overflow-x-auto rounded-xl border border-[var(--hairline)] bg-[var(--card)]">
           {/* Column headers */}
           <div
-            className={`grid ${COLS} items-center gap-4 border-b border-[var(--hairline)] bg-[var(--paper-soft)] px-6 py-3 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]`}
+            className={`hidden ${COLS} items-center gap-4 border-b border-[var(--hairline)] bg-[var(--paper-soft)] px-6 py-3 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-3)]`}
           >
             <span>#</span>
             <span>{closed ? 'Closed' : 'When'}</span>
@@ -354,22 +423,41 @@ function QueueTable({
               <Link
                 key={appt.id}
                 href={`/consultations/${appt.id}`}
-                className={`grid ${COLS} items-center gap-4 border-b border-[var(--hairline)] px-6 py-4 transition-colors last:border-b-0 hover:bg-[var(--paper-soft)] ${
+                className={`block ${COLS} items-center gap-4 border-b border-[var(--hairline)] px-4 py-3.5 transition-colors sm:px-6 sm:py-4 last:border-b-0 hover:bg-[var(--paper-soft)] ${
                   flagged ? 'border-l-[3px] border-l-[var(--ink)] bg-[var(--paper-soft)]' : ''
                 } ${closed ? 'text-[var(--ink-3)]' : ''}`}
               >
-                <span className="font-mono text-[12px] text-[var(--ink-4)]">
+                {/* Phone: when + status on one line, then the patient and concern. */}
+                <div className="sm:hidden">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[13px] text-[var(--ink-2)]">
+                      {closed && appt.closedAt
+                        ? `Closed ${closedDayLabel(appt.closedAt)} · ${formatClock(appt.closedAt)}`
+                        : `${when.date} · ${when.time}`}
+                    </span>
+                    {closed ? <ClosedBadge status={appt.status} /> : <SummaryBadge ready={appt.summary_ready} />}
+                  </div>
+                  <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2">
+                    <span className="truncate text-[16px] font-medium text-[var(--ink)]">{child?.name ?? 'Unknown'}</span>
+                    {child && <span className="text-[12px] text-[var(--ink-3)]">{computeAge(child.dob)}</span>}
+                    {!closed && <UrgencyBadge urgency={urgency} className="shrink-0" />}
+                    {!closed && lateIds?.has(appt.id) && <LateBadge className="shrink-0" />}
+                  </div>
+                  {concern && <div className="truncate text-[13px] text-[var(--ink-3)]">{concern}</div>}
+                </div>
+
+                <span className="hidden font-mono text-[12px] text-[var(--ink-4)] sm:inline">
                   {String(idx + 1).padStart(2, '0')}
                 </span>
                 {closed ? (
                   <ClosedWhen closedAt={appt.closedAt ?? null} date={appt.date} time={appt.time} />
                 ) : (
-                  <div className="flex flex-col">
+                  <div className="hidden flex-col sm:flex">
                     <span className="text-[14px] text-[var(--ink)]">{when.date}</span>
                     <span className="font-mono text-[12px] text-[var(--ink-3)]">{when.time}</span>
                   </div>
                 )}
-                <div className="min-w-0">
+                <div className="hidden min-w-0 sm:block">
                   <div className="flex min-w-0 items-center gap-2">
                     <span className="truncate text-[16px] font-medium text-[var(--ink)]">
                       {child?.name ?? 'Unknown'}
@@ -384,12 +472,12 @@ function QueueTable({
                     <div className="truncate text-[13px] text-[var(--ink-3)]">{concern}</div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--ink-3)]">
+                <div className="hidden items-center gap-2 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--ink-3)] sm:flex">
                   <span>{child ? computeAge(child.dob) : '—'}</span>
                   <span className="text-[var(--hairline-strong)]">·</span>
                   <span>{child?.sex ?? '—'}</span>
                 </div>
-                <div className="flex flex-col items-end gap-1 text-right">
+                <div className="hidden flex-col items-end gap-1 text-right sm:flex">
                   {closed ? <ClosedBadge status={appt.status} /> : <SummaryBadge ready={appt.summary_ready} />}
                 </div>
               </Link>

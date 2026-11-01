@@ -66,7 +66,7 @@ export function ForgotForm() {
         </button>
         <Link
           href="/login"
-          className="block text-center text-[13px] text-[var(--ink-3)] underline"
+          className="link-underline mx-auto block w-fit text-center text-[13px] text-[var(--ink-3)]"
         >
           Back to sign in
         </Link>
@@ -76,7 +76,7 @@ export function ForgotForm() {
 
   return (
     <div className="space-y-7 fade-up">
-      <p className="text-[15px] leading-[1.5] text-[var(--ink-3)]">
+      <p className="rounded-xl border border-[var(--hairline)] bg-[var(--paper-soft)] px-4 py-3 text-[14px] leading-[1.55] text-[var(--ink-2)]">
         {verified
           ? "Code accepted. Choose your new password."
           : `If ${email} has a dashboard login, we sent it a code. It expires in 10 minutes. Enter it with your new password.`}
@@ -125,12 +125,12 @@ export function ForgotForm() {
         </button>
       </form>
       {verified ? null : (
-        <form action={sendAction}>
+        <form action={sendAction} className="space-y-3">
           <input type="hidden" name="email" value={email} />
           <button
             type="submit"
             disabled={sending}
-            className="w-full text-center text-[13px] text-[var(--ink-3)] underline"
+            className="editorial-btn-ghost w-full"
           >
             {sending ? "Sending…" : "Didn't get it? Send a new code"}
           </button>

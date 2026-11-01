@@ -68,6 +68,7 @@ export function MeetLinkForm({ initialLink }: { initialLink: string | null }) {
 
       {feedback && (
         <p
+          role={feedback.kind === 'err' ? 'alert' : 'status'}
           className={`border-l-2 pl-3 font-mono text-[11px] uppercase tracking-[0.12em] ${
             feedback.kind === 'ok'
               ? 'border-[var(--accent)] text-[var(--accent)]'

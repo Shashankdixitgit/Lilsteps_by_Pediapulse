@@ -40,7 +40,7 @@
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
 import { type Channel, dispatch, isChannel, type Recipient, smsEnabled } from '../_shared/notify.ts';
 import { canReceiveEmail, firstName, parentContact } from '../_shared/parentNotify.ts';
-import { DOCTOR_EMAIL_TEMPLATES, isTemplateKey } from '../_shared/templates.ts';
+import { DOCTOR_EMAIL_TEMPLATES, isTemplateKey, SERVER_ONLY_TEMPLATES } from '../_shared/templates.ts';
 import { createAdminClient, getCaller } from '../_shared/supabase.ts';
 
 const RATE_LIMIT_PER_HOUR = 20;
@@ -91,6 +91,8 @@ Deno.serve(async (req) => {
   const channel: Channel =
     (body.channel === 'sms' || body.channel === 'whatsapp') && !smsEnabled() ? 'email' : body.channel;
   if (!isTemplateKey(body?.template)) return jsonResponse({ error: 'Invalid template' }, 400);
+  // Payment-link messages are only ever sent by the server itself.
+  if (SERVER_ONLY_TEMPLATES.includes(body.template)) return jsonResponse({ error: 'Invalid template' }, 400);
   const params = cleanParams(body?.params);
   if (!params) return jsonResponse({ error: 'Invalid params' }, 400);
 

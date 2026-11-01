@@ -1,18 +1,20 @@
+import { safeNext } from '@/lib/safe-next';
 import { LoginForm } from './login-form';
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; next?: string }>;
 }) {
-  const { error } = await searchParams;
+  const { error, next } = await searchParams;
+  const back = safeNext(next);
   const initialError =
     error === 'not_a_doctor'
       ? 'This account is not authorised for the clinical dashboard.'
       : null;
 
   return (
-    <main className="flex min-h-screen w-full flex-1 items-center justify-center px-8 py-16">
+    <main className="flex min-h-screen w-full flex-1 items-center justify-center px-4 py-16 sm:px-8">
       <div className="w-full max-w-md">
         {/* Masthead */}
         <div className="mb-12 fade-up">
@@ -28,7 +30,7 @@ export default async function LoginPage({
           </p>
         </div>
 
-        <LoginForm initialError={initialError} />
+        <LoginForm initialError={initialError} next={back === '/' ? undefined : back} />
 
         <div className="mt-12 border-t border-[var(--hairline)] pt-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-4)]">
           LilSteps · for paediatricians

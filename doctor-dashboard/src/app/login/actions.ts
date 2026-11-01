@@ -1,6 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { safeNext } from '@/lib/safe-next';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export type LoginState = { error?: string } | null;
@@ -23,5 +24,5 @@ export async function loginAction(
     return { error: error.message };
   }
 
-  redirect('/');
+  redirect(safeNext(formData.get('next')));
 }

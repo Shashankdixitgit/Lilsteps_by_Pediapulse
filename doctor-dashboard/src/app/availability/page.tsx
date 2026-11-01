@@ -17,6 +17,7 @@ type BookedRow = {
   date: string;
   time: string;
   status: string;
+  followup_of: string | null;
   children: { name: string } | null;
 };
 
@@ -41,7 +42,7 @@ export default async function AvailabilityPage() {
       .returns<SlotRow[]>(),
     supabase
       .from('appointments')
-      .select('id, date, time, status, children(name)')
+      .select('id, date, time, status, followup_of, children(name)')
       .eq('doctor_id', doctor.doctorId)
       .gte('date', todayIso)
       .neq('status', 'cancelled')
@@ -50,12 +51,14 @@ export default async function AvailabilityPage() {
 
   // A family mid-payment holds the slot (0045) but isn't booked yet: show it
   // as held, without their name or a link, until the payment goes through.
-  const bookedByKey = new Map<string, { appointmentId: string; childName: string; held: boolean }>();
+  // A follow-up the doctor booked (0051) is theirs: named, with a link.
+  const bookedByKey = new Map<string, { appointmentId: string; childName: string; held: boolean; followup: boolean }>();
   (booked ?? []).forEach((b) =>
     bookedByKey.set(`${b.date} ${b.time}`, {
       appointmentId: b.id,
       childName: b.children?.name ?? 'patient',
       held: b.status === 'awaiting_payment',
+      followup: b.status === 'awaiting_payment' && !!b.followup_of,
     }),
   );
 
@@ -70,7 +73,7 @@ export default async function AvailabilityPage() {
   const days = Array.from(byDate.values());
 
   return (
-    <main className="mx-auto w-full max-w-5xl flex-1 px-8 py-12">
+    <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-12 sm:px-8">
       <header className="mb-10 fade-up">
         <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
           Calendar

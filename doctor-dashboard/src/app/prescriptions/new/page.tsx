@@ -30,6 +30,29 @@ export default async function NewPrescriptionPage({
 
   if (!child) notFound();
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: doctorAuth } = user
+    ? await supabase.from('doctor_auth').select('doctor_id').eq('id', user.id).maybeSingle<{ doctor_id: string }>()
+    : { data: null };
+
+  // A prescription may only attach to this doctor's own upcoming or completed
+  // visit for this child (create_prescription refuses anything else, 0050).
+  if (appointmentId) {
+    const { data: ownVisit } = doctorAuth
+      ? await supabase
+          .from('appointments')
+          .select('id')
+          .eq('id', appointmentId)
+          .eq('doctor_id', doctorAuth.doctor_id)
+          .eq('child_id', child.id)
+          .in('status', ['upcoming', 'completed'])
+          .maybeSingle<{ id: string }>()
+      : { data: null };
+    if (!ownVisit) notFound();
+  }
+
   // Dose depends on weight and must respect allergies — show both next to the form.
   const [{ data: allergies }, { data: conditions }, { data: medications }, { data: growth }, allergiesNotKnown, { data: existing }] =
     await Promise.all([
@@ -60,12 +83,6 @@ export default async function NewPrescriptionPage({
 
   // The prescription must carry the doctor's registration number; the action
   // refuses without it, so warn before the doctor fills anything in.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: doctorAuth } = user
-    ? await supabase.from('doctor_auth').select('doctor_id').eq('id', user.id).maybeSingle<{ doctor_id: string }>()
-    : { data: null };
   const { data: doctorRow } = doctorAuth
     ? await supabase
         .from('doctors')
@@ -80,7 +97,7 @@ export default async function NewPrescriptionPage({
   const weightNote = latest ? `measured ${formatDate(latest.measured_at)}` : child.weight ? 'from profile' : null;
 
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-8 py-16">
+    <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-16 sm:px-8">
       <header className="mb-10 fade-up">
         {appointmentId && (
           <Link

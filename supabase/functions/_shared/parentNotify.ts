@@ -193,25 +193,42 @@ export async function notifyParent(admin: SupabaseClient, input: NotifyParentInp
  * Whether a one-off message for this appointment should not be (re)sent:
  * already sent, being sent right now (queued < 10 min ago), or tried
  * MAX_ATTEMPTS times already (failed / skipped runs stop retrying).
+ *
+ * `startsAt` (startsAtKey) scopes it to one consult time, for messages that
+ * depend on the time (reminders, reschedule emails): after a reschedule the
+ * reminders go out again for the new time. Rows from before 0051 carry no
+ * start time; they still count when `legacyCounts` (the consult was never
+ * moved).
  */
 export async function alreadyNotified(
   admin: SupabaseClient,
   appointmentId: string,
   template: string,
+  startsAt?: { key: string; legacyCounts: boolean },
 ): Promise<boolean> {
   const freshQueued = new Date(Date.now() - STALE_QUEUED_MS).toISOString();
+  const scope = (q: any) => {
+    if (!startsAt) return q;
+    return startsAt.legacyCounts
+      ? q.or(`payload->>starts_at.eq."${startsAt.key}",payload->>starts_at.is.null`)
+      : q.eq('payload->>starts_at', startsAt.key);
+  };
   const [{ count: done }, { count: attempts }] = await Promise.all([
-    admin
-      .from('notification_log')
-      .select('id', { count: 'exact', head: true })
-      .eq('appointment_id', appointmentId)
-      .eq('template', template)
-      .or(`status.eq.sent,and(status.eq.queued,created_at.gte.${freshQueued})`),
-    admin
-      .from('notification_log')
-      .select('id', { count: 'exact', head: true })
-      .eq('appointment_id', appointmentId)
-      .eq('template', template),
+    scope(
+      admin
+        .from('notification_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('appointment_id', appointmentId)
+        .eq('template', template)
+        .or(`status.eq.sent,and(status.eq.queued,created_at.gte.${freshQueued})`),
+    ),
+    scope(
+      admin
+        .from('notification_log')
+        .select('id', { count: 'exact', head: true })
+        .eq('appointment_id', appointmentId)
+        .eq('template', template),
+    ),
   ]);
   return (done ?? 0) > 0 || (attempts ?? 0) >= MAX_ATTEMPTS;
 }

@@ -24,7 +24,8 @@ export type TemplateKey =
   | 'prescription_issued'
   | 'vaccine_due_soon'
   | 'new_message'
-  | 'checkin_summary_ready';
+  | 'checkin_summary_ready'
+  | 'followup_payment_request';
 
 const TEMPLATES: Record<TemplateKey, RenderedTemplate> = {
   appointment_confirmation: {
@@ -71,7 +72,19 @@ const TEMPLATES: Record<TemplateKey, RenderedTemplate> = {
     body:
       'LilSteps: Your symptom summary is ready and has been shared with {{doctor}}.',
   },
+  followup_payment_request: {
+    subject: 'Follow-up booked',
+    body:
+      'LilSteps: {{doctor}} booked a follow-up on {{date}} at {{time}}. Pay in the app to confirm it.',
+  },
 };
+
+/**
+ * Templates only the server sends (they carry a payment link built on the
+ * server). The notify endpoint refuses them, so nobody can mail a family a
+ * link of their own choosing under the LilSteps name.
+ */
+export const SERVER_ONLY_TEMPLATES: readonly string[] = ['followup_payment_request'];
 
 export const TEMPLATE_KEYS = Object.keys(TEMPLATES) as TemplateKey[];
 
@@ -163,6 +176,23 @@ interface EmailParts {
   lines: string[];
   /** Highlighted "when" box. */
   when?: string;
+  /** One button (server-built https link only, see safeLink). */
+  button?: { label: string; href: string };
+}
+
+/** Only an https link on a known payment host makes it into an email. */
+export function safeLink(raw: string | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') return null;
+    if (!['rzp.io', 'razorpay.com', 'razorpay.me'].some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`))) {
+      return null;
+    }
+    return u.toString();
+  } catch {
+    return null;
+  }
 }
 
 const REFUND_LINES: Record<string, string> = {
@@ -208,8 +238,31 @@ function emailParts(key: string, p: Record<string, string>): EmailParts | null {
         subject: 'Your LilSteps consult has a new time',
         heading: 'Your consult has a new time',
         when,
-        lines: [`${child}'s video consult with ${doctor} has moved to the time below.`, videoLine],
+        lines: [
+          p.by === 'doctor'
+            ? `${doctor} moved ${child}'s video consult to the time below.`
+            : `${child}'s video consult with ${doctor} has moved to the time below.`,
+          'There is nothing more to pay: your payment carries over.',
+          videoLine,
+        ],
       };
+    case 'followup_payment_request': {
+      const href = safeLink(p.link);
+      return {
+        // Generic on purpose, like every subject here.
+        subject: 'Your doctor booked a follow-up — confirm with payment',
+        heading: 'Your doctor booked a follow-up',
+        when,
+        lines: [
+          `${doctor} would like to see ${child} again and has kept the time below for a follow-up video consult.`,
+          `To confirm it, pay the consult fee (${p.price || '₹449'}). You can pay with the button below, or from the Consult tab in the LilSteps app.`,
+          p.until
+            ? `The time is kept for you until ${p.until} (India time). If it isn't paid by then, it is released and nothing is charged.`
+            : "If it isn't paid in time, the slot is released and nothing is charged.",
+        ],
+        button: href ? { label: 'Pay and confirm', href } : undefined,
+      };
+    }
     case 'appointment_reminder_24h':
       return {
         subject: 'Reminder: your LilSteps consult',
@@ -306,6 +359,7 @@ export function renderEmail(
     ...(parts.when ? ['', parts.when] : []),
     '',
     ...parts.lines.flatMap((l) => [l, '']),
+    ...(parts.button ? [`${parts.button.label}: ${parts.button.href}`, ''] : []),
     footer,
   ].join('\n');
 
@@ -321,6 +375,7 @@ export function renderEmail(
 <h1 style="margin:0 0 16px;font-size:22px;line-height:28px;font-weight:700;">${escapeHtml(parts.heading)}</h1>
 ${parts.when ? `<p style="margin:0 0 16px;padding:12px 14px;background:${SURFACE};border-radius:10px;font-size:15px;line-height:22px;font-weight:600;">${escapeHtml(parts.when)}</p>` : ''}
 ${parts.lines.map((l) => `<p style="margin:0 0 12px;font-size:15px;line-height:22px;">${escapeHtml(l)}</p>`).join('\n')}
+${parts.button ? `<p style="margin:20px 0 4px;"><a href="${escapeHtml(parts.button.href)}" style="display:inline-block;padding:12px 20px;background:${BRAND};color:#ffffff;border-radius:10px;font-size:15px;font-weight:600;text-decoration:none;">${escapeHtml(parts.button.label)}</a></p>` : ''}
 </td></tr>
 <tr><td style="padding:16px 24px 24px;color:#65687b;font-size:13px;line-height:19px;border-top:1px solid #ecebf3;">${escapeHtml(footer)}</td></tr>
 </table>

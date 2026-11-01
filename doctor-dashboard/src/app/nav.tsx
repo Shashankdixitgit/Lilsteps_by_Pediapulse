@@ -65,7 +65,7 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
   return (
     <Link
       href={href}
-      className="link-underline text-[13px] uppercase tracking-[0.14em] text-[var(--ink-2)] hover:text-[var(--ink)]"
+      className="link-underline text-[14px] font-medium text-[var(--ink-2)] hover:text-[var(--ink)]"
     >
       {children}
     </Link>

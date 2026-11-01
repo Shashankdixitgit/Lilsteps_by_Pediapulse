@@ -5,7 +5,9 @@
 //   • 1h before  (template: appointment_reminder_1h)
 //
 // Idempotent: checks notification_log for a 'sent' row with the same
-// (appointment_id, template) and skips if already dispatched.
+// (appointment_id, template, payload.starts_at) and skips if already
+// dispatched. Keyed on the start time so a rescheduled consult is reminded
+// again for its new time.
 //
 // Schedule (recommended): hourly via pg_cron — see migration notes.
 //   select cron.schedule('appointment-reminders', '0 * * * *',
@@ -21,6 +23,7 @@
 import { alreadyNotified, notifyParent } from '../_shared/parentNotify.ts';
 import { jsonResponse } from '../_shared/cors.ts';
 import { createAdminClient, isServerCaller } from '../_shared/supabase.ts';
+import { consultStart, startsAtKey } from '../_shared/schedule.ts';
 
 interface AppointmentRow {
   id: string;
@@ -28,14 +31,9 @@ interface AppointmentRow {
   time: string;
   parent_id: string;
   child_id: string;
+  reschedule_count: number;
   doctors: { name: string } | null;
   children: { name: string } | null;
-}
-
-function buildSlot(date: string, time: string): Date {
-  // PostgreSQL DATE + TIME — treat as IST. Pedia Pulse is Pune-based.
-  // IST = UTC+5:30, no DST.
-  return new Date(`${date}T${time.slice(0, 8)}+05:30`);
 }
 
 Deno.serve(async (req) => {
@@ -54,7 +52,7 @@ Deno.serve(async (req) => {
   const { data, error } = await admin
     .from('appointments')
     .select(
-      'id, date, time, parent_id, child_id, doctors(name), children(name)',
+      'id, date, time, parent_id, child_id, reschedule_count, doctors(name), children(name)',
     )
     .eq('status', 'upcoming')
     .gte('date', todayIso)
@@ -69,7 +67,7 @@ Deno.serve(async (req) => {
   const results: Array<{ id: string; template: string; ok: boolean; error?: string }> = [];
 
   for (const appt of data ?? []) {
-    const slotAt = buildSlot(appt.date, appt.time);
+    const slotAt = consultStart(appt.date, appt.time);
     const msUntil = slotAt.getTime() - now.getTime();
     if (msUntil <= 0) continue;
 
@@ -82,11 +80,16 @@ Deno.serve(async (req) => {
     }
     if (templates.length === 0) continue;
 
+    // Reminders are per consult time AND move (0051): a consult moved with
+    // Reschedule gets them again, even if moved back to an earlier time.
+    const startsAt = startsAtKey(appt.date, appt.time, appt.reschedule_count ?? 0);
     for (const template of templates) {
-      // Idempotency: one of each reminder per consult, on any channel (the
-      // 0046 unique index also stops a second run racing this one); failed or
-      // skipped sends stop after MAX_ATTEMPTS tries instead of every run.
-      if (await alreadyNotified(admin, appt.id, template)) {
+      // Idempotency: one of each reminder per consult time, on any channel
+      // (the 0051 unique index also stops a second run racing this one);
+      // failed or skipped sends stop after MAX_ATTEMPTS tries instead of
+      // every run. Rows from before 0051 have no start time: they still count
+      // for a consult that was never moved.
+      if (await alreadyNotified(admin, appt.id, template, { key: startsAt, legacyCounts: !appt.reschedule_count })) {
         results.push({ id: appt.id, template, ok: true });
         continue;
       }
@@ -102,6 +105,7 @@ Deno.serve(async (req) => {
           date: appt.date,
           time: appt.time.slice(0, 5),
         },
+        payload: { starts_at: startsAt },
       });
       for (const r of sent) results.push({ id: appt.id, template, ok: r.ok, error: r.error });
     }

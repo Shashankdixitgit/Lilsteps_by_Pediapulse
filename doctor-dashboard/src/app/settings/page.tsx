@@ -49,7 +49,7 @@ export default async function SettingsPage() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl flex-1 px-8 py-12">
+    <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-12 sm:px-8">
       <header className="mb-10 fade-up">
         <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
           Practice

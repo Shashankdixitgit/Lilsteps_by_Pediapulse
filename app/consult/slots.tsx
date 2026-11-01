@@ -14,7 +14,6 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -23,9 +22,10 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CONSULT_MINUTES, formatSlotTime as formatTime, getBookingDays } from '@/components/consult/appointmentFormat';
+import { DayStrip, TimeSlotGrid } from '@/components/consult/SlotPickerParts';
 import { GradientButton } from '@/components/gradient-button';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { AppColors, FontFamily, Radius } from '@/constants/theme';
+import { AppColors } from '@/constants/theme';
 import { typography } from '@/styles/global';
 import { supabase } from '@/lib/supabase';
 import { useDoctorVideoLink, useTimeSlots } from '@/hooks/useDoctors';
@@ -199,33 +199,14 @@ export default function SlotsScreen() {
 
         <View style={styles.section}>
           <Text style={typography.headingSM}>Choose a date</Text>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.dateScroll}
-            contentContainerStyle={styles.dateStrip}
-          >
-            {DAYS.map((d, i) => {
-              const active = selectedDay === i;
-              return (
-                <Pressable
-                  key={i}
-                  style={[styles.dayChip, active && styles.dayChipActive]}
-                  onPress={() => {
-                    userPickedDay.current = true;
-                    setSelectedDay(i);
-                  }}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  aria-selected={active}
-                  accessibilityLabel={d.fullLabel}
-                >
-                  <Text style={[styles.dayLabel, active && styles.dayLabelActive]}>{d.label}</Text>
-                  <Text style={[styles.dayDate, active && styles.dayDateActive]}>{d.date}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          <DayStrip
+            days={DAYS}
+            selected={selectedDay}
+            onSelect={(i) => {
+              userPickedDay.current = true;
+              setSelectedDay(i);
+            }}
+          />
         </View>
 
         <View style={styles.section}>
@@ -244,34 +225,7 @@ export default function SlotsScreen() {
               No {anyDoctor ? 'free times' : 'slots'} on {DAYS[selectedDay].fullLabel}. Try another date.
             </Text>
           ) : (
-            <View style={styles.slotsGrid}>
-              {chips.map((slot) => {
-                const unavailable = !slot.is_available;
-                const active = selected?.id === slot.id;
-                return (
-                  <Pressable
-                    key={slot.id}
-                    disabled={unavailable}
-                    style={[styles.slotChip, unavailable && styles.slotDisabled, active && styles.slotActive]}
-                    onPress={() => setSelected(slot)}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: active, disabled: unavailable }}
-                    aria-selected={active}
-                  >
-                    <Text
-                      style={[
-                        styles.slotText,
-                        unavailable && styles.slotTextDisabled,
-                        active && styles.slotTextActive,
-                      ]}
-                    >
-                      {formatTime(slot.time)}
-                    </Text>
-                    {unavailable && <Text style={styles.bookedLabel}>Booked</Text>}
-                  </Pressable>
-                );
-              })}
-            </View>
+            <TimeSlotGrid chips={chips} selectedId={selected?.id ?? null} onSelect={setSelected} />
           )}
         </View>
       </ScrollView>
@@ -306,51 +260,8 @@ const styles = StyleSheet.create({
 
   section: { gap: 8 },
 
-  dateScroll: { marginHorizontal: -20 },
-  dateStrip: { gap: 8, paddingHorizontal: 20 },
-  dayChip: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: 56,
-    minWidth: 76,
-    paddingHorizontal: 14,
-    borderRadius: Radius.md,
-    borderCurve: 'continuous',
-    backgroundColor: AppColors.card,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-  },
-  dayChipActive: { backgroundColor: AppColors.primary, borderColor: AppColors.primary },
-  dayLabel: { fontFamily: FontFamily.semibold, fontSize: 13, lineHeight: 18, color: AppColors.onSurface },
-  dayLabelActive: { color: AppColors.onPrimary },
-  dayDate: { fontFamily: FontFamily.regular, fontSize: 12, lineHeight: 16, color: AppColors.muted },
-  dayDateActive: { color: AppColors.onDarkMuted },
-
   center: { paddingVertical: 24, alignItems: 'center' },
   center0: { textAlign: 'center' },
-
-  slotsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  slotChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    height: 44,
-    flexBasis: '30%',
-    flexGrow: 1,
-    paddingHorizontal: 12,
-    borderRadius: Radius.md,
-    borderCurve: 'continuous',
-    backgroundColor: AppColors.card,
-    borderWidth: 1,
-    borderColor: AppColors.border,
-  },
-  slotDisabled: { backgroundColor: AppColors.surfaceContainer, borderColor: AppColors.surfaceContainer },
-  slotActive: { backgroundColor: AppColors.primary, borderColor: AppColors.primary },
-  slotText: { fontFamily: FontFamily.semibold, fontSize: 13, color: AppColors.onSurface },
-  slotTextDisabled: { color: AppColors.muted, textDecorationLine: 'line-through' },
-  slotTextActive: { color: AppColors.onPrimary },
-  bookedLabel: { fontFamily: FontFamily.medium, fontSize: 12, color: AppColors.muted },
 
   bottomBar: {
     paddingHorizontal: 20,

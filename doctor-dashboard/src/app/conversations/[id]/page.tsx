@@ -3,12 +3,13 @@ import { notFound } from 'next/navigation';
 import { fetchAllergiesNotKnown, fetchUrgencies, noAllergiesLabel } from '@/lib/appointments';
 import { allergyText } from '@/lib/consultations';
 import { getCurrentDoctor } from '@/lib/doctor';
-import { computeAge, formatClock, formatDayLong, formatDayShort, formatSlotTime, todayIst } from '@/lib/format';
+import { computeAge, formatClock, formatDayLong, formatDayShort, formatSlotTime, nowIstTime, todayIst } from '@/lib/format';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { UrgencyBadge } from '../../urgency-badge';
 import { chatParentLabel } from '../parent-label';
 import { Composer } from './composer';
 import { MessagesRealtime } from './realtime';
+import { ScrollToLatest } from './scroll-to-latest';
 
 type MessageRow = {
   id: string;
@@ -30,10 +31,13 @@ type ApptLite = { id: string; date: string; time: string; status: string; ai_sum
 
 export default async function ConversationPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ appt?: string }>;
 }) {
   const { id } = await params;
+  const { appt: apptParam } = await searchParams;
   const supabase = await createSupabaseServerClient();
 
   const { data: conversation } = await supabase
@@ -53,7 +57,10 @@ export default async function ConversationPage({
     .eq('sender', 'parent')
     .is('read_at', null);
 
-  const [{ data: messages }, { data: allergies }, { data: appts }, allergiesNotKnown, doctor] = await Promise.all([
+  // The thread is the signed-in doctor's own, so "Start video" uses their
+  // room (read via getCurrentDoctor, not a doctors() join on the thread).
+  const doctor = await getCurrentDoctor(supabase);
+  const [{ data: messages }, { data: allergies }, { data: appts }, allergiesNotKnown] = await Promise.all([
     supabase
       .from('messages')
       .select('id, sender, content, created_at, read_at')
@@ -68,6 +75,9 @@ export default async function ConversationPage({
           .from('appointments')
           .select('id, date, time, status, ai_summary_id')
           .eq('child_id', child.id)
+          // Only this doctor's visits: the links below open and prescribe
+          // against them.
+          .eq('doctor_id', doctor?.doctorId ?? '')
           // Unpaid holds (0045) are not consults yet.
           .not('status', 'in', '(cancelled,awaiting_payment)')
           .order('date', { ascending: false })
@@ -75,9 +85,6 @@ export default async function ConversationPage({
           .returns<ApptLite[]>()
       : Promise.resolve({ data: [] as ApptLite[] }),
     child ? fetchAllergiesNotKnown(supabase, child.id) : Promise.resolve(false),
-    // The thread is the signed-in doctor's own, so "Start video" uses their
-    // room (read via getCurrentDoctor, not a doctors() join on the thread).
-    getCurrentDoctor(supabase),
   ]);
   const meetLink = doctor?.defaultMeetLink ?? null;
 
@@ -87,12 +94,22 @@ export default async function ConversationPage({
   const urgencies = await fetchUrgencies(supabase, openAppts);
   const urgentAppt = openAppts.find((a) => urgencies.get(a.id) === 'urgent') ?? null;
 
-  // Link back to the consult: the thread's own appointment, else the next
-  // upcoming one, else the most recent.
+  // The visit the "Consultation" and "Issue prescription" links act on: the
+  // one the doctor came from (?appt=, only if it is theirs for this child),
+  // else the nearest open visit (next upcoming from now, else the latest one
+  // still waiting to be closed), else the most recent. The thread's stored
+  // appointment_id is only the visit it was started from, so it is not used.
+  const list = appts ?? [];
+  const nowTime = nowIstTime();
+  const open = list.filter((a) => a.status === 'upcoming');
+  const ahead = open
+    .filter((a) => a.date > today || (a.date === today && a.time.slice(0, 5) >= nowTime.slice(0, 5)))
+    .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
   const consult =
-    (appts ?? []).find((a) => a.id === conversation.appointment_id) ??
-    [...(appts ?? [])].reverse().find((a) => a.status === 'upcoming') ??
-    (appts ?? [])[0] ??
+    (apptParam ? list.find((a) => a.id === apptParam) : undefined) ??
+    ahead[0] ??
+    open[0] ??
+    list[0] ??
     null;
 
   // Group messages by day for editorial section breaks
@@ -105,7 +122,7 @@ export default async function ConversationPage({
   });
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-8">
+    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 sm:px-8">
       {/* Editorial conversation header */}
       <header className="py-10 fade-up">
         <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
@@ -163,7 +180,7 @@ export default async function ConversationPage({
               href={meetLink}
               target="_blank"
               rel="noreferrer"
-              className="editorial-btn-ghost"
+              className="btn-go"
             >
               Start video
             </a>
@@ -175,10 +192,13 @@ export default async function ConversationPage({
             View prescriptions
           </Link>
           <Link
+            // A no-show visit can't carry a prescription (0050); the chat alone can.
             href={`/prescriptions/new?child=${child?.id ?? ''}${
-              conversation.appointment_id ? `&appointment=${conversation.appointment_id}` : ''
+              consult && (consult.status === 'upcoming' || consult.status === 'completed')
+                ? `&appointment=${consult.id}`
+                : ''
             }`}
-            className="editorial-btn"
+            className="btn-peach"
           >
             Issue prescription
           </Link>
@@ -209,13 +229,13 @@ export default async function ConversationPage({
                       }`}
                     >
                       <div
-                        className={`max-w-[78%] ${
+                        className={`min-w-0 max-w-[78%] ${
                           m.sender === 'doctor'
                             ? 'border-r-2 border-[var(--ink)] pr-4 text-right'
                             : 'border-l-2 border-[var(--accent)] pl-4'
                         }`}
                       >
-                        <div className="font-sans text-[15.5px] leading-[1.55] text-[var(--ink)]">
+                        <div className="whitespace-pre-wrap font-sans text-[15.5px] leading-[1.55] text-[var(--ink)] [overflow-wrap:anywhere]">
                           {m.content}
                         </div>
                         <div
@@ -238,6 +258,11 @@ export default async function ConversationPage({
       </section>
 
       <Composer conversationId={id} />
+      {/* After the composer, so the newest message lands just above it. */}
+      <ScrollToLatest
+        count={messages?.length ?? 0}
+        lastFromDoctor={messages?.[messages.length - 1]?.sender === 'doctor'}
+      />
       <MessagesRealtime conversationId={id} />
     </main>
   );

@@ -1,7 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { nowIstTime, todayIst } from '@/lib/format';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+
+const INTERVALS = [15, 30, 45, 60];
 
 async function currentDoctorId(): Promise<string | null> {
   const supabase = await createSupabaseServerClient();
@@ -29,8 +32,27 @@ export interface GenerateSlotsInput {
 export async function generateSlotsAction(
   input: GenerateSlotsInput,
 ): Promise<{ error?: string; inserted?: number }> {
-  if (input.days < 1 || input.days > 30) return { error: 'Days must be 1–30' };
+  const isInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n);
+  if (!isInt(input.days) || input.days < 1 || input.days > 30) return { error: 'Days must be 1–30' };
+  if (!isInt(input.startHour) || input.startHour < 0 || input.startHour > 23) {
+    return { error: 'Start hour must be between 0 and 23' };
+  }
+  if (!isInt(input.endHour) || input.endHour < 1 || input.endHour > 24) {
+    return { error: 'End hour must be between 1 and 24' };
+  }
   if (input.endHour <= input.startHour) return { error: 'End hour must be after start hour' };
+  if (!INTERVALS.includes(input.intervalMinutes)) return { error: 'Slot length must be 15, 30, 45 or 60 minutes' };
+  // A real calendar date (rejects 2026-02-30), today or later in clinic time.
+  const today = todayIst();
+  if (
+    typeof input.startDate !== 'string' ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(input.startDate) ||
+    new Date(`${input.startDate}T12:00:00Z`).toISOString().slice(0, 10) !== input.startDate
+  ) {
+    return { error: 'Invalid start date' };
+  }
+  if (input.startDate < today) return { error: 'Start date is in the past. Pick today or later.' };
+  const nowTime = nowIstTime();
 
   const doctorId = await currentDoctorId();
   if (!doctorId) return { error: 'Not signed in as a doctor' };
@@ -56,12 +78,14 @@ export async function generateSlotsAction(
     for (let h = input.startHour; h < input.endHour; h++) {
       for (let mins = 0; mins < 60; mins += input.intervalMinutes) {
         const time = `${String(h).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`;
+        // Today's times that have already gone by can't be booked.
+        if (isoDate === today && time <= nowTime) continue;
         rows.push({ doctor_id: doctorId, date: isoDate, time, is_available: true });
       }
     }
   }
 
-  if (rows.length === 0) return { error: 'No slots to generate' };
+  if (rows.length === 0) return { error: 'No slots to generate (those times have already passed)' };
 
   const { error, count } = await supabase
     .from('time_slots')
@@ -101,9 +125,14 @@ async function ownUnbookedSlot(slotId: string) {
     .eq('id', slotId)
     .eq('doctor_id', doctorId)
     .maybeSingle<{ id: string; date: string; time: string }>();
-  if (!slot) return { error: 'Slot not found' } as const;
+  // Both refusals mean the page is out of date: re-render it.
+  if (!slot) {
+    revalidatePath('/availability');
+    return { error: 'Slot not found' } as const;
+  }
   if (await slotIsBooked(supabase, doctorId, slot.date, slot.time)) {
-    return { error: 'This slot is booked. Cancel or close the appointment first.' } as const;
+    revalidatePath('/availability');
+    return { error: 'This slot is booked. Cancel the consult from its visit page first.' } as const;
   }
   return { supabase, doctorId, slot } as const;
 }

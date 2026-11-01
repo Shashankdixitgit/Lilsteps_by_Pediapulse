@@ -123,6 +123,7 @@ interface PrescriptionJoinRow {
   id: string;
   child_id: string;
   issued_at: string;
+  doctor_name: string | null;
   doctors: { name: string } | null;
   children: { name: string } | null;
 }
@@ -157,7 +158,7 @@ export function useUpdates() {
         .limit(200),
       supabase
         .from('prescriptions')
-        .select('id, child_id, issued_at, doctors(name), children(name)')
+        .select('id, child_id, issued_at, doctor_name, doctors(name), children(name)')
         .gt('issued_at', seen.seenAt)
         .order('issued_at', { ascending: false })
         .limit(50),
@@ -199,7 +200,7 @@ export function useUpdates() {
             id: p.id,
             childId: p.child_id,
             childName: p.children?.name ?? '',
-            doctorName: p.doctors?.name ?? 'Your doctor',
+            doctorName: p.doctor_name ?? p.doctors?.name ?? 'Your doctor',
             issuedAt: p.issued_at,
           })),
       );

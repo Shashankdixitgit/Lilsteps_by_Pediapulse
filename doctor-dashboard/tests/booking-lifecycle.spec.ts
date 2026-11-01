@@ -41,10 +41,12 @@ test.describe('Booking → queue → consultation lifecycle', () => {
     // 2. UI: doctor logs in, sees the row in the queue.
     await signInAsDoctor(page);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(/consultations/i);
-    await expect(page.locator(`text=${TEST_TAG}-child`)).toBeVisible({ timeout: 10_000 });
+    // The name shows in the calendar and, on narrow screens, the agenda list:
+    // check the one on screen.
+    await expect(page.locator(`text=${TEST_TAG}-child`).filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 });
 
     // 3. Drill into the consultation detail page.
-    await page.locator(`text=${TEST_TAG}-child`).first().click();
+    await page.locator(`text=${TEST_TAG}-child`).filter({ visible: true }).first().click();
     await expect(page).toHaveURL(new RegExp(`/consultations/${appointmentId}`));
     await expect(page.getByRole('heading', { level: 1 })).toContainText(new RegExp(`${TEST_TAG}-child`));
     // Vitals / Immunisation / Clinical flags sections render

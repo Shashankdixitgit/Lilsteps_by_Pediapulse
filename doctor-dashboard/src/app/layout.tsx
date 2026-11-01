@@ -1,17 +1,11 @@
 import type { Metadata } from 'next';
-import { Roboto, Roboto_Mono } from 'next/font/google';
+import { Inter } from 'next/font/google';
 import './globals.css';
 import { DevFeedback } from './dev-feedback';
 import { DashboardNav } from './nav';
 
-const roboto = Roboto({
-  variable: '--font-roboto',
-  subsets: ['latin'],
-  display: 'swap',
-});
-
-const robotoMono = Roboto_Mono({
-  variable: '--font-roboto-mono',
+const inter = Inter({
+  variable: '--font-inter',
   subsets: ['latin'],
   display: 'swap',
 });
@@ -29,7 +23,7 @@ export default function RootLayout({
   return (
     <html
       lang="en-IN"
-      className={`${roboto.variable} ${robotoMono.variable} h-full`}
+      className={`${inter.variable} h-full`}
     >
       <body className="min-h-full flex flex-col">
         <DashboardNav />

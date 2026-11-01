@@ -16,7 +16,8 @@ import type { PrescriptionRow } from '@/hooks/usePrescriptions';
  * The 2020 Telemedicine Practice Guidelines want the prescriber's
  * qualifications and registration number, and the patient's age and weight,
  * on every prescription (R2-13). doctors.registration_number is added by
- * migration 0040; test profiles don't have one yet.
+ * migration 0040; since 0050 the prescription row keeps its own copy of the
+ * doctor's name, qualifications and registration number from issue time.
  */
 type PrescriptionDetail = Omit<PrescriptionRow, 'doctors'> & {
   doctors?: {
@@ -95,7 +96,20 @@ export default function PrescriptionDetailScreen() {
 
   // en-IN like every other date in the app ("13 Oct 2026").
   const issuedDate = prescription ? formatDate(prescription.issued_at, { year: 'always' }) : '';
-  const doctor = prescription?.doctors ?? null;
+  // Name, qualifications and registration number as they were when the
+  // prescription was issued (frozen on the row, migration 0050); the live
+  // doctors row is only a fallback for rows from before that.
+  const liveDoctor = prescription?.doctors ?? null;
+  const doctor = prescription
+    ? {
+        name: prescription.doctor_name ?? liveDoctor?.name ?? null,
+        specialisation: liveDoctor?.specialisation ?? null,
+        qualifications: prescription.doctor_name ? prescription.qualifications ?? null : liveDoctor?.qualifications ?? null,
+        registration_number: prescription.doctor_name
+          ? prescription.registration_number ?? null
+          : liveDoctor?.registration_number ?? null,
+      }
+    : null;
   const child = prescription?.children ?? null;
   const items = prescription?.prescription_items ?? [];
 

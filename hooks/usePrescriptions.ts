@@ -22,6 +22,10 @@ export interface PrescriptionRow {
   notes: string | null;
   pdf_url: string | null;
   created_at: string;
+  /** Issuing doctor as they were when it was issued (migration 0050). Prefer these over doctors(). */
+  doctor_name?: string | null;
+  registration_number?: string | null;
+  qualifications?: string | null;
   // joined
   doctors?: { name: string; specialisation: string };
   prescription_items?: PrescriptionItemRow[];

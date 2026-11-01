@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import { fetchAllergiesNotKnown, fetchConcerns, noAllergiesLabel } from '@/lib/appointments';
 import { parseVisitNotes, severityLabel } from '@/lib/consultations';
 import { getCurrentDoctor, hasVideoLink } from '@/lib/doctor';
-import { computeAge, dateStamp, formatClock, formatDate, formatDateTime, formatSlotTime, nowIstTime, todayIst } from '@/lib/format';
+import { computeAge, dateStamp, formatClock, formatDate, formatDateTime, formatDayShort, formatSlotTime, nowIstTime, todayIst } from '@/lib/format';
 import { parentContact } from '@/lib/parent';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { vaccineBucket } from '@/lib/vaccines';
@@ -12,6 +12,10 @@ import { FlashToast } from '../../flash-toast';
 import { LateBadge, UrgencyBadge } from '../../urgency-badge';
 import { VideoLinkBanner } from '../../video-link-banner';
 import { OnboardingAnswersList, onboardingAnswersEyebrow, type OnboardingAnswers } from './onboarding-answers';
+import { CancelConsultButton } from './cancel-consult-button';
+import { CancelFollowupButton } from './cancel-followup-button';
+import { SlotPicker } from './slot-picker';
+import { fetchOpenSlots } from '@/lib/open-slots';
 import { OpenChatButton } from './open-chat-button';
 import { VisitNotesForm } from './visit-notes';
 
@@ -22,6 +26,10 @@ type AppointmentRow = {
   status: 'awaiting_payment' | 'upcoming' | 'completed' | 'cancelled' | 'no_show';
   ai_summary_id: string | null;
   meet_link: string | null;
+  /** 0051: times this consult was moved (max 3), and the visit a follow-up comes from. */
+  reschedule_count: number;
+  followup_of: string | null;
+  hold_expires_at: string | null;
   children: { id: string; name: string; dob: string; sex: string; weight: number | null; height: number | null; blood_group: string | null; onboarding_answers: OnboardingAnswers } | null;
   parents: { name: string | null; phone: string | null } | null;
 };
@@ -46,7 +54,7 @@ type PrescriptionRow = {
   id: string;
   issued_at: string;
   notes: string | null;
-  prescription_items: { id: string; medicine: string; dose: string; frequency: string; duration: string | null; position: number }[];
+  prescription_items: { id: string; medicine: string; dose: string; frequency: string; duration: string | null; notes: string | null; position: number }[];
 };
 
 type HealthNoteRow = {
@@ -110,25 +118,30 @@ export default async function ConsultationPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ issued?: string }>;
+  searchParams: Promise<{ issued?: string; followup?: string }>;
 }) {
   const { id } = await params;
-  const { issued } = await searchParams;
+  const { issued, followup } = await searchParams;
   const supabase = await createSupabaseServerClient();
   const doctor = await getCurrentDoctor(supabase);
 
   const { data: appointment } = await supabase
     .from('appointments')
     .select(
-      'id, date, time, status, ai_summary_id, meet_link, ' +
+      'id, date, time, status, ai_summary_id, meet_link, reschedule_count, followup_of, hold_expires_at, ' +
         'children(id, name, dob, sex, weight, height, blood_group, onboarding_answers), ' +
         'parents(name, phone)',
     )
     .eq('id', id)
     .maybeSingle<AppointmentRow>();
 
-  // An unpaid hold (0045) is not a consult yet.
-  if (!appointment || !appointment.children || appointment.status === 'awaiting_payment') notFound();
+  if (!appointment || !appointment.children) notFound();
+  // An unpaid hold (0045) is not a consult yet. A follow-up the doctor booked
+  // (0051) gets a short page of its own until the family pays.
+  if (appointment.status === 'awaiting_payment') {
+    if (!appointment.followup_of) notFound();
+    return <FollowupHoldPage appointment={appointment} />;
+  }
   const child = appointment.children;
   const stamp = { ...dateStamp(appointment.date), time: formatSlotTime(appointment.time) };
   const age = computeAge(child.dob);
@@ -163,12 +176,35 @@ export default async function ConsultationPage({
     fetchConcerns(supabase, [appointment.id]),
     supabase.from('health_notes').select('id, category, content, severity, noted_at').eq('child_id', child.id).order('noted_at', { ascending: false }).limit(HEALTH_NOTES_LIMIT).returns<HealthNoteRow[]>(),
     fetchAllergiesNotKnown(supabase, child.id),
-    supabase.from('prescriptions').select('id, issued_at, notes, prescription_items(id, medicine, dose, frequency, duration, position)').eq('appointment_id', appointment.id).order('issued_at', { ascending: true }).returns<PrescriptionRow[]>(),
+    supabase.from('prescriptions').select('id, issued_at, notes, prescription_items(id, medicine, dose, frequency, duration, notes, position)').eq('appointment_id', appointment.id).order('issued_at', { ascending: true }).returns<PrescriptionRow[]>(),
     // The full check-in conversation behind the summary. Needs a doctor
     // SELECT policy on checkin_messages; without one this is simply empty.
     appointment.ai_summary_id
       ? supabase.from('checkin_messages').select('id, role, content, created_at').eq('session_id', appointment.ai_summary_id).order('created_at', { ascending: true }).returns<CheckinMessageRow[]>()
       : Promise.resolve({ data: [] as CheckinMessageRow[] }),
+  ]);
+  // Reschedule (upcoming) and Book follow-up (completed): the doctor's own
+  // open times, and any follow-up for this child still waiting for payment.
+  const canReschedule =
+    appointment.status === 'upcoming' && !isLate && appointment.date >= todayIst() && (appointment.reschedule_count ?? 0) < 3;
+  const canFollowUp = appointment.status === 'completed';
+  const [pickerSlots, { data: pendingFollowup }] = await Promise.all([
+    doctor && (canReschedule || canFollowUp)
+      ? // Both need the new time 2 hours or more away (0051).
+      fetchOpenSlots(supabase, doctor.doctorId, 120)
+      : Promise.resolve([]),
+    canFollowUp
+      ? supabase
+          .from('appointments')
+          .select('id, date, time, hold_expires_at')
+          .eq('child_id', child.id)
+          .eq('status', 'awaiting_payment')
+          .not('followup_of', 'is', null)
+          .gt('hold_expires_at', new Date().toISOString())
+          .order('date', { ascending: true })
+          .limit(1)
+          .maybeSingle<{ id: string; date: string; time: string; hold_expires_at: string }>()
+      : Promise.resolve({ data: null }),
   ]);
   const summary = checkin?.ai_summary ?? null;
   const urgency = summary?.suggestedUrgency ?? null;
@@ -216,10 +252,15 @@ export default async function ConsultationPage({
   const lastMeasured = growth?.[0]?.measured_at ?? null;
 
   return (
-    <main className="mx-auto w-full max-w-6xl flex-1 px-8 py-10">
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-8">
       {issued && (
         <Suspense>
           <FlashToast param="issued" message={`Prescription issued to ${firstName}'s parent`} />
+        </Suspense>
+      )}
+      {followup === 'cancelled' && (
+        <Suspense>
+          <FlashToast param="followup" message="Follow-up cancelled. The time is open for booking again." />
         </Suspense>
       )}
 
@@ -261,17 +302,46 @@ export default async function ConsultationPage({
         <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[var(--hairline)] pt-5">
           {meetLink && (
             // Per-appointment Calendar-event Meet link, else the doctor's permanent room.
-            <a href={meetLink} target="_blank" rel="noreferrer" className="editorial-btn">
+            <a href={meetLink} target="_blank" rel="noreferrer" className="btn-go">
               Start video
             </a>
           )}
           <OpenChatButton appointmentId={appointment.id} />
-          <Link href={`/prescriptions/new?child=${child.id}&appointment=${appointment.id}`} className="editorial-btn-ghost">
-            {prescriptions.length > 0 ? 'Issue another prescription' : 'Issue prescription'}
-          </Link>
+          {/* Only for a real visit: create_prescription (0050) refuses no-show and cancelled ones. */}
+          {(appointment.status === 'upcoming' || appointment.status === 'completed') && (
+            <Link href={`/prescriptions/new?child=${child.id}&appointment=${appointment.id}`} className="btn-peach">
+              {prescriptions.length > 0 ? 'Issue another prescription' : 'Issue prescription'}
+            </Link>
+          )}
           <Link href={`/prescriptions?child=${child.id}`} className="editorial-btn-ghost">
             Past prescriptions
           </Link>
+          {canFollowUp && !pendingFollowup && (
+            <SlotPicker mode="followup" appointmentId={appointment.id} childFirstName={firstName} slots={pickerSlots} />
+          )}
+          {pendingFollowup && (
+            <Link href={`/consultations/${pendingFollowup.id}`} className="text-[13px] text-[var(--ink-2)] underline">
+              Follow-up {formatDayShort(pendingFollowup.date)}, {formatSlotTime(pendingFollowup.time)} · waiting for payment
+            </Link>
+          )}
+          {appointment.status === 'upcoming' && (
+            <span className="flex flex-wrap items-center gap-3 sm:ml-auto">
+              {canReschedule && (
+                <SlotPicker
+                  mode="reschedule"
+                  appointmentId={appointment.id}
+                  childFirstName={firstName}
+                  currentWhen={`${formatDayShort(appointment.date)}, ${formatSlotTime(appointment.time)}`}
+                  slots={pickerSlots}
+                />
+              )}
+              <CancelConsultButton
+                appointmentId={appointment.id}
+                childFirstName={firstName}
+                when={`${formatDayShort(appointment.date)}, ${formatSlotTime(appointment.time)}`}
+              />
+            </span>
+          )}
         </div>
       </header>
 
@@ -378,6 +448,7 @@ export default async function ConsultationPage({
               <>
                 {(overdueVaccines.length > 0 || upcomingVaccines.length > 0 || yearlyVaccines.length > 0 || otherVaccines.length > 0) && (
                   <Table
+                    stackOnPhone
                     head={['Vaccine', 'Dose', 'Status']}
                     rows={[
                       ...overdueVaccines.map((v) => [v.vaccine_name, v.dose_label, <b key="s">Overdue · due {formatDate(v.scheduled_date)}</b>]),
@@ -394,6 +465,7 @@ export default async function ConsultationPage({
                 {upcomingVaccines.length > UPCOMING_PREVIEW && (
                   <Fold label={`Show ${upcomingVaccines.length - UPCOMING_PREVIEW} later doses`}>
                     <Table
+                      stackOnPhone
                       head={['Vaccine', 'Dose', 'Status']}
                       rows={upcomingVaccines.slice(UPCOMING_PREVIEW).map((v) => [v.vaccine_name, v.dose_label, `Due ${formatDate(v.scheduled_date)}`])}
                     />
@@ -402,6 +474,7 @@ export default async function ConsultationPage({
                 {doneVaccines.length > 0 && (
                   <Fold label={`Show ${doneVaccines.length} given`}>
                     <Table
+                      stackOnPhone
                       head={['Vaccine', 'Dose', 'Given']}
                       rows={doneVaccines.map((v) => [
                         v.vaccine_name,
@@ -489,10 +562,15 @@ export default async function ConsultationPage({
                               · {it.dose} · {it.frequency}
                               {it.duration ? ` · ${it.duration}` : ''}
                             </span>
+                            {it.notes && (
+                              <span className="block whitespace-pre-line break-words text-[13px] text-[var(--ink-2)]">
+                                {it.notes}
+                              </span>
+                            )}
                           </li>
                         ))}
                     </ul>
-                    {p.notes && <p className="mt-1 text-[13px] text-[var(--ink-3)]">Note: {p.notes}</p>}
+                    {p.notes && <p className="mt-1 whitespace-pre-line break-words text-[13px] text-[var(--ink-3)]">Note: {p.notes}</p>}
                   </div>
                 ))}
               </div>
@@ -616,14 +694,41 @@ function Table({
   head,
   rows,
   compact,
+  stackOnPhone,
   className,
 }: {
   head?: string[];
   rows: React.ReactNode[][];
   compact?: boolean;
+  /** Below sm each row becomes a small stack (name, then the rest) instead of
+   *  three squeezed columns. */
+  stackOnPhone?: boolean;
   className?: string;
 }) {
   const pad = compact ? 'px-3 py-2' : 'px-4 py-2.5';
+  if (stackOnPhone) {
+    return (
+      <>
+        <ul className={`divide-y divide-[var(--hairline)] rounded-xl border border-[var(--hairline)] sm:hidden ${className ?? ''}`}>
+          {rows.map((r, i) => (
+            <li key={i} className="px-4 py-2.5 text-[14px] leading-[1.5]">
+              <div className="text-[var(--ink)]">
+                {r[0]} {r[1] ? <span className="text-[var(--ink-3)]">· {r[1]}</span> : null}
+              </div>
+              {r.slice(2).map((cell, j) => (
+                <div key={j} className="text-[13px] text-[var(--ink-2)]">
+                  {cell}
+                </div>
+              ))}
+            </li>
+          ))}
+        </ul>
+        <div className="hidden sm:block">
+          <Table head={head} rows={rows} compact={compact} className={className} />
+        </div>
+      </>
+    );
+  }
   return (
     <div className={`overflow-x-auto rounded-xl border border-[var(--hairline)] ${className ?? ''}`}>
       <table className="w-full border-collapse text-left text-[14px]">
@@ -699,5 +804,49 @@ function FlagList({ label, items, alert }: { label: string; items: string[]; ale
         ))}
       </ul>
     </div>
+  );
+}
+
+/** A follow-up the doctor booked (0051) that the family has not paid for yet. */
+function FollowupHoldPage({ appointment }: { appointment: AppointmentRow }) {
+  const child = appointment.children!;
+  const when = `${formatDayShort(appointment.date)}, ${formatSlotTime(appointment.time)}`;
+  const heldUntil = appointment.hold_expires_at ? formatDateTime(appointment.hold_expires_at) : null;
+  return (
+    <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-10 sm:px-8">
+      <Link href="/" className="link-underline text-[13px] text-[var(--ink-3)]">
+        ← Back to queue
+      </Link>
+      <header className="mt-5 fade-up rounded-2xl border border-[var(--hairline)] bg-[var(--card)] p-6">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div className="min-w-0">
+            <h1 className="font-display text-[32px] leading-tight text-[var(--ink)]">{child.name}</h1>
+            <p className="mt-1 text-[14px] text-[var(--ink-3)]">Parent: {parentContact(appointment.parents)}</p>
+          </div>
+          <div className="text-right">
+            <div className="text-[15px] font-semibold text-[var(--ink)]">{when}</div>
+            <div className="mt-0.5 text-[13px] text-[var(--ink-3)]">Video consult · 30 min</div>
+            <span className="mt-3 inline-flex items-center rounded-full border border-dashed border-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--accent)]">
+              Follow-up · waiting for payment
+            </span>
+          </div>
+        </div>
+        <p className="mt-5 max-w-2xl text-[14.5px] leading-[1.55] text-[var(--ink-2)]">
+          You booked this follow-up. The family has been sent a link to pay the consult fee and confirm it
+          {heldUntil ? `; the time is held for them until ${heldUntil}` : ''}. Once they pay, it becomes a normal
+          consult in your queue. If they don&apos;t, the time opens for booking again by itself.
+        </p>
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-[var(--hairline)] pt-5">
+          {appointment.followup_of && (
+            <Link href={`/consultations/${appointment.followup_of}`} className="editorial-btn-ghost">
+              Open the earlier visit
+            </Link>
+          )}
+          <span className="flex flex-wrap items-center gap-3 sm:ml-auto">
+            <CancelFollowupButton holdId={appointment.id} when={when} />
+          </span>
+        </div>
+      </header>
+    </main>
   );
 }
