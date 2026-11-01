@@ -2,9 +2,9 @@ import { Alert, Linking } from 'react-native';
 
 /**
  * Where parents reach the LilSteps team (Help & support, account deletion).
- * TODO(launch): confirm this mailbox exists and is monitored before go-live.
+ * All support and tickets go to dev@ for now (decided 1 Nov 2026).
  */
-export const SUPPORT_EMAIL = 'support@pediapulse.in';
+export const SUPPORT_EMAIL = 'dev@lilstepsclinics.com';
 
 /** India's single emergency number. */
 export const EMERGENCY_NUMBER = '112';
