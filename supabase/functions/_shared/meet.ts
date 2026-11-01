@@ -1,11 +1,21 @@
-// Per-consult Google Meet link via the doctor's connected Google Calendar.
-// Used by create-meet-event (parent / doctor JWT callers) and by
-// _shared/razorpay.ts once a consult is paid. Never throws: the consult
-// stands either way and the app falls back to doctors.default_meet_link.
+// Per-consult Google Meet link. Used by create-meet-event (parent / doctor
+// JWT callers) and by _shared/razorpay.ts once a consult is paid. Never
+// throws: the consult stands either way and the app falls back to
+// doctors.default_meet_link.
 //
-// Secrets: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (the same OAuth client as
-// the Google provider in Supabase Auth). Google error bodies are logged,
-// never returned.
+// Two ways to get the link:
+// 1. Clinic account (preferred, used when GOOGLE_MEET_REFRESH_TOKEN is set):
+//    one LilSteps Google Workspace account (dev@lilstepsclinics.com) creates
+//    a fresh Meet space per consult through the Meet REST API, with open
+//    access (family and doctor join from the link without knocking) and
+//    recording/transcripts off. Secrets: GOOGLE_MEET_CLIENT_ID,
+//    GOOGLE_MEET_CLIENT_SECRET (internal Desktop OAuth client in GCP project
+//    lilsteps-prod), GOOGLE_MEET_REFRESH_TOKEN (scope meetings.space.created).
+// 2. Doctor's own Google Calendar (fallback): the doctor's stored refresh
+//    token mints a Calendar event with Meet attached. Secrets:
+//    GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (the same OAuth client as the
+//    Google provider in Supabase Auth).
+// Google error bodies are logged, never returned.
 
 // deno-lint-ignore-file no-explicit-any
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
@@ -39,6 +49,10 @@ export async function createMeetForAppointment(
   // or already happened).
   if (appt.status !== 'upcoming') {
     return { ok: false, status: 409, error: 'This consult is no longer upcoming' };
+  }
+
+  if (Deno.env.get('GOOGLE_MEET_REFRESH_TOKEN')) {
+    return await createClinicMeetSpace(admin, appt);
   }
 
   // Doctor's Google refresh token
@@ -143,5 +157,80 @@ export async function createMeetForAppointment(
   } catch (e) {
     console.error(`[meet] ${appt.id}: ${(e as Error).message}`);
     return { ok: false, status: 502, error: 'Could not reach Google Calendar' };
+  }
+}
+
+/** Fresh Meet space from the clinic account; see the header for secrets. */
+async function createClinicMeetSpace(
+  admin: SupabaseClient,
+  appt: MeetAppointment,
+): Promise<MeetResult> {
+  const clientId = Deno.env.get('GOOGLE_MEET_CLIENT_ID');
+  const clientSecret = Deno.env.get('GOOGLE_MEET_CLIENT_SECRET');
+  const refreshToken = Deno.env.get('GOOGLE_MEET_REFRESH_TOKEN');
+  if (!clientId || !clientSecret || !refreshToken) {
+    return { ok: false, status: 500, error: 'Google Meet secrets not configured' };
+  }
+
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+    if (!tokenRes.ok) {
+      const err = await tokenRes.text().catch(() => 'unknown');
+      console.error(`[meet] clinic token refresh ${tokenRes.status}: ${err}`);
+      return { ok: false, status: 502, error: 'Could not reach Google Meet' };
+    }
+    const accessToken: string | undefined = (await tokenRes.json()).access_token;
+    if (!accessToken) return { ok: false, status: 502, error: 'No access token returned' };
+
+    const spaceRes = await fetch('https://meet.googleapis.com/v2/spaces', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ config: { accessType: 'OPEN', entryPointAccess: 'ALL' } }),
+    });
+    if (!spaceRes.ok) {
+      const err = await spaceRes.text().catch(() => 'unknown');
+      console.error(`[meet] Meet API ${spaceRes.status} for appt ${appt.id}: ${err}`);
+      return { ok: false, status: 502, error: 'Could not create the Meet room' };
+    }
+    const space = await spaceRes.json();
+    const meetLink: string | undefined = space.meetingUri;
+    if (!meetLink) return { ok: false, status: 502, error: 'Meet room created but no link returned' };
+
+    // Only the first writer wins, so two racing calls can't leave the doctor
+    // and the family in different rooms.
+    const { data: saved, error: updateErr } = await admin
+      .from('appointments')
+      .update({ meet_link: meetLink })
+      .eq('id', appt.id)
+      .is('meet_link', null)
+      .select('meet_link')
+      .maybeSingle();
+    if (updateErr) {
+      console.error(`[meet] meet_link update failed for ${appt.id}: ${updateErr.message}`);
+      return { ok: false, status: 500, error: 'Could not save the meeting link' };
+    }
+    if (!saved) {
+      const { data: current } = await admin
+        .from('appointments')
+        .select('meet_link')
+        .eq('id', appt.id)
+        .maybeSingle();
+      if (current?.meet_link) return { ok: true, meetLink: current.meet_link, reused: true };
+      return { ok: false, status: 500, error: 'Could not save the meeting link' };
+    }
+
+    return { ok: true, meetLink, eventId: space.name };
+  } catch (e) {
+    console.error(`[meet] ${appt.id}: ${(e as Error).message}`);
+    return { ok: false, status: 502, error: 'Could not reach Google Meet' };
   }
 }
