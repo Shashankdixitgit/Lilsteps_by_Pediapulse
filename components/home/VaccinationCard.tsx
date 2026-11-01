@@ -86,12 +86,15 @@ export function VaccinationCard({ vaccinations, loading, error, onRetry, onViewS
   // The yearly flu shot is never "overdue" or "to check", same as the Vaccines tab (O2).
   const overdueCount = vaccinations.filter((v) => v.status === 'overdue' && !isYearly(v)).length;
   const unknownCount = vaccinations.filter((v) => v.status === 'unknown' && !isYearly(v)).length;
+  // Past a vaccine's age limit: never in the overdue count, a calm pill instead.
+  const missedCount = vaccinations.filter((v) => v.status === 'missed').length;
   const fluReminder = vaccinations.some(yearlyPast);
   const nextDate = next ? formatDate(next.scheduled_date) : '';
 
   const pills: { tone: StatusTone; label: string }[] = [];
   if (overdueCount > 0) pills.push({ tone: 'danger', label: `${overdueCount} overdue` });
   if (unknownCount > 0) pills.push({ tone: 'info', label: `${unknownCount} to check with your doctor` });
+  if (missedCount > 0) pills.push({ tone: 'neutral', label: `${missedCount} missed, ask your doctor` });
   if (pills.length === 0) {
     pills.push(
       next?.status === 'due_soon'
@@ -105,7 +108,7 @@ export function VaccinationCard({ vaccinations, loading, error, onRetry, onViewS
   }
 
   const title = !next
-    ? overdueCount + unknownCount > 0
+    ? overdueCount + unknownCount + missedCount > 0
       ? 'Nothing else coming up'
       : 'Lovely work, nothing due right now'
     : sameDay.length > 1

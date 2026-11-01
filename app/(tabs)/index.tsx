@@ -9,6 +9,7 @@ import { AllergyBanner } from '@/components/home/AllergyBanner';
 import { CareTeam, type CareProvider } from '@/components/home/CareTeam';
 import { monthsBetween } from '@/components/growth/whoData';
 import { GrowthCards } from '@/components/home/GrowthCards';
+import { HealthLogCard } from '@/components/home/HealthLogCard';
 import { HomeHeader } from '@/components/home/HomeHeader';
 import { MentalHealthHomeCard } from '@/components/home/MentalHealthHomeCard';
 import { MilestonesCard } from '@/components/home/MilestonesCard';
@@ -19,6 +20,7 @@ import { NewPrescriptionCard } from '@/components/home/NewPrescriptionCard';
 import { PrimaryCtaCard } from '@/components/home/PrimaryCtaCard';
 import { VaccinationCard } from '@/components/home/VaccinationCard';
 import { AppointmentCard } from '@/components/consult/AppointmentCard';
+import { PendingPaymentCard } from '@/components/consult/PendingPaymentCard';
 import { doctorInitial } from '@/components/consult/appointmentFormat';
 import { CancelNotice, cancelLabel, useCancelAppointment } from '@/components/consult/useCancelAppointment';
 import { TextButton } from '@/components/gradient-button';
@@ -108,6 +110,7 @@ export default function HomeScreen() {
   const {
     appointments,
     upcoming,
+    paymentDue,
     error: apptsError,
     cancelAppointment,
     refetch: refetchAppts,
@@ -200,7 +203,7 @@ export default function HomeScreen() {
       id: a.doctor_id,
       name,
       role: a.doctors.specialisation,
-      // Last-name initial ("Dr. Emily Chen" -> "C"), like the consult screens.
+      // The doctor's initial without the "Dr." ("Dr. Emily Chen" -> "E"), like the consult screens.
       initial: doctorInitial(name),
     });
     if (careProviders.length === 3) break;
@@ -257,6 +260,28 @@ export default function HomeScreen() {
           <MentalHealthHomeCard level={moodLevel} childId={child.id} childName={childName} />
         ) : null}
 
+        {/* Bookings not paid yet (the parent left the payment page, or a
+            doctor's follow-up): findable here until the hold runs out. */}
+        {paymentDue.length > 0 ? (
+          <View style={styles.section}>
+            <SectionHeader title="Waiting for payment" />
+            {paymentDue.map((f) => (
+              <PendingPaymentCard
+                key={f.id}
+                appointmentId={f.id}
+                childId={f.child_id}
+                doctorId={f.doctor_id}
+                doctorName={f.doctors?.name ?? 'Doctor'}
+                date={f.date}
+                time={f.time}
+                holdExpiresAt={f.hold_expires_at ?? null}
+                followUp={!!f.followup_of}
+                onSettled={refetchAppts}
+              />
+            ))}
+          </View>
+        ) : null}
+
         <PrimaryCtaCard
           title={bracketCfg.ctaTitle}
           subtitle="Log symptoms or daily wellness"
@@ -264,6 +289,8 @@ export default function HomeScreen() {
           secondaryLabel="Book a doctor"
           onSecondary={() => router.push('/consult/booking')}
         />
+
+        <HealthLogCard childName={childName} onPress={() => router.push('/health-log')} />
 
         {/* Shown once the child has any consult, so past visits and doctor
             messages (Consult tab) stay reachable with nothing upcoming. */}

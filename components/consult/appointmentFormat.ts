@@ -123,12 +123,14 @@ export function getBookingDays(n: number = BOOKING_DAYS, now: Date = new Date())
   });
 }
 
-/** Last-name initial ("Dr. Emily Chen" → "C"), never the "D" of "Dr.". */
+/**
+ * The doctor's own initial for an avatar: the first letter of the name after
+ * any "Dr" / "Dr." title ("Dr. Madhav Rao" → "M"), never the "D" of "Dr.".
+ */
 export function doctorInitial(name: string | null | undefined): string {
-  const trimmed = (name ?? '').trim();
-  if (!trimmed) return 'D';
-  const last = trimmed.split(/\s+/).slice(-1)[0] ?? trimmed;
-  return Array.from(last)[0]?.toUpperCase() ?? 'D';
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  const first = parts.find((p) => !/^dr\.?$/i.test(p)) ?? '';
+  return Array.from(first.replace(/^dr\.(?=\p{L})/iu, ''))[0]?.toUpperCase() ?? 'D';
 }
 
 /** "Dr. Emily Chen" → "Dr. Chen"; a name without a title stays as given. */

@@ -3,6 +3,7 @@ import { Fragment, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { formatWeight } from '@/components/growth/format';
 import { HeaderIconButton, ScreenHeader } from '@/components/ScreenHeader';
 import { AppColors, Radius } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
@@ -120,7 +121,7 @@ export default function PrescriptionDetailScreen() {
 
   const ageAtIssue =
     child && prescription ? formatAgeLabel(child.dob, { now: new Date(prescription.issued_at) }) : '';
-  const childFacts = [ageAtIssue, weightKg ? `${weightKg} kg` : 'Weight not recorded'].filter(Boolean).join(' · ');
+  const childFacts = [ageAtIssue, weightKg ? `${formatWeight(Number(weightKg))} kg` : 'Weight not recorded'].filter(Boolean).join(' · ');
   const allergyText =
     allergies.length > 0
       ? allergies.map(allergyLine).join(', ')

@@ -55,10 +55,18 @@ export const FIRST_PATH_SCREEN: Record<OnboardingPath, OnboardingScreen> = {
 export interface OnboardingStep {
   /** 1-based position of the screen. */
   step: number;
-  /** Total steps on the path, including confirm; null while the path is not
-   *  known yet (before the date of birth is entered). */
+  /** Total steps on the path, including confirm. Before the path is known
+   *  (no date of birth yet) this is TYPICAL_TOTAL, so the label always
+   *  reads "Step N of M". Kept nullable for callers that check it. */
   total: number | null;
 }
+
+/**
+ * The step count shown before the child's path is known: the middle path
+ * length (A 12, B 11, C 13 → 12). Paths differ by one screen at most, so
+ * the count changes by at most one once the date of birth is in.
+ */
+export const TYPICAL_TOTAL = Object.values(ONBOARDING_STEPS).map((l) => l.length).sort((a, b) => a - b)[1];
 
 export interface OnboardingStepOptions {
   /** The parent already has a child, so this run started at "add-child" and
@@ -75,8 +83,8 @@ function stepsFor(list: OnboardingScreen[], screen: OnboardingScreen, opts?: Onb
 
 /**
  * Position of a screen. Before the path is known, the common screens report
- * `total: null` (show "Step X" only). Returns null for a screen that is not
- * on the given path.
+ * TYPICAL_TOTAL as the total. Returns null for a screen that is not on the
+ * given path.
  */
 export function getOnboardingStep(
   screen: OnboardingScreen,
@@ -89,5 +97,6 @@ export function getOnboardingStep(
     return idx === -1 ? null : { step: idx + 1, total: steps.length };
   }
   const idx = stepsFor(COMMON_STEPS, screen, opts).indexOf(screen);
-  return idx === -1 ? null : { step: idx + 1, total: null };
+  const total = opts?.skipParentDetails && screen !== 'parent-details' ? TYPICAL_TOTAL - 1 : TYPICAL_TOTAL;
+  return idx === -1 ? null : { step: idx + 1, total };
 }

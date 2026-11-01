@@ -310,7 +310,7 @@ export default function UploadDocumentScreen() {
           label="Doctor"
           hint="(optional)"
           hintInline
-          placeholder="e.g. Dr. Sarah Miller"
+          placeholder="e.g. Dr. A. Kumar"
           value={doctorName}
           onChangeText={setDoctorName}
         />

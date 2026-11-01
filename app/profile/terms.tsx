@@ -4,7 +4,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LegalDocument, type LegalSection } from '@/components/legal-document';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { AppColors } from '@/constants/theme';
-import { EMERGENCY_NUMBER, SUPPORT_EMAIL } from '@/lib/support';
+import { CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
+import { EMERGENCY_NUMBER, REFUND_POLICY_URL, SUPPORT_EMAIL } from '@/lib/support';
 
 /*
  * DRAFT FOR LAWYER REVIEW — not final legal text.
@@ -19,7 +20,7 @@ import { EMERGENCY_NUMBER, SUPPORT_EMAIL } from '@/lib/support';
  * Keep this note in code only; parents never see the word "draft".
  */
 
-const UPDATED = '13 October 2026';
+const UPDATED = '1 November 2026';
 
 const SECTIONS: readonly LegalSection[] = [
   {
@@ -87,6 +88,18 @@ const SECTIONS: readonly LegalSection[] = [
     paragraphs: [
       'If a consult or service has a fee, we will show you the price before you book. You will never be charged without seeing the price first.',
     ],
+  },
+  {
+    heading: 'Payments, cancellations and refunds',
+    bullets: [
+      `A video consult costs ${CONSULT_PRICE_LABEL}. You pay when you book, through Razorpay, our payment processor. Your consult is booked once the payment goes through.`,
+      'If you cancel 2 hours or more before the consult starts, you get a full refund.',
+      'If you cancel less than 2 hours before the start, or do not join the consult, the fee is not refunded.',
+      'If the doctor cancels, you get a full refund.',
+      'Refunds go back to the card, UPI or account you paid with and usually take 5–7 working days to reach you.',
+    ],
+    paragraphs: ['This is a summary. Our full refund policy is on our website.'],
+    link: { label: 'Read the full refund policy', url: REFUND_POLICY_URL },
   },
   {
     heading: 'Ending your account',

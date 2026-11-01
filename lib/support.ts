@@ -6,6 +6,9 @@ import { Alert, Linking } from 'react-native';
  */
 export const SUPPORT_EMAIL = 'dev@lilstepsclinics.com';
 
+/** The full payments, cancellations and refunds policy (Terms links to it). */
+export const REFUND_POLICY_URL = 'https://lilstepsclinics.com/refund';
+
 /** India's single emergency number. */
 export const EMERGENCY_NUMBER = '112';
 

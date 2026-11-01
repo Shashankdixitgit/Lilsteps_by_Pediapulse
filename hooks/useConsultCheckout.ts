@@ -1,14 +1,23 @@
+import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 
 import {
   bookWithCarePlan,
   cancelConsult,
+  checkConsultPayment,
+  clearPendingWebPayment,
   CONSULT_PRICE_LABEL,
   findOwnHold,
   payForConsult,
+  PaymentPageError,
   type PaymentState,
+  type PaymentStatus,
   REFUND_FAILED_TEXT,
 } from '@/lib/consultPayment';
+
+/** Shown when the payment page could not be opened; the hold is dropped. */
+export const SLOT_NOT_KEPT_TEXT = "Couldn't open the payment page. Your slot was not kept — please try again.";
 
 /** The slot a hold is for; a hold for another target is dropped first. */
 export interface HoldTarget {
@@ -40,6 +49,14 @@ const keyOf = (t: HoldTarget) => `${t.childId}|${t.doctorId}|${t.date}|${t.time}
  * paying". A hold that was made but never reached the payment page is
  * dropped when the screen goes away, so it doesn't count against the
  * two-hold limit.
+ *
+ * If the payment page can't be opened at all, the hold is released straight
+ * away and `checkout` throws SLOT_NOT_KEPT_TEXT.
+ *
+ * Web: the page leaves for Razorpay. If the parent comes back with the
+ * browser's Back button, the page can be restored from the back/forward
+ * cache with the button still busy; `pageshow` (persisted) and
+ * `visibilitychange` clear that and ask the server about the hold again.
  */
 export function useConsultCheckout() {
   const held = useRef<{ id: string; key: string; sentToPayment: boolean } | null>(null);
@@ -47,6 +64,8 @@ export function useConsultCheckout() {
   const [notice, setNotice] = useState<string | null>(null);
   /** True while a hold exists that can still be paid. */
   const [awaitingPayment, setAwaitingPayment] = useState(false);
+  /** Web: the page was sent to Razorpay and has not come back yet. */
+  const awayAtPayment = useRef(false);
 
   useEffect(
     () => () => {
@@ -55,6 +74,57 @@ export function useConsultCheckout() {
     },
     [],
   );
+
+  // Web: back from Razorpay without paying (Back button, bfcache restore).
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) void backFromPaymentPage();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void backFromPaymentPage();
+    };
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+    // Listeners only read refs and state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** Clear the busy state and show what the server now says about the hold. */
+  async function backFromPaymentPage() {
+    if (!awayAtPayment.current) return;
+    awayAtPayment.current = false;
+    setPaying(false);
+    const h = held.current;
+    if (!h) return;
+    let status: PaymentStatus;
+    try {
+      status = await checkConsultPayment(h.id);
+    } catch {
+      // Can't tell right now: offer to pay again (the server re-checks).
+      setAwaitingPayment(true);
+      setNotice(pendingText());
+      return;
+    }
+    if (status.state === 'pending' || status.state === 'redirecting') {
+      setAwaitingPayment(true);
+      setNotice(pendingText(status.holdExpiresAt));
+      return;
+    }
+    if (status.state === 'paid') {
+      // The return page reads the saved booking and shows "You're booked".
+      router.replace('/payment-return');
+      return;
+    }
+    held.current = null;
+    clearPendingWebPayment();
+    setAwaitingPayment(false);
+    setNotice(endedText(status.state, status.refunded, status.refundFailed));
+  }
 
   function pendingText(holdExpiresAt?: string | null): string {
     const mins = holdExpiresAt
@@ -141,6 +211,8 @@ export function useConsultCheckout() {
     book: () => Promise<{ id: string }>,
     target: HoldTarget,
     label?: string,
+    /** false: never drop this hold (a follow-up the doctor booked). */
+    releaseOnFail = true,
   ): Promise<string | null> {
     setPaying(true);
     setNotice(null);
@@ -148,7 +220,7 @@ export function useConsultCheckout() {
     try {
       const h = await holdFor(book, target);
       h.sentToPayment = true;
-      const result = await payForConsult(h.id, label);
+      const result = await openPayment(h, label, releaseOnFail);
       if (result.state === 'redirecting') {
         redirecting = true;
         return null;
@@ -170,6 +242,30 @@ export function useConsultCheckout() {
     } finally {
       // Web: the page is leaving for Razorpay; keep the button busy.
       if (!redirecting) setPaying(false);
+    }
+  }
+
+  /**
+   * payForConsult, except that when the payment page can't be opened the
+   * hold is released at once (no payment can have been made), instead of
+   * keeping the slot from other families until it runs out.
+   */
+  async function openPayment(
+    h: { id: string },
+    label: string | undefined,
+    releaseOnFail: boolean,
+  ): Promise<PaymentStatus> {
+    try {
+      const result = await payForConsult(h.id, label);
+      if (result.state === 'redirecting') awayAtPayment.current = true;
+      return result;
+    } catch (e) {
+      if (!(e instanceof PaymentPageError)) throw e;
+      if (!releaseOnFail) throw new Error(e.message);
+      await cancelConsult(h.id).catch(() => undefined);
+      held.current = null;
+      setAwaitingPayment(false);
+      throw new Error(SLOT_NOT_KEPT_TEXT);
     }
   }
 

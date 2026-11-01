@@ -1,4 +1,6 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, Text, View } from 'react-native';
+
+import { TextButton } from '@/components/gradient-button';
 
 import { AppColors, Radius } from '@/constants/theme';
 import { typography } from '@/styles/global';
@@ -8,6 +10,8 @@ export interface LegalSection {
   heading: string;
   paragraphs?: readonly string[];
   bullets?: readonly string[];
+  /** A link shown after the text, e.g. the full refund policy on the website. */
+  link?: { label: string; url: string };
 }
 
 /**
@@ -49,9 +53,23 @@ export function LegalDocument({
               {p}
             </Text>
           ))}
+          {s.link ? <SectionLink link={s.link} /> : null}
         </View>
       ))}
     </View>
+  );
+}
+
+/** The section's link, e.g. the full refund policy on lilstepsclinics.com. */
+function SectionLink({ link }: { link: { label: string; url: string } }) {
+  return (
+    <TextButton
+      label={link.label}
+      onPress={() => void Linking.openURL(link.url)}
+      accessibilityLabel={`${link.label}, opens ${link.url}`}
+      chevron
+      style={styles.link}
+    />
   );
 }
 
@@ -70,4 +88,5 @@ const styles = StyleSheet.create({
   bulletRow: { flexDirection: 'row', gap: 8 },
   dot: { color: AppColors.secondary },
   bulletText: { flex: 1 },
+  link: { alignSelf: 'flex-start' },
 });

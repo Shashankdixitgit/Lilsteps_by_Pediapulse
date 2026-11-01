@@ -9,7 +9,7 @@
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,6 +25,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { useAuth } from '@/context/auth';
 import { AppColors } from '@/constants/theme';
 import { useTimeSlots } from '@/hooks/useDoctors';
+import { firstFreeDayIndex } from '@/hooks/useEarliestSlots';
 import { MAX_RESCHEDULES, RESCHEDULE_CUTOFF_MINUTES, rescheduleConsult } from '@/lib/consultPayment';
 import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
@@ -95,6 +96,20 @@ export default function RescheduleScreen() {
       cancelled = true;
     };
   }, [id]);
+
+  // Open on the first day this doctor has a free time, not on a full Today.
+  const userPickedDay = useRef(false);
+  const apptDoctorId = appt?.doctor_id ?? null;
+  useEffect(() => {
+    if (!apptDoctorId) return;
+    let cancelled = false;
+    firstFreeDayIndex(apptDoctorId, DAYS.map((d) => d.iso)).then((idx) => {
+      if (!cancelled && !userPickedDay.current) setSelectedDay(idx);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [apptDoctorId, DAYS]);
 
   const selectedIso = DAYS[selectedDay].iso;
   const { slots, loading: loadingSlots, refetch } = useTimeSlots(appt?.doctor_id ?? null, selectedIso);
@@ -176,6 +191,7 @@ export default function RescheduleScreen() {
             days={DAYS}
             selected={selectedDay}
             onSelect={(i) => {
+              userPickedDay.current = true;
               setSelectedDay(i);
               setSelected(null);
             }}

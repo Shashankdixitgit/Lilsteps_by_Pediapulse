@@ -3,7 +3,7 @@
  *
  * User describes their concern via chips + free text.
  * "Skip" option takes them directly to slot selection.
- * Passing: doctorId → slots screen
+ * Passing: doctorId → slots screen (the concern goes through lib/bookingDraft)
  */
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -18,6 +18,7 @@ import { TextInputField } from '@/components/text-input-field';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { typography } from '@/styles/global';
+import { setBookingConcern } from '@/lib/bookingDraft';
 import { WEB_DEMO } from '@/lib/webDemo';
 
 // Bracket-specific quick complaint chips
@@ -54,9 +55,9 @@ export default function DescribeScreen() {
     .join(', ');
 
   function goToSlots(issue?: string) {
-    // Params object: expo-router encodes it once and hands it back decoded,
-    // so a concern like "100% sure it's fever" survives intact.
-    router.push({ pathname: '/consult/slots', params: { doctorId: doctorId ?? '', issue: issue ?? '' } });
+    // The concern is health information: kept in memory, never in the URL.
+    setBookingConcern(issue);
+    router.push({ pathname: '/consult/slots', params: { doctorId: doctorId ?? '' } });
   }
 
   return (

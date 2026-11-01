@@ -72,3 +72,18 @@ export async function fetchFreeSlotsOn(isoDate: string, doctorId?: string | null
   if (error) throw new Error(error.message);
   return (data ?? []) as FreeSlot[];
 }
+
+/**
+ * Index of the first booking day with a free, still-ahead slot (for one
+ * doctor, or any bookable doctor); 0 when none is free or the lookup fails.
+ */
+export async function firstFreeDayIndex(doctorId: string | null, isoDates: string[]): Promise<number> {
+  const { data, error } = await supabase.rpc('next_free_slot_per_doctor');
+  if (error || !data) return 0;
+  const dates = (data as FreeSlot[])
+    .filter((s) => !doctorId || s.doctor_id === doctorId)
+    .map((s) => s.date)
+    .sort();
+  const idx = dates.length > 0 ? isoDates.indexOf(dates[0]) : -1;
+  return idx === -1 ? 0 : idx;
+}

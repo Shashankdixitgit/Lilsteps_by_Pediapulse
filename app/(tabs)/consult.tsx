@@ -6,7 +6,8 @@ import { AiCheckinHeroCard } from '@/components/consult/AiCheckinHeroCard';
 import { AppointmentCard } from '@/components/consult/AppointmentCard';
 import { ConsultHistoryItem } from '@/components/consult/ConsultHistoryItem';
 import { ConversationListItem } from '@/components/consult/ConversationListItem';
-import { FollowUpDueCard } from '@/components/consult/FollowUpDueCard';
+import { CancelledConsultItem } from '@/components/consult/CancelledConsultItem';
+import { PendingPaymentCard } from '@/components/consult/PendingPaymentCard';
 import { CancelNotice, cancelLabel, useCancelAppointment } from '@/components/consult/useCancelAppointment';
 import { DoctorCardCompact } from '@/components/consult/DoctorCardCompact';
 import { EmptyStateCard } from '@/components/consult/EmptyStateCard';
@@ -18,15 +19,17 @@ import { useChild } from '@/context/child';
 import { appointmentHasVideoLink, isUrgentAppointment, useAppointments } from '@/hooks/useAppointments';
 import { parentConsultTitle, useConsultations } from '@/hooks/useConsultations';
 import { useConversations } from '@/hooks/useConversations';
-import { useDoctors } from '@/hooks/useDoctors';
+import { useDoctorQualifications, useDoctors } from '@/hooks/useDoctors';
+import { cancelledStatusLabel, useRefundStatus } from '@/hooks/useRefundStatus';
 import { typography } from '@/styles/global';
 
 export default function ConsultScreen() {
   const { child } = useChild();
   const { doctors, loading: loadingDocs } = useDoctors();
   const {
+    appointments,
     upcoming,
-    followUpsDue,
+    paymentDue,
     cancelAppointment,
     loading: loadingAppts,
     refetch: refetchAppts,
@@ -39,6 +42,20 @@ export default function ConsultScreen() {
     startConversation,
   } = useConversations(child?.id ?? null);
   const { requestCancel, notice: cancelNotice, cancellingId } = useCancelAppointment(cancelAppointment);
+  const qualifications = useDoctorQualifications(doctors.map((d) => d.id));
+  // Cancelled consults (not unpaid holds that ran out: the query leaves those
+  // out) go under "Past", newest first, with what happened to the payment.
+  const cancelled = appointments
+    .filter((a) => a.status === 'cancelled')
+    .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+  const refunds = useRefundStatus(cancelled.map((a) => a.id));
+  // An unpaid booking the parent dropped (or whose payment page failed) was
+  // never a consult: only cancelled consults that were paid are listed.
+  const cancelledPast = cancelled.filter((a) => {
+    const r = refunds.get(a.id);
+    return r !== undefined && r !== 'not_paid';
+  });
+  const pastCount = consultations.length + cancelledPast.length;
 
   // "Message doctor" on an appointment opens the chat directly, as on Home.
   async function messageDoctor(doctorId: string) {
@@ -85,9 +102,10 @@ export default function ConsultScreen() {
       <View style={styles.section}>
         <Text style={typography.headingSM}>Upcoming</Text>
         <CancelNotice notice={cancelNotice} />
-        {/* Follow-ups the doctor booked: not booked until the family pays (0051). */}
-        {followUpsDue.map((f) => (
-          <FollowUpDueCard
+        {/* Waiting for payment: the parent's own unfinished payments, and
+            follow-ups the doctor booked (0051). Not booked until paid. */}
+        {paymentDue.map((f) => (
+          <PendingPaymentCard
             key={f.id}
             appointmentId={f.id}
             childId={f.child_id}
@@ -96,10 +114,11 @@ export default function ConsultScreen() {
             date={f.date}
             time={f.time}
             holdExpiresAt={f.hold_expires_at ?? null}
+            followUp={!!f.followup_of}
             onSettled={refetchAppts}
           />
         ))}
-        {loadingAppts && upcoming.length === 0 && followUpsDue.length === 0 ? (
+        {loadingAppts && upcoming.length === 0 && paymentDue.length === 0 ? (
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={AppColors.primary} />
           </View>
@@ -129,7 +148,7 @@ export default function ConsultScreen() {
               />
             );
           })
-        ) : followUpsDue.length === 0 ? (
+        ) : paymentDue.length === 0 ? (
           <EmptyStateCard icon="calendar-outline" title="No upcoming appointments" />
         ) : null}
       </View>
@@ -175,6 +194,7 @@ export default function ConsultScreen() {
               <DoctorCardCompact
                 key={doc.id}
                 doctor={doc}
+                qualifications={qualifications.get(doc.id) ?? null}
                 inList
                 divider={i > 0}
                 onBook={(id) => router.push({ pathname: '/consult/describe', params: { doctorId: id } })}
@@ -190,10 +210,22 @@ export default function ConsultScreen() {
           <View style={styles.loadingRow}>
             <ActivityIndicator size="small" color={AppColors.primary} />
           </View>
-        ) : consultations.length === 0 ? (
+        ) : pastCount === 0 ? (
           <EmptyStateCard icon="document-text-outline" title="No past consultations" />
         ) : (
           <View style={styles.listCard}>
+            {cancelledPast.map((a, i) => (
+              <CancelledConsultItem
+                key={a.id}
+                doctorName={a.doctors?.name ?? 'Doctor'}
+                date={a.date}
+                time={a.time}
+                concern={a.concern}
+                statusLabel={cancelledStatusLabel(refunds.get(a.id))}
+                byDoctor={a.cancel_reason === 'doctor'}
+                divider={i > 0}
+              />
+            ))}
             {consultations.map((c, i) => (
               <ConsultHistoryItem
                 key={c.id}
@@ -202,7 +234,7 @@ export default function ConsultScreen() {
                 doctorName={c.doctor_name}
                 chiefComplaint={parentConsultTitle(c)}
                 outcome={c.outcome}
-                divider={i > 0}
+                divider={i > 0 || cancelledPast.length > 0}
                 onPress={(id) => router.push(`/consult/${id}`)}
               />
             ))}

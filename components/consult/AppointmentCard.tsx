@@ -37,7 +37,7 @@ export interface AppointmentCardProps {
 }
 
 /**
- * Upcoming appointment: one hairline card. Avatar 36 (last-name initial) +
+ * Upcoming appointment: one hairline card. Avatar 36 (doctor initial) +
  * doctor 15 SemiBold + specialty 13 muted, the when line
  * "Today, 13 Oct · 2:00 PM", a "Video · 30 min" meta line, then Join video
  * (primary md) with Details / Cancel as text buttons. Join is only active

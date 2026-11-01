@@ -7,6 +7,7 @@ import {
   addDays,
   istToday,
   type LogRow,
+  pastMaxAge,
   planReminders,
   queryRange,
   settledKeys,
@@ -146,4 +147,22 @@ Deno.test('emails: due soon / overdue wording, singular and plural, no booking p
   assertStringIncludes(late.text, 'paediatrician');
   // Subjects stay generic: no child or vaccine name in the inbox preview.
   for (const e of [one, many, late]) assert(!e.subject.includes('Myra') && !e.subject.includes('MMR'));
+});
+
+Deno.test('age limit: Rotavirus at 7m30d is still reminded (overdue); at 8m1d it is skipped (missed)', () => {
+  assertEquals(pastMaxAge('Rotavirus', '2026-03-11', TODAY), false); // 7 months 30 days
+  assertEquals(pastMaxAge('Rotavirus', '2026-03-10', TODAY), false); // 8 months 0 days
+  assertEquals(pastMaxAge('Rotavirus', '2026-03-09', TODAY), true); // 8 months 1 day
+  assertEquals(pastMaxAge('MMR', '2010-01-01', TODAY), false);
+  assertEquals(pastMaxAge('Rotavirus', null, TODAY), false);
+
+  const rota = (id: string, dob: string) =>
+    dose(id, '2026-11-01', {
+      vaccine_name: 'Rotavirus',
+      dose_label: 'Dose 3',
+      status: 'overdue',
+      children: { name: 'Myra', parent_id: 'u1', dob },
+    });
+  const groups = planReminders([rota('r1', '2026-03-11'), rota('r2', '2026-03-09')], new Set(), TODAY);
+  assertEquals(groups.flatMap((g) => g.keys), ['r1@2026-11-01']);
 });

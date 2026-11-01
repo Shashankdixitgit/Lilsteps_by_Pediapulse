@@ -2,9 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { addCalendar, parseDateOnly, toDateOnlyString } from '@/lib/date';
 import { istTodayDateOnly } from '@/hooks/useGrowth';
-import { ANNUAL_VACCINE_NAMES } from '@/constants/vaccineQuestions';
+import { ANNUAL_VACCINE_NAMES, isPastMaxAge } from '@/constants/vaccineQuestions';
 
-export type VaccinationStatus = 'done' | 'due_soon' | 'overdue' | 'upcoming' | 'unknown';
+/**
+ * 'missed' is shown only, never stored: a dose not given whose vaccine has an
+ * age limit the child is past (VACCINE_MAX_AGE, e.g. Rotavirus after 8
+ * months). Not overdue: the doctor advises what to do.
+ */
+export type VaccinationStatus = 'done' | 'due_soon' | 'overdue' | 'upcoming' | 'unknown' | 'missed';
 
 export interface VaccinationRow {
   id: string;
@@ -23,6 +28,8 @@ export interface VaccinationRow {
    */
   status: VaccinationStatus;
   created_at: string;
+  /** Joined for the age-limit check; not shown. */
+  children?: { dob: string | null } | null;
 }
 
 /**
@@ -45,6 +52,9 @@ export function statusForDate(
 
 function withLiveStatus(row: VaccinationRow, today: string): VaccinationRow {
   if (row.status === 'done') return row;
+  // Past the vaccine's age limit (Rotavirus after 8 months): "Missed — ask
+  // your doctor", not overdue or "Not sure" (VACCINE_MAX_AGE).
+  if (isPastMaxAge(row.vaccine_name, row.children?.dob, today)) return { ...row, status: 'missed' };
   // The flu shot is yearly: never "Not sure" catch-up, never overdue.
   if (row.status === 'unknown' && !ANNUAL_VACCINE_NAMES.has(row.vaccine_name)) return row;
   return { ...row, status: statusForDate(row.scheduled_date, today, row.vaccine_name) };
@@ -76,7 +86,7 @@ export function useVaccinations(childId: string | null) {
     try {
       const { data, error: err } = await supabase
         .from('vaccinations')
-        .select('*')
+        .select('*, children(dob)')
         .eq('child_id', childId)
         .order('scheduled_date', { ascending: true })
         .order('vaccine_name', { ascending: true });

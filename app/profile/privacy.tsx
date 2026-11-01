@@ -26,12 +26,16 @@ import { layout, typography } from '@/styles/global';
  *   - Push notifications: Expo push service. Emails (sign-in codes, booking
  *     updates): Google Workspace (Gmail), sent as dev@lilstepsclinics.com.
  *     SMS is off until DLT; add the SMS provider back here when it is on.
+ *   - Payments: Razorpay (payment links via the consult-payment edge
+ *     function). Card / UPI / bank details are entered on Razorpay's page and
+ *     never reach the app; the payments table keeps status, amount, Razorpay
+ *     ids and refund state only.
  *   - No advertising or analytics SDKs are in the app today. Update this
  *     page before adding Sentry / PostHog (lib/observability.ts).
  * Do not add claims like "HIPAA compliant" or "end-to-end encrypted".
  */
 
-const UPDATED = '13 October 2026';
+const UPDATED = '1 November 2026';
 
 const SECTIONS: readonly LegalSection[] = [
   {
@@ -42,6 +46,7 @@ const SECTIONS: readonly LegalSection[] = [
       'What you add over time: vaccines, growth entries, health-log notes and photos, uploaded reports and records.',
       'Consults: AI check-in conversations and summaries, bookings, chats with the doctor, consult notes and prescriptions.',
       'Technical: a notification token so we can send you reminders, if you allow notifications.',
+      'Payments: whether a consult was paid for, the amount, and any refund. Your card, UPI or bank details are not collected by LilSteps.',
     ],
   },
   {
@@ -61,6 +66,7 @@ const SECTIONS: readonly LegalSection[] = [
       'You. Only you can see your children’s information in the app.',
       'Doctors you book with. A doctor can see a child’s details only after you book a consult with them, so they can prepare.',
       'Service providers who run parts of the app for us, only for that purpose: Supabase (secure database, sign-in and file storage), Google Gemini (prepares the AI check-in summary), Google Meet (video consults), Expo (push notifications) and Google Workspace (Gmail), which sends our emails: sign-in codes and booking updates.',
+      'Razorpay, our payment processor. When you pay for a consult, you enter your card, UPI or bank details on Razorpay’s secure payment page, so they go to Razorpay, not to LilSteps. We keep only the payment status (paid, refunded and so on), not your card or UPI details.',
       'Authorities, only if Indian law requires us to share it.',
     ],
   },

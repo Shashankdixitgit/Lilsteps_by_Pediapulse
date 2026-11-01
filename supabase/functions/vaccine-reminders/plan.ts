@@ -27,6 +27,33 @@ export const OVERDUE_UNTIL_DAYS = 30;
 /** Same list as ANNUAL_VACCINE_NAMES in the app (constants/vaccineQuestions.ts). */
 export const ANNUAL_VACCINES = new Set(['Influenza']);
 
+/**
+ * Vaccines with an upper age limit, in months from birth. Same data as
+ * VACCINE_MAX_AGE in the app (constants/vaccineQuestions.ts). Past it, a dose
+ * not given is "Missed — ask your doctor" in the app, so it gets no due or
+ * overdue email: the doctor decides what to do.
+ * Age limit per IAP schedule — confirm with Dr Madhav.
+ * Rotavirus: series completed by 8 months; no dose after 8 months 0 days.
+ */
+export const VACCINE_MAX_AGE_MONTHS: Readonly<Record<string, number>> = { Rotavirus: 8 };
+
+/** dob + n calendar months ('YYYY-MM-DD'), clamped to the month's last day. */
+function addMonths(isoDate: string, months: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const total = m - 1 + months;
+  const year = y + Math.floor(total / 12);
+  const month = ((total % 12) + 12) % 12;
+  const last = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  return new Date(Date.UTC(year, month, Math.min(d, last))).toISOString().slice(0, 10);
+}
+
+/** True when the child is past the vaccine's age limit today (IST date). */
+export function pastMaxAge(vaccineName: string, dob: string | null | undefined, today: string): boolean {
+  const months = VACCINE_MAX_AGE_MONTHS[vaccineName];
+  if (months === undefined || !dob) return false;
+  return today > addMonths(dob.slice(0, 10), months);
+}
+
 export type ReminderWindow = 'due' | 'overdue';
 export const TEMPLATE_FOR: Record<ReminderWindow, string> = { due: 'vaccine_due_soon', overdue: 'vaccine_overdue' };
 
@@ -73,7 +100,7 @@ export interface VaccinationRow {
   dose_label: string | null;
   scheduled_date: string;
   status: string;
-  children: { name: string; parent_id: string } | null;
+  children: { name: string; parent_id: string; dob?: string | null } | null;
 }
 
 export interface LogRow {
@@ -155,6 +182,8 @@ export function planReminders(rows: VaccinationRow[], settled: Set<string>, toda
   const groups = new Map<string, ReminderGroup & { labels: string[] }>();
   for (const v of rows) {
     if (!v.children?.parent_id) continue;
+    // Past the vaccine's age limit: for the doctor, not a reminder email.
+    if (pastMaxAge(v.vaccine_name, v.children.dob, today)) continue;
     const window = windowFor(v.scheduled_date, v.status, v.vaccine_name, today);
     if (!window) continue;
     const template = TEMPLATE_FOR[window];

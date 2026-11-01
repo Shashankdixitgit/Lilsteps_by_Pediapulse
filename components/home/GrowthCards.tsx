@@ -1,5 +1,6 @@
 import { StyleSheet, Text, View } from 'react-native';
 
+import { formatWeight } from '@/components/growth/format';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { typography } from '@/styles/global';
@@ -28,7 +29,7 @@ interface GrowthCardsProps {
 export function GrowthCards({ data, onPress, onWeightPress, onHeightPress, heightLabel = 'Height' }: GrowthCardsProps) {
   const content = (
     <>
-      <Column label="Weight" value={data.weight} unit="kg" onPress={onPress ? undefined : onWeightPress} />
+      <Column label="Weight" value={data.weight == null ? null : formatWeight(data.weight)} unit="kg" onPress={onPress ? undefined : onWeightPress} />
       <View style={styles.divider} />
       <Column label={heightLabel} value={data.height} unit="cm" onPress={onPress ? undefined : onHeightPress} />
     </>
@@ -41,7 +42,7 @@ export function GrowthCards({ data, onPress, onWeightPress, onHeightPress, heigh
         scaleTo={0.98}
         bg={AppColors.card}
         bgPressed={AppColors.surfaceContainerLow}
-        accessibilityLabel={`Weight ${data.weight ?? 'not logged'} kg, height ${data.height ?? 'not logged'} cm`}
+        accessibilityLabel={`Weight ${data.weight == null ? 'not logged' : formatWeight(data.weight)} kg, height ${data.height ?? 'not logged'} cm`}
         style={styles.card}
       >
         {content}
@@ -58,7 +59,7 @@ function Column({
   onPress,
 }: {
   label: string;
-  value: number | null;
+  value: number | string | null;
   unit: string;
   onPress?: () => void;
 }) {
