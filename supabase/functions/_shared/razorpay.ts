@@ -43,13 +43,40 @@ function authHeader(): string {
   return `Basic ${btoa(`${id}:${secret}`)}`;
 }
 
+/** Every Razorpay call gives up after this long (RAZORPAY_TIMEOUT_MS overrides, for tests). */
+export const RAZORPAY_TIMEOUT_MS = 15_000;
+
+function timeoutMs(): number {
+  const v = Number(Deno.env.get('RAZORPAY_TIMEOUT_MS'));
+  return Number.isFinite(v) && v > 0 ? v : RAZORPAY_TIMEOUT_MS;
+}
+
 async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<any> {
-  const res = await fetch(`${API}${path}`, {
-    method,
-    headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  const text = await res.text();
+  // A stalled Razorpay must not hold up a cancel, a webhook or an account
+  // deletion. A refund that times out is treated as failed (refund_failed,
+  // team alerted); the alert says to check Razorpay before refunding by hand,
+  // as Razorpay may still have taken the request.
+  const ms = timeoutMs();
+  let res: Response;
+  let text: string;
+  try {
+    res = await fetch(`${API}${path}`, {
+      method,
+      headers: { Authorization: authHeader(), 'Content-Type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(ms),
+    });
+    text = await res.text();
+  } catch (e) {
+    if (e instanceof RazorpayError) throw e;
+    const name = (e as Error).name;
+    if (name === 'TimeoutError' || name === 'AbortError') {
+      console.error(`[razorpay] ${method} ${path} timed out after ${ms} ms`);
+      throw new RazorpayError('Razorpay timeout', 504);
+    }
+    console.error(`[razorpay] ${method} ${path} network error: ${(e as Error).message}`);
+    throw new RazorpayError('Razorpay unreachable', 502);
+  }
   if (!res.ok) {
     // Razorpay error bodies are logged, never returned to the app.
     console.error(`[razorpay] ${method} ${path} → ${res.status}: ${text.slice(0, 500)}`);

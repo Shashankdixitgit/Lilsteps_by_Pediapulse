@@ -110,6 +110,8 @@ interface DeleteAccountResponse {
   error?: string;
   refundsStarted?: number;
   refundsFailed?: number;
+  /** Cancelled under 2 hours before the start: not refunded (refund policy). */
+  lateNotRefunded?: number;
   /** Plain words from the server when a refund could not be started. */
   notice?: string;
 }
@@ -122,7 +124,7 @@ function deletedMessage(data: DeleteAccountResponse): string {
   }
   if (data.refundsStarted) {
     const n = data.refundsStarted;
-    return `${base} ${n === 1 ? 'Your upcoming consult was' : `Your ${n} upcoming consults were`} cancelled and refunded in full: it usually reaches your account in 5–7 working days.`;
+    return `${base} ${n === 1 ? 'A refund for your cancelled consult has' : `Refunds for ${n} cancelled consults have`} started: it usually reaches your account in 5–7 working days.`;
   }
   return base;
 }
@@ -227,8 +229,8 @@ export default function PrivacyScreen() {
               <>
                 <Text style={typography.bodySM}>
                   Deleting your account removes it and every child profile, record, check-in, booking,
-                  chat and prescription linked to it. Upcoming paid consults are cancelled and refunded in
-                  full. This cannot be undone.
+                  chat and prescription linked to it. Upcoming consults are cancelled. Paid consults more
+                  than 2 hours away are refunded in full, as in our refund policy. This cannot be undone.
                 </Text>
                 <GradientButton label="Delete my account" variant="danger" onPress={() => setStep('confirm')} />
               </>
@@ -244,7 +246,7 @@ export default function PrivacyScreen() {
                     'All your children’s profiles and health details',
                     'Uploaded records, photos, check-ins and growth entries',
                     'Bookings, chats with doctors and prescriptions',
-                    'Upcoming consults are cancelled, and paid ones are refunded in full (5–7 working days)',
+                    'Upcoming consults are cancelled. Paid consults more than 2 hours away are refunded in full, as in our refund policy.',
                   ].map((line) => (
                     <View key={line} style={styles.listRow}>
                       <Text style={[typography.bodySM, styles.dot]}>•</Text>

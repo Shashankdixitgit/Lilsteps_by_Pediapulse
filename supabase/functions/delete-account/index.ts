@@ -4,10 +4,12 @@
 // account-deletion policy). Called from Profile → Privacy & security →
 // "Delete my account" with the signed-in parent's session.
 //
-// First (account.ts settleConsultsBeforeDelete): every upcoming consult and
-// unpaid hold is cancelled; paid consults are refunded IN FULL through the
-// consult-payment cancel code, and refunds the account was still owed are
-// retried. A failed refund does not stop the deletion: the payments row stays
+// First (account.ts settleConsultsBeforeDelete): every consult that has not
+// started yet and every unpaid hold is cancelled through the consult-payment
+// cancel code, with the same refund rules as a parent cancel (in full 2 h or
+// more before the start, or if the doctor moved it in the last 24 h; else no
+// refund). Consults whose start has passed are left alone (no refund).
+// Refunds the account was still owed are retried. A failed refund does not stop the deletion: the payments row stays
 // refund_failed (parent_id → null) and the team is emailed once.
 //
 // What it deletes (policy: everything the parent put in or that is about
@@ -30,7 +32,7 @@
 // from the parent app.
 //
 // Request:  POST { "confirm": "DELETE" }  with Authorization: Bearer <user JWT>
-// Response: { ok: true, consultsCancelled, refundsStarted, refundsFailed,
+// Response: { ok: true, consultsCancelled, lateNotRefunded, refundsStarted, refundsFailed,
 //            notice? } or { error }. `notice` (plain words for the parent)
 //            is set when a refund could not be started automatically.
 //
@@ -74,7 +76,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // ── 0. Upcoming consults: cancelled, paid ones refunded in full ─────
+    // ── 0. Upcoming consults: cancelled, refunded by the usual rules ─────
     const settled = await settleConsultsBeforeDelete(admin, uid);
     const deleted = await deleteAccountData(admin, uid);
 
@@ -85,6 +87,7 @@ Deno.serve(async (req) => {
     return jsonResponse({
       ok: true,
       consultsCancelled: settled.cancelled,
+      lateNotRefunded: settled.lateNotRefunded,
       refundsStarted: settled.refundsStarted,
       refundsFailed: settled.refundsFailed,
       ...(settled.refundsFailed > 0 ? { notice: REFUND_FAILED_NOTICE } : {}),

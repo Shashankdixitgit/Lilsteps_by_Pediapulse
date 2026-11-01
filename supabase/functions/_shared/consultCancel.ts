@@ -1,6 +1,6 @@
 // Cancelling a consult or an unpaid hold, with its refund. Shared by
 // consult-payment `cancel` (parent / doctor) and delete-account (every
-// upcoming consult of the account, refunded in full).
+// not-yet-started consult of the account, as a parent cancel).
 //
 //   • The booking is set 'cancelled' only if it is still in the state we
 //     read (a parallel cancel / payment / expiry wins otherwise: 'changed').
@@ -9,10 +9,10 @@
 //     booking cancelled and refunds it).
 //   • A paid consult is refunded by refundPaymentRow (claim first, then
 //     Razorpay; a failure leaves refund_failed and alerts the team).
-//     refund 'policy' (default): in full when 2 h or more before the start,
-//     when the doctor cancels, or when the doctor moved it in the last 24 h;
-//     otherwise none for a late parent cancel. refund 'full': always in full
-//     (account deletion).
+//     Refund rules: in full when 2 h or more before the start, when the
+//     doctor cancels, or when the doctor moved it in the last 24 h;
+//     otherwise none for a late parent cancel. There is deliberately no
+//     "always refund" switch: account deletion uses the same rules.
 //
 // Who may cancel what is the caller's job; this only does it.
 
@@ -37,7 +37,6 @@ export type CancelResult =
 
 export interface CancelOptions {
   by: 'parent' | 'doctor';
-  refund?: 'policy' | 'full';
   /** payments.refund_reason; default doctor_cancelled / parent_cancelled. */
   refundReason?: string;
   /** Wait for a refund-failure alert (see RefundOptions.awaitAlert). */
@@ -82,13 +81,11 @@ export async function cancelConsult(
   const paid = payments.find((p) => p.status === 'paid');
   if (!paid) return { done: true, refund: 'not_paid' };
 
-  if ((opts.refund ?? 'policy') === 'policy') {
-    const early = consultStart(appt.date, appt.time).getTime() - (opts.now ?? Date.now()) >= REFUND_CUTOFF_MS;
-    // Late, but the doctor moved this consult in the last 24 hours: the new
-    // time may not suit the family, so they still get their money back.
-    if (opts.by === 'parent' && !early && !doctorMovedRecently(appt.last_rescheduled_by, appt.rescheduled_at, opts.now)) {
-      return { done: true, refund: 'none', late: true };
-    }
+  const early = consultStart(appt.date, appt.time).getTime() - (opts.now ?? Date.now()) >= REFUND_CUTOFF_MS;
+  // Late, but the doctor moved this consult in the last 24 hours: the new
+  // time may not suit the family, so they still get their money back.
+  if (opts.by === 'parent' && !early && !doctorMovedRecently(appt.last_rescheduled_by, appt.rescheduled_at, opts.now)) {
+    return { done: true, refund: 'none', late: true };
   }
 
   const reason = opts.refundReason ?? (opts.by === 'doctor' ? 'doctor_cancelled' : 'parent_cancelled');

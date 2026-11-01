@@ -46,10 +46,11 @@ Deno.test('cancel: late parent cancel is not refunded under the rules', async ()
   assertEquals(f.tables.payments[0].status, 'paid');
 });
 
-Deno.test("cancel: refund 'full' (account deletion) refunds even when late", async () => {
+Deno.test('cancel: a late parent cancel is still refunded if the doctor moved it in the last 24 h', async () => {
   const calls = stubRazorpay();
   const { f, appt } = setup('upcoming', soon(), [paid()]);
-  const r = await cancelConsult(f.client, appt, { by: 'parent', refund: 'full', refundReason: 'account_deleted' });
+  const moved = { ...appt, last_rescheduled_by: 'doctor', rescheduled_at: new Date(Date.now() - 3600_000).toISOString() };
+  const r = await cancelConsult(f.client, moved, { by: 'parent', refundReason: 'account_deleted' });
   assertEquals(r, { done: true, refund: 'started' });
   assertEquals(calls[0].body.notes.reason, 'account_deleted');
 });

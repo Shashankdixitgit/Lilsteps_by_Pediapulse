@@ -252,8 +252,11 @@ export async function sweepRefundAlerts(
       `status.eq.refund_failed,and(status.eq.refund_due,updated_at.lt.${cutoff}),` +
         `and(status.eq.refund_pending,refund_id.is.null,updated_at.lt.${cutoff})`,
     )
-    .order('updated_at', { ascending: true })
-    .limit(opts.limit ?? 200);
+    // Newest first: refund_failed rows that were already alerted stay in
+    // that state for good, and must never push a NEW failure out of the
+    // window. (An alerted row is only re-read while it is among the newest.)
+    .order('updated_at', { ascending: false })
+    .limit(opts.limit ?? 500);
   if (error) throw new Error(`refund sweep: ${error.message}`);
   const rows = (data ?? []) as Array<{ id: string; status: string }>;
   if (!rows.length) return [];

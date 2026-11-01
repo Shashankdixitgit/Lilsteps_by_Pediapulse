@@ -142,6 +142,22 @@ Deno.test('sweep: at most maxEmails per run; the rest go next run', async () => 
   assertEquals(box.sent.length, 7);
 });
 
+Deno.test('review #16 LOW: hundreds of old, already-alerted failures never hide a new one', async () => {
+  const VERY_OLD = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const old = Array.from({ length: 250 }, (_, i) => payment({ id: `old${i}`, updated_at: VERY_OLD }));
+  const f = fakeAdmin({
+    payments: [...old, payment({ id: 'fresh', updated_at: NEW })],
+    appointments: [],
+    notification_log: old.map((p) => ({
+      id: `n_${p.id}`, template: 'refund_alert', status: 'sent', created_at: VERY_OLD, payload: { payment_id: p.id },
+    })),
+  });
+  const box = mailbox();
+  const r = await sweepRefundAlerts(f.client, { send: box.send, limit: 200 });
+  assertEquals(r.map((x) => x.paymentId), ['fresh']);
+  assertEquals(box.sent.length, 1);
+});
+
 Deno.test('refundPaymentRow: a Razorpay refusal leaves refund_failed and raises the alert', async () => {
   stubRazorpay({ status: 502, body: {} });
   const f = world([payment({ status: 'paid' })]);

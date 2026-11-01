@@ -1,11 +1,14 @@
 // The work behind delete-account, kept apart from the HTTP handler so it
 // can be tested with a fake client and a fake Razorpay.
 //
-//   settleConsultsBeforeDelete: every upcoming consult and unpaid hold of the
-//     account is cancelled through the same code as consult-payment `cancel`
-//     (_shared/consultCancel.ts). A paid consult is refunded IN FULL whatever
-//     the time to the start (the family is leaving, not skipping a consult).
-//     Refunds this account was still owed (refund_due / refund_failed) are
+//   settleConsultsBeforeDelete: every consult of the account that has not
+//     started yet, and every unpaid hold, is cancelled through the same code
+//     as consult-payment `cancel` (_shared/consultCancel.ts), with the SAME
+//     refund rules as a parent's own cancel: in full when it starts 2 hours
+//     or more from now, or when the doctor moved it in the last 24 hours;
+//     otherwise no refund. A paid consult whose start time has passed is not
+//     cancelled or refunded at all (it may have taken place; the account
+//     deletion removes it). Refunds this account was still owed (refund_due / refund_failed) are
 //     tried again too: once the account is gone nobody would retry them.
 //     A refund that fails does not stop the deletion: its payments row stays
 //     refund_failed (parent_id becomes null through the FK) and the team is
@@ -17,10 +20,13 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 import { cancelConsult, type CancellableConsult } from '../_shared/consultCancel.ts';
 import { refundPaymentRow } from '../_shared/razorpay.ts';
+import { consultStart } from '../_shared/schedule.ts';
 
 export interface SettleSummary {
   /** Upcoming consults and unpaid holds cancelled. */
   cancelled: number;
+  /** Cancelled under 2 hours before the start: not refunded (refund policy). */
+  lateNotRefunded: number;
   /** Refunds started (paid consults and money still owed). */
   refundsStarted: number;
   /** Refunds Razorpay refused / didn't answer: left refund_failed, team alerted. */
@@ -34,8 +40,13 @@ export const REFUND_FAILED_NOTICE =
 /** A consult that changed under us (paid / expired a moment ago) is read again, this many times. */
 const MAX_CANCEL_TRIES = 3;
 
-export async function settleConsultsBeforeDelete(admin: SupabaseClient, uid: string): Promise<SettleSummary> {
-  const summary: SettleSummary = { cancelled: 0, refundsStarted: 0, refundsFailed: 0 };
+export async function settleConsultsBeforeDelete(
+  admin: SupabaseClient,
+  uid: string,
+  opts: { now?: number } = {},
+): Promise<SettleSummary> {
+  const summary: SettleSummary = { cancelled: 0, lateNotRefunded: 0, refundsStarted: 0, refundsFailed: 0 };
+  const now = opts.now ?? Date.now();
   const columns = 'id, date, time, status, last_rescheduled_by, rescheduled_at';
 
   // Money this account was already owed back (read BEFORE cancelling, so a
@@ -58,14 +69,18 @@ export async function settleConsultsBeforeDelete(admin: SupabaseClient, uid: str
   for (const first of (open ?? []) as CancellableConsult[]) {
     let appt: CancellableConsult | null = first;
     for (let attempt = 0; appt && attempt < MAX_CANCEL_TRIES; attempt++) {
+      // A paid consult that has started (or is over) is left alone: no
+      // cancel, no refund. Unpaid holds are always dropped.
+      if (appt.status === 'upcoming' && consultStart(appt.date, appt.time).getTime() <= now) break;
       const r = await cancelConsult(admin, appt, {
         by: 'parent',
-        refund: 'full',
         refundReason: 'account_deleted',
         awaitAlert: true,
+        now,
       });
       if (r.done) {
         summary.cancelled++;
+        if (r.late) summary.lateNotRefunded++;
         if (r.refund === 'started') summary.refundsStarted++;
         if (r.refund === 'failed') summary.refundsFailed++;
         break;

@@ -99,6 +99,7 @@ export function fakeAdmin(
     let limit: number | null = null;
     let range: [number, number] | null = null;
     let headCount = false;
+    const orders: Array<{ key: string; asc: boolean }> = [];
 
     const run = (mode: 'many' | 'one'): Promise<{ data: any; error: any; count?: number }> => {
       const rows = rowsOf(table);
@@ -120,6 +121,17 @@ export function fakeAdmin(
       } else if (op === 'delete') {
         tables[table] = rows.filter((r) => !hit.includes(r));
         cascadeDelete(table, hit);
+      }
+      if (orders.length) {
+        hit = [...hit].sort((a, b) => {
+          for (const o of orders) {
+            const x = get(a, o.key);
+            const y = get(b, o.key);
+            if (x === y) continue;
+            return (x < y ? -1 : 1) * (o.asc ? 1 : -1);
+          }
+          return 0;
+        });
       }
       if (range) hit = hit.slice(range[0], range[1] + 1);
       if (limit !== null) hit = hit.slice(0, limit);
@@ -149,7 +161,7 @@ export function fakeAdmin(
       lte: (k: string, v: string) => (filters.push((r) => get(r, k) <= v), api),
       gte: (k: string, v: string) => (filters.push((r) => get(r, k) >= v), api),
       or: (expr: string) => (filters.push(orPredicate(expr)), api),
-      order: () => api,
+      order: (key: string, o?: { ascending?: boolean }) => (orders.push({ key, asc: o?.ascending !== false }), api),
       returns: () => api,
       limit: (n: number) => ((limit = n), api),
       range: (a: number, b: number) => ((range = [a, b]), api),
