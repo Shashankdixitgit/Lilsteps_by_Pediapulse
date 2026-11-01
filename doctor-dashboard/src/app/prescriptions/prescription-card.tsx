@@ -150,12 +150,14 @@ export function PrescriptionCard({
               >
                 {rx.appointments ? (
                   <>
-                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-3)]">Consult</span>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-2)]">Consult</span>
                     <span>{`${formatDayShort(rx.appointments.date)}, ${formatSlotTime(rx.appointments.time)}`}</span>
                     <span aria-hidden="true">→</span>
                   </>
                 ) : (
-                  'Open the linked consult →'
+                  <>
+                    Open the linked consult <span aria-hidden="true">→</span>
+                  </>
                 )}
               </Link>
             ) : (
