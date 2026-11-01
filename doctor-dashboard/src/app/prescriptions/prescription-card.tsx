@@ -144,10 +144,21 @@ export function PrescriptionCard({
         {linkConsult && (
           <div className="border-t border-[var(--hairline)] pt-3 text-[13px]">
             {rx.appointment_id ? (
-              <Link href={`/consultations/${rx.appointment_id}`} className="link-underline font-medium text-[var(--ink-2)] hover:text-[var(--ink)]">
-                {rx.appointments
-                  ? `Consult · ${formatDayShort(rx.appointments.date)}, ${formatSlotTime(rx.appointments.time)} →`
-                  : 'Open the linked consult →'}
+              <Link
+                href={`/consultations/${rx.appointment_id}`}
+                className="editorial-btn inline-flex items-center gap-2 !px-3.5 !py-1.5 !text-[13px] font-semibold"
+              >
+                {rx.appointments ? (
+                  <>
+                    <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-2)]">Consult</span>
+                    <span>{`${formatDayShort(rx.appointments.date)}, ${formatSlotTime(rx.appointments.time)}`}</span>
+                    <span aria-hidden="true">→</span>
+                  </>
+                ) : (
+                  <>
+                    Open the linked consult <span aria-hidden="true">→</span>
+                  </>
+                )}
               </Link>
             ) : (
               <span className="text-[var(--ink-4)]">Issued from chat · no linked consult</span>
