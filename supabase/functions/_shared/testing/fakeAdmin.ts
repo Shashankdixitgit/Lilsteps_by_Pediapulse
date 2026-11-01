@@ -53,7 +53,11 @@ function orPredicate(expr: string): (r: Row) => boolean {
       case 'lt':
         return (r) => get(r, col) !== null && get(r, col) !== undefined && String(get(r, col)) < val;
       case 'gte':
-        return (r) => String(get(r, col)) >= val;
+        return (r) => get(r, col) !== null && get(r, col) !== undefined && String(get(r, col)) >= val;
+      case 'in': {
+        const vs = val.replace(/^\(|\)$/g, '').split(',');
+        return (r) => vs.includes(String(get(r, col)));
+      }
       case 'is':
         return (r) => (val === 'null' ? get(r, col) === null || get(r, col) === undefined : String(get(r, col)) === val);
       default:
@@ -116,7 +120,7 @@ export function fakeAdmin(
     let limit: number | null = null;
     let range: [number, number] | null = null;
     let headCount = false;
-    const orders: Array<{ key: string; asc: boolean }> = [];
+    const orders: Array<{ key: string; asc: boolean; nullsFirst: boolean }> = [];
 
     const run = (mode: 'many' | 'one'): Promise<{ data: any; error: any; count?: number }> => {
       const rows = rowsOf(table);
@@ -142,9 +146,11 @@ export function fakeAdmin(
       if (orders.length) {
         hit = [...hit].sort((a, b) => {
           for (const o of orders) {
-            const x = get(a, o.key);
-            const y = get(b, o.key);
+            const x = get(a, o.key) ?? null;
+            const y = get(b, o.key) ?? null;
             if (x === y) continue;
+            // Postgres: nulls sort last ascending unless NULLS FIRST.
+            if (x === null || y === null) return (x === null) === o.nullsFirst ? -1 : 1;
             return (x < y ? -1 : 1) * (o.asc ? 1 : -1);
           }
           return 0;
@@ -167,8 +173,12 @@ export function fakeAdmin(
       delete: () => ((op = 'delete'), api),
       eq: (k: string, v: unknown) => (filters.push((r) => get(r, k) != null && String(get(r, k)) === String(v)), api),
       in: (k: string, vs: unknown[]) => (filters.push((r) => vs.map(String).includes(String(get(r, k)))), api),
-      not: (k: string, o: string, v: string) => {
-        if (o !== 'in') throw new Error(`fakeAdmin: not ${o}`);
+      not: (k: string, o: string, v: string | null) => {
+        if (o === 'is' && v === null) {
+          filters.push((r) => get(r, k) !== null && get(r, k) !== undefined);
+          return api;
+        }
+        if (o !== 'in' || v === null) throw new Error(`fakeAdmin: not ${o}`);
         const vs = v.replace(/^\(|\)$/g, '').split(',');
         filters.push((r) => !vs.includes(String(get(r, k))));
         return api;
@@ -178,7 +188,11 @@ export function fakeAdmin(
       lte: (k: string, v: string) => (filters.push((r) => get(r, k) <= v), api),
       gte: (k: string, v: string) => (filters.push((r) => get(r, k) >= v), api),
       or: (expr: string) => (filters.push(orPredicate(expr)), api),
-      order: (key: string, o?: { ascending?: boolean }) => (orders.push({ key, asc: o?.ascending !== false }), api),
+      order: (key: string, o?: { ascending?: boolean; nullsFirst?: boolean }) => {
+        const asc = o?.ascending !== false;
+        orders.push({ key, asc, nullsFirst: o?.nullsFirst ?? !asc });
+        return api;
+      },
       returns: () => api,
       limit: (n: number) => ((limit = n), api),
       range: (a: number, b: number) => ((range = [a, b]), api),

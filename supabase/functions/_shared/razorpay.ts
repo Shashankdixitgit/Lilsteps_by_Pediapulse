@@ -52,12 +52,13 @@ function timeoutMs(): number {
   return Number.isFinite(v) && v > 0 ? v : RAZORPAY_TIMEOUT_MS;
 }
 
-async function call(method: 'GET' | 'POST', path: string, body?: unknown): Promise<any> {
+async function call(method: 'GET' | 'POST', path: string, body?: unknown, opts: { timeoutMs?: number } = {}): Promise<any> {
   // A stalled Razorpay must not hold up a cancel, a webhook or an account
   // deletion. A refund that times out is treated as failed (refund_failed,
   // team alerted); the alert says to check Razorpay before refunding by hand,
   // as Razorpay may still have taken the request.
-  const ms = timeoutMs();
+  // opts.timeoutMs can only shorten the limit (a caller in front of a parent).
+  const ms = Math.min(timeoutMs(), opts.timeoutMs ?? Infinity);
   let res: Response;
   let text: string;
   try {

@@ -30,6 +30,11 @@
 //                             records the paid month (3 consults) once.
 //                             A subscription that matches no plan of ours is
 //                             logged and recorded with unmatched = true.
+//                             NOTE: these events are NOT enabled on the live
+//                             Razorpay webhook. The Care Plan is kept right
+//                             without them by syncCarePlans (0054), run by
+//                             appointment-reminders every 15 minutes. If they
+//                             are enabled later, both paths are idempotent.
 //
 // Deploy: supabase functions deploy razorpay-webhook --no-verify-jwt
 // Secrets: RAZORPAY_WEBHOOK_SECRET, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET.
