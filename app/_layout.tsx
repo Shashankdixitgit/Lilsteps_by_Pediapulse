@@ -17,6 +17,7 @@ import { Uniwind } from 'uniwind';
 
 import { AuthProvider } from '@/context/auth';
 import { ChildProvider } from '@/context/child';
+import { DevFeedback } from '@/components/dev/DevFeedback';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { analytics, crash } from '@/lib/observability';
 
@@ -101,6 +102,7 @@ export default function RootLayout() {
               />
             </Stack>
             <StatusBar style="dark" />
+            <DevFeedback />
           </ChildProvider>
         </AuthProvider>
         </HeroUINativeProvider>
