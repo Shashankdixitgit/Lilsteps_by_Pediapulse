@@ -8,7 +8,7 @@
  *    "Co-amoxiclav" prescribed).
  *
  * This is a prompt for the doctor, not a safety system: the class list is a
- * starting point and needs clinical review (Dr Atish) before it is relied on.
+ * starting point and needs clinical review (Dr Madhav) before it is relied on.
  */
 
 export type AllergyInput = { name: string; severity?: string | null; type?: string | null };

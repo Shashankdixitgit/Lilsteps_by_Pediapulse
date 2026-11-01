@@ -117,7 +117,7 @@ interface DangerSign {
   mild: string;
   /**
    * EMERGENCY-NOW sign: the reply says call 112 / go to hospital now, asks
-   * nothing more and ends the check-in (R3-03). Pending Dr Atish sign-off (C5).
+   * nothing more and ends the check-in (R3-03). Pending Dr Madhav sign-off (C5).
    */
   emergency?: boolean;
   /** Only applies below this age (days). */
@@ -139,7 +139,7 @@ interface DangerSign {
  * `emergency` (a fit, blue lips or skin, can't be woken, severe breathing
  * difficulty) get "call 112 / go to hospital now" instead of "seen today".
  *
- * pending Dr Atish sign-off (C5), including the EMERGENCY-NOW level (R3-03)
+ * pending Dr Madhav sign-off (C5), including the EMERGENCY-NOW level (R3-03)
  */
 const DANGER_SIGNS: DangerSign[] = [
   {
@@ -398,7 +398,7 @@ function signsInTranscript(messages: ChatMessage[], ageDays: number | undefined)
  * EMERGENCY-NOW (R3-03): a fit, blue lips or skin, can't be woken or severe
  * breathing difficulty. A hedged "a little" to "hard to wake?" or "struggling
  * to breathe?" stays 'urgent'; a possible fit or bluish lips is still an
- * emergency. Pending Dr Atish sign-off (C5).
+ * emergency. Pending Dr Madhav sign-off (C5).
  */
 type DangerLevel = "emergency" | "urgent";
 
@@ -453,7 +453,7 @@ function signsInSummary(parsed: any, ageDays: number | undefined): string[] {
  * emergency 112 card first for 'crisis'.
  *
  * Decided by Shashank (C2, Claude's suggested default); wording pending
- * Dr Atish sign-off.
+ * Dr Madhav sign-off.
  */
 type SupportLevel = "concern" | "crisis";
 
@@ -613,7 +613,7 @@ const HELPLINE_RULE =
  * the hourly limit, or Gemini's reply broke a safety rule (asked a question
  * after an emergency sign, left out 112, named another helpline). The parent
  * must never get "try again" instead of 112 on these messages. Wording
- * follows the danger-sign and crisis rules in the prompt; pending Dr Atish
+ * follows the danger-sign and crisis rules in the prompt; pending Dr Madhav
  * sign-off (C5), including the EMERGENCY-NOW wording (R3-03).
  */
 function safetyFallbackReply(
@@ -916,7 +916,7 @@ function buildSystemPrompt(
     labels.map((l) => signInParentWords(l, danger.signs.get(l) ?? null)).join(", ");
   const allLabels = [...danger.signs.keys()];
 
-  // EMERGENCY-NOW and its wording: pending Dr Atish sign-off (C5).
+  // EMERGENCY-NOW and its wording: pending Dr Madhav sign-off (C5).
   let dangerBlock = "";
   if (danger.level === "emergency") {
     const emergencyLabels = allLabels.filter((l) => isEmergency(l, danger.signs.get(l) ?? null));

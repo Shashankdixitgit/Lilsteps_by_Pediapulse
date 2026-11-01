@@ -25,7 +25,7 @@ from (values
   ('Dr. Madhav',   'Pediatrician', 'LilSteps Test Clinic',
    'Test profile · qualifications to be added',
    'Test doctor account for app testing. Not a real consultation profile.'),
-  ('Dr. Atish',    'Pediatrician', 'LilSteps Test Clinic',
+  ('Dr. Arthesh',  'Pediatrician', 'LilSteps Test Clinic',
    'Test profile · qualifications to be added',
    'Test doctor account for app testing. Not a real consultation profile.'),
   ('Dr. Shashank', 'Pediatrician', 'LilSteps Test Clinic',
@@ -45,7 +45,7 @@ insert into public.doctor_auth (id, doctor_id)
 select u.id, d.id
 from (values
   ('doctor.madhav@lilsteps.dev',   'Dr. Madhav'),
-  ('doctor.atish@lilsteps.dev',    'Dr. Atish'),
+  ('doctor.atish@lilsteps.dev',    'Dr. Arthesh'),
   ('doctor.shashank@lilsteps.dev', 'Dr. Shashank')
 ) as v(email, name)
 join auth.users u on lower(u.email) = v.email

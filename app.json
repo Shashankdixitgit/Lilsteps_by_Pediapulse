@@ -11,7 +11,7 @@
     "backgroundColor": "#fdfeff",
     "primaryColor": "#49378f",
     "ios": {
-      "bundleIdentifier": "com.pediapulse.lilsteps",
+      "bundleIdentifier": "com.lilstepsclinics.app",
       "buildNumber": "1",
       "supportsTablet": false,
       "config": {
@@ -63,7 +63,7 @@
             ]
           },
           {
-            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypePhoneNumber",
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeEmailAddress",
             "NSPrivacyCollectedDataTypeLinked": true,
             "NSPrivacyCollectedDataTypeTracking": false,
             "NSPrivacyCollectedDataTypePurposes": [
@@ -72,6 +72,14 @@
           },
           {
             "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypeHealth",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypePurchaseHistory",
             "NSPrivacyCollectedDataTypeLinked": true,
             "NSPrivacyCollectedDataTypeTracking": false,
             "NSPrivacyCollectedDataTypePurposes": [
@@ -106,7 +114,7 @@
       }
     },
     "android": {
-      "package": "com.pediapulse.lilsteps",
+      "package": "com.lilstepsclinics.app",
       "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#49378f",

@@ -442,7 +442,7 @@ export function onboardingVaccinePlan(
 // ─── After-vaccine fever tip (pending clinical sign-off) ─────────────────────
 
 /**
- * PENDING C5 SIGN-OFF (Dr Atish): fever thresholds shown on the Vaccines tab.
+ * PENDING C5 SIGN-OFF (Dr Madhav): fever thresholds shown on the Vaccines tab.
  * Under 3 months any fever of 38°C / 100.4°F needs a call to the doctor (AAP /
  * IMNCI); 101°F stays for older children until reviewed. Listed with the other
  * C5 items; do not change the wording without clinical review.

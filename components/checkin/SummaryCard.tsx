@@ -141,7 +141,7 @@ function UrgencyBanner({
   /** The parent reported a physical danger sign (breathing, fit, ...). */
   physicalSigns: boolean;
 }) {
-  // R3-03 (wording pending Dr Atish sign-off, C5): an emergency danger sign
+  // R3-03 (wording pending Dr Madhav sign-off, C5): an emergency danger sign
   // (fit, blue lips, can't wake) comes before any booking advice.
   if (emergencyNow) {
     return (
@@ -235,7 +235,7 @@ function UrgencyBanner({
       </View>
     );
   }
-  // C5: routine wording is neutral placeholder copy, pending Dr Atish's sign-off.
+  // C5: routine wording is neutral placeholder copy, pending Dr Madhav's sign-off.
   return (
     <View style={[styles.banner, styles.bannerCalm]}>
       <View style={styles.bannerRow}>

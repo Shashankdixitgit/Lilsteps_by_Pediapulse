@@ -8,7 +8,7 @@
  * "hurt myself", "khud ko khatam kar loon", "jaan de doon", "खुद को खत्म",
  * and fear of harming the baby). Keep the two lists in step.
  *
- * Wording of the support card is pending Dr Atish sign-off (C5); this only
+ * Wording of the support card is pending Dr Madhav sign-off (C5); this only
  * decides 'concern' vs 'crisis'.
  */
 import type { MentalHealthLevel } from '@/components/checkin/MentalHealthSupport';

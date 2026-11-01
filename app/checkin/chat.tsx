@@ -35,7 +35,7 @@ function callEmergency() {
 
 /**
  * A red Call 112 card in the chat: the danger-sign card (C3 / R3-03) and the
- * crisis card (C2). Wording pending Dr Atish sign-off (C5).
+ * crisis card (C2). Wording pending Dr Madhav sign-off (C5).
  */
 function EmergencyCard({ title, body }: { title: string; body: string }) {
   return (
@@ -156,7 +156,7 @@ export default function CheckinChatScreen() {
   const showDanger = checkin.dangerSigns.length > 0;
   // R3-03 EMERGENCY-NOW (fit, blue lips or skin, can't be woken, severe
   // breathing difficulty): 112 / hospital now, not "seen today".
-  // Wording pending Dr Atish sign-off (C5).
+  // Wording pending Dr Madhav sign-off (C5).
   const emergency = checkin.dangerLevel === 'emergency';
   const dangerTitle = emergency ? 'This is an emergency' : `${childName} should be seen by a doctor today`;
   const dangerBody = emergency
