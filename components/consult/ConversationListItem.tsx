@@ -22,6 +22,15 @@ export interface ConversationListItemProps {
   divider?: boolean;
 }
 
+/**
+ * A chat note written by the server, not typed by a person: the reschedule
+ * note from reschedule_appointment (0051) is stored as the mover's own
+ * message ("I have moved Asha's consult to … (India time). …").
+ */
+export function isAutoNote(content: string): boolean {
+  return /^I have moved .+ consult to .+\(India time\)\./.test(content.trim());
+}
+
 /** "14:05" style for today, "13 Oct" otherwise (en-IN, device time). */
 function shortStamp(iso: string | null): string {
   if (!iso) return '';
@@ -50,7 +59,10 @@ export function ConversationListItem({
   divider,
 }: ConversationListItemProps) {
   const stamp = shortStamp(lastAt);
-  const previewText = preview ? `${previewFromParent ? 'You: ' : ''}${preview}` : 'No messages yet';
+  // Notes the app writes into the chat (e.g. "I have moved …" on a
+  // reschedule) are not something the parent typed: no "You:".
+  const youPrefix = previewFromParent && preview && !isAutoNote(preview) ? 'You: ' : '';
+  const previewText = preview ? `${youPrefix}${preview}` : 'No messages yet';
   const label = [
     `Chat with ${doctorName}`,
     unread > 0 ? `${unread} unread` : null,

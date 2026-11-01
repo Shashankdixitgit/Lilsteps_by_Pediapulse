@@ -131,6 +131,22 @@ export function clearPendingWebPayment() {
   }
 }
 
+export const PAYMENT_PAGE_FAILED_TEXT = "Couldn't open the payment page. Please check your connection and try again.";
+
+/**
+ * The payment page could not be opened (the 'start' step failed), so no
+ * payment can have been made. useConsultCheckout releases the hold.
+ */
+export class PaymentPageError extends Error {
+  /** What the server said, e.g. a return-URL problem; kept for debugging. */
+  readonly detail: string;
+  constructor(detail: string) {
+    super(PAYMENT_PAGE_FAILED_TEXT);
+    this.name = 'PaymentPageError';
+    this.detail = detail;
+  }
+}
+
 /**
  * Open the payment page and wait for the family to come back. Resolves with
  * the server's view of the payment (never with what the browser said). On
@@ -138,12 +154,17 @@ export function clearPendingWebPayment() {
  */
 export async function payForConsult(appointmentId: string, label?: string): Promise<PaymentStatus> {
   const returnUrl = Linking.createURL(RETURN_PATH);
-  const started = await call<{ url?: string; state?: PaymentState }>(
-    { action: 'start', appointmentId, returnUrl },
-    "Couldn't open the payment page. Please check your connection and try again.",
-  );
+  let started: { url?: string; state?: PaymentState };
+  try {
+    started = await call<{ url?: string; state?: PaymentState }>(
+      { action: 'start', appointmentId, returnUrl },
+      PAYMENT_PAGE_FAILED_TEXT,
+    );
+  } catch (e) {
+    throw new PaymentPageError(e instanceof Error ? e.message : PAYMENT_PAGE_FAILED_TEXT);
+  }
   if (started.state) return { state: started.state };
-  if (!started.url) throw new Error("Couldn't open the payment page. Please try again.");
+  if (!started.url) throw new PaymentPageError(PAYMENT_PAGE_FAILED_TEXT);
 
   if (Platform.OS === 'web') {
     savePending({ appointmentId, label });
@@ -224,4 +245,28 @@ export async function findOwnHoldForCheckin(
     .limit(1)
     .maybeSingle<{ id: string; doctor_id: string; date: string; time: string; hold_expires_at: string | null }>();
   return data ?? null;
+}
+
+/** One of this parent's unpaid holds on a day (the slot picker shows it as theirs). */
+export interface OwnHold {
+  id: string;
+  doctor_id: string;
+  time: string;
+  hold_expires_at: string | null;
+  concern: string | null;
+  doctors: { name: string } | null;
+}
+
+/** This child's live unpaid holds on one clinic day, optionally for one doctor. */
+export async function fetchOwnHoldsOn(childId: string, date: string, doctorId?: string | null): Promise<OwnHold[]> {
+  let q = supabase
+    .from('appointments')
+    .select('id, doctor_id, time, hold_expires_at, concern, doctors(name)')
+    .eq('child_id', childId)
+    .eq('date', date)
+    .eq('status', 'awaiting_payment')
+    .gt('hold_expires_at', new Date().toISOString());
+  if (doctorId) q = q.eq('doctor_id', doctorId);
+  const { data } = await q.returns<OwnHold[]>();
+  return data ?? [];
 }

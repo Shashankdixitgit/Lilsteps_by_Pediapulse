@@ -1,5 +1,7 @@
 {
   "imports": {
+    "@/lib/age": "../../lib/age.ts",
+    "@/lib/date": "../../lib/date.ts",
     "@/lib/supabase": "./stubs/supabase.ts",
     "@/lib/support": "./stubs/support.ts",
     "expo-linking": "./stubs/expo-linking.ts",

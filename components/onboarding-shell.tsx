@@ -99,9 +99,8 @@ export function OnboardingShell({
   const fill = stepInfo && fillTotal
     ? stepInfo.step / fillTotal
     : Math.min(progress ?? 0, MAX_LEGACY_FILL);
-  // "Step X of N" once the path is known. Before that the number of steps
-  // depends on the child's age, so only "Step X" shows (with the bar), and
-  // the count never jumps from an estimate to a different exact number.
+  // Always "Step X of N". Before the date of birth is in, N is the typical
+  // path length (TYPICAL_TOTAL); it moves by one at most once the path is known.
   const stepText = stepInfo
     ? stepInfo.total
       ? `Step ${stepInfo.step} of ${stepInfo.total}`

@@ -209,7 +209,7 @@ export default function GrowthScreen() {
       );
       if (change > allowed.up || -change > allowed.down) {
         jumps.push(
-          `Weight ${change > 0 ? 'went up' : 'went down'} from ${Number(prevW.weight)} kg to ${toSave.weight} kg (${Math.round(Math.abs(change) * 100)}%) since ${formatDate(prevW.measured_at)}.`,
+          `Weight ${change > 0 ? 'went up' : 'went down'} from ${formatWeight(Number(prevW.weight))} kg to ${formatWeight(toSave.weight)} kg (${Math.round(Math.abs(change) * 100)}%) since ${formatDate(prevW.measured_at)}.`,
         );
       }
     }

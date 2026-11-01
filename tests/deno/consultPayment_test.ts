@@ -88,3 +88,19 @@ Deno.test('reschedule: asks the server with the booking and the new slot only, r
   assertEquals(invoked, [{ name: 'consult-payment', body: { action: 'reschedule', appointmentId: 'appt-4', slotId: 'slot-9' } }]);
   assertEquals(moved, { id: 'appt-4', date: '2026-11-04', time: '09:00', reschedule_count: 1 });
 });
+
+Deno.test('payment page cannot open: a PaymentPageError (the hook then releases the hold)', async () => {
+  const { PaymentPageError } = await import('../../lib/consultPayment.ts');
+  setInvokeHandler((_name, body) => {
+    if (body.action === 'start') throw new Error('returnUrl not allowed');
+    return {};
+  });
+  let caught: unknown = null;
+  try {
+    await payForConsult('appt-x');
+  } catch (e) {
+    caught = e;
+  }
+  assertEquals(caught instanceof PaymentPageError, true);
+  assertEquals((caught as Error).message.startsWith("Couldn't open the payment page."), true);
+});

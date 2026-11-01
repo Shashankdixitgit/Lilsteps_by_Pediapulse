@@ -274,6 +274,40 @@ export interface BabyVaccinesQuestion {
  */
 export const ANNUAL_VACCINE_NAMES: ReadonlySet<string> = new Set(['Influenza']);
 
+// ─── Vaccines with an upper age limit ────────────────────────────────────────
+
+/**
+ * Vaccines that must not be given after a certain age. Past it, a dose that
+ * was not given is not "Overdue" (with a nudge to give it): it is "Missed —
+ * ask your doctor", because the doctor decides what to do. Add a vaccine
+ * here to give it the same handling everywhere (Vaccines tab, Home,
+ * onboarding summary). The vaccine-reminders function keeps its own copy
+ * (supabase/functions/vaccine-reminders/plan.ts, VACCINE_MAX_AGE_MONTHS).
+ *
+ * Age limit per IAP schedule — confirm with Dr Madhav.
+ * Rotavirus: the series must be completed by 8 months of age; no dose after
+ * 8 months 0 days.
+ */
+export const VACCINE_MAX_AGE: Readonly<Record<string, DueAt>> = {
+  Rotavirus: { months: 8 },
+};
+
+/**
+ * True when the child is past the vaccine's age limit on `today` (a dose can
+ * still be given ON the limit day, 8 months 0 days, not the day after).
+ * False for vaccines without a limit, or without a date of birth.
+ */
+export function isPastMaxAge(
+  vaccineName: string,
+  dob: Date | string | null | undefined,
+  today: Date | string = new Date(),
+): boolean {
+  const limit = VACCINE_MAX_AGE[vaccineName];
+  if (!limit || !dob) return false;
+  const lastDay = addCalendar(startOfLocalDay(parseDateOnly(dob)), limit);
+  return startOfLocalDay(parseDateOnly(today)) > lastDay;
+}
+
 export const BABY_VACCINES_QUESTION: Partial<Record<OnboardingPath, BabyVaccinesQuestion>> = {
   // Path A (under 3): every dose due so far. A dose the parent doesn't
   // answer one by one is covered by this answer; under 12 months (or when
@@ -360,6 +394,13 @@ export interface OnboardingVaccinePlan {
   babyGiven: number;
   /** Of `unknown`, how many came from the baby-vaccines answer. */
   babyUnknown: number;
+  /**
+   * Due doses not marked given that are past their vaccine's age limit
+   * (VACCINE_MAX_AGE, e.g. Rotavirus after 8 months): "to discuss with your
+   * doctor", whatever the answer was (Missed, Not sure or none). Still saved
+   * as the schedule / `unknown` says; the app shows them as missed.
+   */
+  missedAgeLimit: VaccineDoseRow[];
 }
 
 const rowKey = (r: { vaccine_name?: string; vaccineName?: string; dose_number?: number; doseNumber?: number }) =>
@@ -386,7 +427,7 @@ export function onboardingVaccinePlan(
   dob: Date | string | null,
   now: Date = new Date(),
 ): OnboardingVaccinePlan {
-  const empty: OnboardingVaccinePlan = { given: [], unknown: [], babyGiven: 0, babyUnknown: 0 };
+  const empty: OnboardingVaccinePlan = { given: [], unknown: [], babyGiven: 0, babyUnknown: 0, missedAgeLimit: [] };
   if (!path || !dob) return empty;
   const given = new Map<string, VaccineDoseRow>();
   for (const r of givenDoseRows(path, answers, dob, now)) given.set(rowKey(r), r);
@@ -436,7 +477,17 @@ export function onboardingVaccinePlan(
       babyUnknown += 1;
     }
   }
-  return { given: Array.from(given.values()), unknown: Array.from(unknown.values()), babyGiven, babyUnknown };
+  // Past a vaccine's age limit and not given: to discuss with the doctor.
+  const missedAgeLimit = SCHEDULE_DOSES.filter(
+    (dose) => isDoseDue(dob, dose, now) && !given.has(rowKey(dose)) && isPastMaxAge(dose.vaccineName, dob, now),
+  ).map((dose) => ({ vaccine_name: dose.vaccineName, dose_number: dose.doseNumber }));
+  return {
+    given: Array.from(given.values()),
+    unknown: Array.from(unknown.values()),
+    babyGiven,
+    babyUnknown,
+    missedAgeLimit,
+  };
 }
 
 // ─── After-vaccine fever tip (pending clinical sign-off) ─────────────────────

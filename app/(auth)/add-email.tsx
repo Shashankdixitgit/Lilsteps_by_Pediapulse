@@ -5,7 +5,7 @@
  * they can sign in again by email. Booking emails then reach them too.
  */
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 
 import {
@@ -23,7 +23,7 @@ import { isEmailCode, isValidEmail, normaliseEmail, passwordProblem, useAuth } f
 import { dbg } from '@/lib/debug';
 
 export default function AddEmailScreen() {
-  const { addEmail, verifyEmailCode, updatePassword, hasChildren } = useAuth();
+  const { addEmail, verifyEmailCode, updatePassword, hasChildren, user, session, loading: authLoading } = useAuth();
 
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -37,6 +37,20 @@ export default function AddEmailScreen() {
     dbg.nav(`AddEmail → ${target}`);
     router.replace(target as '/(tabs)');
   }
+
+  // Opened directly (e.g. /add-email) by someone who has nothing to do here:
+  // already has an email → into the app; not signed in → sign-in.
+  const hasEmail = !!user?.email;
+  useEffect(() => {
+    if (authLoading || step !== 'email') return;
+    if (!session) {
+      router.replace('/(auth)/login');
+      return;
+    }
+    if (hasEmail && hasChildren !== null) continueIntoApp();
+    // continueIntoApp only reads hasChildren.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, session, hasEmail, hasChildren, step]);
 
   async function handleSend() {
     if (loading) return;

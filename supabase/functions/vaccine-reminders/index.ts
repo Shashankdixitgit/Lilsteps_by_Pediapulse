@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
   for (let offset = 0; ; offset += PAGE) {
     const { data, error } = await admin
       .from('vaccinations')
-      .select('id, child_id, vaccine_name, dose_label, scheduled_date, status, children(name, parent_id)')
+      .select('id, child_id, vaccine_name, dose_label, scheduled_date, status, children(name, parent_id, dob)')
       .not('status', 'in', '(done,unknown)')
       .gte('scheduled_date', from)
       .lte('scheduled_date', to)

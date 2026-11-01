@@ -55,7 +55,10 @@ export function GradientButton({
   // so the label keeps the room, and let it wrap to 2 lines (R3-16).
   // Window width, not the pill's: a short inline button keeps its arrow.
   const { width: windowWidth, fontScale } = useWindowDimensions();
-  const roomy = fontScale < 1.3 && windowWidth >= 340;
+  // Width 0 = the web page being pre-rendered at build time (no window):
+  // assume a normal phone, so the pre-rendered button matches the browser's
+  // first render (React #418 hydration mismatch otherwise).
+  const roomy = fontScale < 1.3 && (windowWidth === 0 || windowWidth >= 340);
   const isText = variant === 'ghost' || variant === 'danger';
   if (isText) {
     return (

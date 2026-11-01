@@ -28,7 +28,7 @@ import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { useChild } from '@/context/child';
-import { doctorHasVideoLink, useDoctors, type DoctorRow } from '@/hooks/useDoctors';
+import { doctorHasVideoLink, useDoctorQualifications, useDoctors, type DoctorRow } from '@/hooks/useDoctors';
 import { ANY_DOCTOR, useNextFreeSlots, type FreeSlot } from '@/hooks/useEarliestSlots';
 import { typography } from '@/styles/global';
 
@@ -38,6 +38,7 @@ export default function BookingScreen() {
   const { doctors, loading } = useDoctors();
   const { child } = useChild();
   const { earliest, byDoctor, loading: loadingNext } = useNextFreeSlots();
+  const qualifications = useDoctorQualifications(doctors.map((d) => d.id));
 
   const filtered = doctors.filter((d) => {
     const q = search.toLowerCase();
@@ -113,6 +114,7 @@ export default function BookingScreen() {
                 <DoctorRowItem
                   key={doc.id}
                   doc={doc}
+                  qualifications={qualifications.get(doc.id) ?? null}
                   next={byDoctor.get(doc.id) ?? null}
                   nextLoading={loadingNext}
                   divider={i > 0 || !search}
@@ -178,12 +180,15 @@ function EarliestRow({
 
 function DoctorRowItem({
   doc,
+  qualifications,
   next,
   nextLoading,
   divider,
   onBook,
 }: {
   doc: DoctorRow;
+  /** e.g. "MBBS, MD (Pediatrics)"; null when not set (or a test placeholder). */
+  qualifications: string | null;
   next: FreeSlot | null;
   nextLoading: boolean;
   divider: boolean;
@@ -199,7 +204,7 @@ function DoctorRowItem({
       scaleTo={0.99}
       bg={AppColors.card}
       bgPressed={AppColors.surfaceContainerLow}
-      accessibilityLabel={`${doc.name}, ${meta}${nextText ? `. ${nextText}` : ''}${noVideoLink ? `. ${NO_LINK_HINT}` : ''}. Book`}
+      accessibilityLabel={`${doc.name}, ${meta}${qualifications ? `. ${qualifications}` : ''}${nextText ? `. ${nextText}` : ''}${noVideoLink ? `. ${NO_LINK_HINT}` : ''}. Book`}
       style={[styles.row, divider && styles.divider]}
     >
       <View style={styles.avatar}>
@@ -214,6 +219,7 @@ function DoctorRowItem({
             {meta}
           </Text>
         ) : null}
+        {qualifications ? <Text style={typography.caption}>{qualifications}</Text> : null}
         {nextText ? (
           <Text style={[typography.caption, next && styles.nextFree]} numberOfLines={1}>
             {nextText}

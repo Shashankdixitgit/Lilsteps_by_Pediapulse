@@ -24,7 +24,7 @@ import { AppColors, CanvasFade, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { linkConversationToAppointment, useAppointments } from '@/hooks/useAppointments';
 import { useCheckinSession } from '@/hooks/useCheckin';
-import { useConsultCheckout } from '@/hooks/useConsultCheckout';
+import { SLOT_NOT_KEPT_TEXT, useConsultCheckout } from '@/hooks/useConsultCheckout';
 import { CONSULT_PRICE_LABEL, findOwnHoldForCheckin } from '@/lib/consultPayment';
 import { useConversations } from '@/hooks/useConversations';
 import { doctorHasVideoLink, type DoctorRow, useDoctors, useTimeSlots } from '@/hooks/useDoctors';
@@ -310,7 +310,13 @@ export default function CheckinSummaryScreen() {
       }
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'Payment failed.';
-      setBookingError(`Couldn't finish the payment: ${msg}`);
+      if (msg === SLOT_NOT_KEPT_TEXT) {
+        // The hold was let go: pick a time again.
+        setResumed(null);
+        setBookingError(msg);
+      } else {
+        setBookingError(`Couldn't finish the payment: ${msg}`);
+      }
     }
   }
 
@@ -358,7 +364,7 @@ export default function CheckinSummaryScreen() {
       }
     } catch (e) {
       const msg = e instanceof Error && e.message ? e.message : 'Booking failed.';
-      setBookingError(`Couldn't book: ${msg} Please pick another time.`);
+      setBookingError(msg === SLOT_NOT_KEPT_TEXT ? msg : `Couldn't book: ${msg} Please pick another time.`);
       setSelectedSlot(null);
       refetchSlots();
       // R3-21: the doctor cards' "Next free" and who is free today change too.

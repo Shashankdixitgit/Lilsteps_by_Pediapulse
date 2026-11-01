@@ -10,8 +10,8 @@
  * When the doctor (or, for "Earliest available", the doctor of the picked
  * time) has no video link yet, a hint says so before booking (0035).
  */
-import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -25,11 +25,14 @@ import { CONSULT_MINUTES, formatSlotTime as formatTime, getBookingDays } from '@
 import { DayStrip, TimeSlotGrid } from '@/components/consult/SlotPickerParts';
 import { GradientButton } from '@/components/gradient-button';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { AppColors } from '@/constants/theme';
+import { AppColors, Radius } from '@/constants/theme';
+import { useChild } from '@/context/child';
 import { typography } from '@/styles/global';
+import { setBookingConcern, takeSlotsNotice } from '@/lib/bookingDraft';
+import { fetchOwnHoldsOn, type OwnHold } from '@/lib/consultPayment';
 import { supabase } from '@/lib/supabase';
 import { useDoctorVideoLink, useTimeSlots } from '@/hooks/useDoctors';
-import { ANY_DOCTOR, fetchFreeSlotsOn, type FreeSlot } from '@/hooks/useEarliestSlots';
+import { ANY_DOCTOR, fetchFreeSlotsOn, firstFreeDayIndex, type FreeSlot } from '@/hooks/useEarliestSlots';
 
 // Slots exist 14 clinic (IST) days ahead (0030 rolling generator).
 const SLOT_DAYS = 14;
@@ -45,26 +48,14 @@ interface SlotChip {
   is_available: boolean;
   doctorId: string;
   doctorName: string | null;
-}
-
-/**
- * Index of the first booking day with a free, still-ahead slot (for one
- * doctor, or any bookable doctor); 0 when none is free or the lookup fails.
- */
-async function firstFreeDayIndex(doctorId: string | null, isoDates: string[]): Promise<number> {
-  const { data, error } = await supabase.rpc('next_free_slot_per_doctor');
-  if (error || !data) return 0;
-  const dates = (data as FreeSlot[])
-    .filter((s) => !doctorId || s.doctor_id === doctorId)
-    .map((s) => s.date)
-    .sort();
-  const idx = dates.length > 0 ? isoDates.indexOf(dates[0]) : -1;
-  return idx === -1 ? 0 : idx;
+  /** This family's own unpaid hold: tapping it resumes the payment. */
+  ownHold?: boolean;
 }
 
 export default function SlotsScreen() {
   const insets = useSafeAreaInsets();
-  const { doctorId: doctorParam, issue } = useLocalSearchParams<{ doctorId: string; issue: string }>();
+  const { doctorId: doctorParam } = useLocalSearchParams<{ doctorId: string }>();
+  const { child } = useChild();
   const anyDoctor = !doctorParam || doctorParam === ANY_DOCTOR;
   const doctorId = anyDoctor ? null : doctorParam;
 
@@ -100,7 +91,43 @@ export default function SlotsScreen() {
   }, [doctorId]);
 
   const selectedIso = DAYS[selectedDay].iso;
-  const { slots: doctorSlots, loading: loadingDoctor } = useTimeSlots(doctorId, selectedIso);
+  const { slots: doctorSlots, loading: loadingDoctor, refetch: refetchDoctorSlots } = useTimeSlots(doctorId, selectedIso);
+
+  // This family's own unpaid holds that day: shown as "Your held slot", not "Booked".
+  const childId = child?.id ?? null;
+  const [ownHolds, setOwnHolds] = useState<OwnHold[]>([]);
+  const [holdsVersion, setHoldsVersion] = useState(0);
+  useEffect(() => {
+    if (!childId) return;
+    let cancelled = false;
+    fetchOwnHoldsOn(childId, selectedIso, doctorId)
+      .then((rows) => {
+        if (!cancelled) setOwnHolds(rows);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [childId, selectedIso, doctorId, holdsVersion]);
+
+  // Back on this screen (e.g. a held booking was just cancelled on confirm):
+  // show the note once and reload, so the released slot reads as free.
+  const [notice, setNotice] = useState<string | null>(null);
+  const [anyVersion, setAnyVersion] = useState(0);
+  const firstFocus = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      const n = takeSlotsNotice();
+      if (n) setNotice(n);
+      if (firstFocus.current) {
+        firstFocus.current = false;
+        return;
+      }
+      refetchDoctorSlots();
+      setHoldsVersion((v) => v + 1);
+      setAnyVersion((v) => v + 1);
+    }, [refetchDoctorSlots]),
+  );
 
   // "Earliest available": free slots of every bookable doctor that day.
   const [anySlots, setAnySlots] = useState<FreeSlot[]>([]);
@@ -127,28 +154,46 @@ export default function SlotsScreen() {
     return () => {
       cancelled = true;
     };
-  }, [anyDoctor, selectedIso]);
+  }, [anyDoctor, selectedIso, anyVersion]);
 
   const chips: SlotChip[] = useMemo(() => {
+    const heldKey = (doctor: string, time: string) => `${doctor}|${time.slice(0, 5)}`;
+    const held = new Set(ownHolds.map((h) => heldKey(h.doctor_id, h.time)));
     if (!anyDoctor) {
-      return doctorSlots.map((s) => ({
-        id: s.id,
-        time: s.time,
-        is_available: s.is_available,
-        doctorId: s.doctor_id,
-        doctorName: null,
-      }));
+      return doctorSlots.map((s) => {
+        const ownHold = !s.is_available && held.has(heldKey(s.doctor_id, s.time));
+        return {
+          id: s.id,
+          time: s.time,
+          is_available: s.is_available || ownHold,
+          doctorId: s.doctor_id,
+          doctorName: null,
+          ownHold,
+        };
+      });
     }
-    // One chip per time; rows arrive with the less busy doctor first.
+    // One chip per time; rows arrive with the less busy doctor first. The
+    // family's own held times come first, so they win over a free one.
     const seen = new Set<string>();
     const out: SlotChip[] = [];
+    for (const h of ownHolds) {
+      seen.add(h.time);
+      out.push({
+        id: `hold-${h.id}`,
+        time: h.time,
+        is_available: true,
+        doctorId: h.doctor_id,
+        doctorName: h.doctors?.name ?? null,
+        ownHold: true,
+      });
+    }
     for (const s of anySlots) {
       if (seen.has(s.time)) continue;
       seen.add(s.time);
       out.push({ id: s.slot_id, time: s.time, is_available: true, doctorId: s.doctor_id, doctorName: s.doctor_name });
     }
-    return out;
-  }, [anyDoctor, doctorSlots, anySlots]);
+    return out.sort((a, b) => a.time.localeCompare(b.time));
+  }, [anyDoctor, doctorSlots, anySlots, ownHolds]);
   const loading = anyDoctor ? loadingAny : loadingDoctor;
   const linkDoctorId = anyDoctor ? (selected?.doctorId ?? null) : doctorId;
   const hasVideoLink = useDoctorVideoLink(linkDoctorId);
@@ -157,19 +202,28 @@ export default function SlotsScreen() {
     setSelected(null);
   }, [selectedDay]);
 
-  function goToConfirm() {
-    if (!selected) return;
+  function goToConfirm(chip: SlotChip | null = selected) {
+    if (!chip) return;
+    if (chip.ownHold) {
+      // Resume the held booking: confirm finds the hold and offers "Finish paying".
+      const hold = ownHolds.find((h) => h.doctor_id === chip.doctorId && h.time.slice(0, 5) === chip.time.slice(0, 5));
+      setBookingConcern(hold?.concern);
+    }
     router.push({
       pathname: '/consult/confirm',
       params: {
-        doctorId: selected.doctorId,
+        doctorId: chip.doctorId,
         dateIso: DAYS[selectedDay].iso,
         dateLabel: DAYS[selectedDay].fullLabel,
-        time: selected.time,
-        slotId: selected.id,
-        issue: issue ?? '',
+        time: chip.time,
+        slotId: chip.ownHold ? '' : chip.id,
       },
     });
+  }
+
+  function pickChip(chip: SlotChip) {
+    if (chip.ownHold) goToConfirm(chip);
+    else setSelected(chip);
   }
 
   return (
@@ -196,6 +250,12 @@ export default function SlotsScreen() {
           · times in IST
           {anyDoctor ? ". Pick a time and we'll book a doctor who is free then." : ''}
         </Text>
+
+        {notice ? (
+          <Text style={[typography.bodySM, styles.notice]} accessibilityRole="alert">
+            {notice}
+          </Text>
+        ) : null}
 
         <View style={styles.section}>
           <Text style={typography.headingSM}>Choose a date</Text>
@@ -225,7 +285,7 @@ export default function SlotsScreen() {
               No {anyDoctor ? 'free times' : 'slots'} on {DAYS[selectedDay].fullLabel}. Try another date.
             </Text>
           ) : (
-            <TimeSlotGrid chips={chips} selectedId={selected?.id ?? null} onSelect={setSelected} />
+            <TimeSlotGrid chips={chips} selectedId={selected?.id ?? null} onSelect={pickChip} />
           )}
         </View>
       </ScrollView>
@@ -243,7 +303,7 @@ export default function SlotsScreen() {
             You can still book and message them about the consult.
           </Text>
         ) : null}
-        <GradientButton label="Continue" disabled={!selected} onPress={goToConfirm} />
+        <GradientButton label="Continue" disabled={!selected} onPress={() => goToConfirm()} />
       </View>
     </View>
   );
@@ -262,6 +322,15 @@ const styles = StyleSheet.create({
 
   center: { paddingVertical: 24, alignItems: 'center' },
   center0: { textAlign: 'center' },
+  notice: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: AppColors.successBorder,
+    backgroundColor: AppColors.successSurface,
+    color: AppColors.success,
+  },
 
   bottomBar: {
     paddingHorizontal: 20,

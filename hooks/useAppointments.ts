@@ -60,8 +60,12 @@ export async function linkConversationToAppointment(conversationId: string, appo
 export function useAppointments(childId: string | null) {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState<AppointmentRow[]>([]);
-  /** Follow-ups the doctor booked that wait for this family to pay (0051). */
-  const [followUpsDue, setFollowUpsDue] = useState<AppointmentRow[]>([]);
+  /**
+   * Bookings still waiting for this family to pay, while their hold lasts:
+   * the parent's own unfinished payments (hold_slot, 0045) and follow-ups
+   * the doctor booked (0051, followup_of set). Shown with "Finish paying".
+   */
+  const [paymentDue, setPaymentDue] = useState<AppointmentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,7 +73,7 @@ export function useAppointments(childId: string | null) {
     if (!childId || !user) {
       setLoading(false);
       setAppointments([]);
-      setFollowUpsDue([]);
+      setPaymentDue([]);
       return;
     }
     setLoading(true);
@@ -86,14 +90,13 @@ export function useAppointments(childId: string | null) {
         .or('cancel_reason.is.null,cancel_reason.neq.payment_expired')
         .order('date', { ascending: true })
         .order('time', { ascending: true }),
-      // A follow-up the doctor booked is an unpaid hold too, but the family
-      // sees it (with Pay) until it is paid or runs out.
+      // Unpaid holds (the parent's own, and follow-ups the doctor booked):
+      // the family sees them (with Pay) until they are paid or run out.
       supabase
         .from('appointments')
         .select(select)
         .eq('child_id', childId)
         .eq('status', 'awaiting_payment')
-        .not('followup_of', 'is', null)
         .gt('hold_expires_at', new Date().toISOString())
         .order('date', { ascending: true })
         .order('time', { ascending: true }),
@@ -103,7 +106,7 @@ export function useAppointments(childId: string | null) {
       setError(err.message);
     } else {
       setAppointments(data ?? []);
-      setFollowUpsDue((due as AppointmentRow[] | null) ?? []);
+      setPaymentDue((due as AppointmentRow[] | null) ?? []);
     }
     setLoading(false);
   }, [childId, user]);
@@ -176,7 +179,7 @@ export function useAppointments(childId: string | null) {
     return appointments.filter(a => a.status === 'upcoming' && !appointmentEnded(a.date, a.time, now));
   }, [appointments]);
 
-  return { appointments, upcoming, followUpsDue, loading, error, bookAppointment, cancelAppointment, refetch: fetch };
+  return { appointments, upcoming, paymentDue, loading, error, bookAppointment, cancelAppointment, refetch: fetch };
 }
 
 /** Whether this consult has a video link (per-booking Meet link or the doctor's room). */

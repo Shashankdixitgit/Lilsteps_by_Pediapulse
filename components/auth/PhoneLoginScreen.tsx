@@ -1,5 +1,5 @@
 /** Phone + SMS sign-in, used only when PHONE_AUTH is on (SMS needs DLT first). */
-import { router } from 'expo-router';
+import { type Href, router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { haptic } from '@/components/ui/useMotion';
 import { AppColors } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
 import { DEMO_LOGIN, toMobileDigits, useAuth } from '@/context/auth';
+import { takeReturnTo } from '@/lib/authRedirect';
 import { dbg } from '@/lib/debug';
 import { DEMO_FAMILY_PHONE, DEMO_OTP, WEB_DEMO } from '@/lib/webDemo';
 import { formatPhone, isValidPhone, normalisePhone } from '@/lib/phone';
@@ -88,11 +89,14 @@ export function PhoneLoginScreen() {
       haptic('warning');
       setError(err);
     } else if (isNewUser) {
+      takeReturnTo();
       dbg.nav('Login → Onboarding (new user)');
       router.replace('/(onboarding)/parent-details');
     } else {
-      dbg.nav('Login → Tabs (returning user)');
-      router.replace('/(tabs)');
+      // A protected link opened while signed out (AuthGate) opens now.
+      const back = takeReturnTo();
+      dbg.nav(`Login → ${back ?? 'Tabs'} (returning user)`);
+      router.replace((back ?? '/(tabs)') as Href);
     }
   }
 

@@ -26,14 +26,17 @@ import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { typography } from '@/styles/global';
 import { useChild } from '@/context/child';
 import { supabase } from '@/lib/supabase';
+import { getBookingConcern, setSlotsNotice } from '@/lib/bookingDraft';
 import { linkConversationToAppointment, useAppointments } from '@/hooks/useAppointments';
 import { useConsultCheckout } from '@/hooks/useConsultCheckout';
 import { CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 import { useConversations } from '@/hooks/useConversations';
+import { isPlaceholderQualification } from '@/hooks/useDoctors';
 
 interface DoctorInfo {
   name: string;
   specialisation: string;
+  qualifications: string | null;
   hospital: string;
   has_meet_link: boolean;
   has_google_calendar: boolean;
@@ -60,6 +63,8 @@ function bookingErrorText(e: unknown): string {
   if (known) return `Couldn't book: ${known} Please go back and pick another time.`;
   // hold_slot's two-holds limit names its own wait; show it as it is.
   if (msg.startsWith('You already have two bookings waiting for payment.')) return msg;
+  // useConsultCheckout: the payment page didn't open and the hold was released.
+  if (msg.startsWith("Couldn't open the payment page.")) return msg;
   if (/fetch|network|timed? ?out|offline/i.test(msg)) {
     return "Couldn't book: no connection. Check your internet and tap the Pay button again.";
   }
@@ -69,13 +74,12 @@ function bookingErrorText(e: unknown): string {
 export default function ConfirmScreen() {
   const insets = useSafeAreaInsets();
   const { child } = useChild();
-  const { doctorId, dateIso, dateLabel, time, slotId, issue } = useLocalSearchParams<{
+  const { doctorId, dateIso, dateLabel, time, slotId } = useLocalSearchParams<{
     doctorId: string;
     dateIso: string;
     dateLabel: string;
     time: string;
     slotId: string;
-    issue: string;
   }>();
   const { bookAppointment } = useAppointments(child?.id ?? null);
   const { startConversation } = useConversations(child?.id ?? null);
@@ -94,7 +98,7 @@ export default function ConfirmScreen() {
     (async () => {
       const { data } = await supabase
         .from('doctors')
-        .select('name, specialisation, hospital, has_meet_link, has_google_calendar')
+        .select('name, specialisation, qualifications, hospital, has_meet_link, has_google_calendar')
         .eq('id', doctorId)
         .maybeSingle<DoctorInfo>();
       if (data) setDoctor(data);
@@ -111,8 +115,8 @@ export default function ConfirmScreen() {
   }, [childId, doctorId, dateIso, time]);
 
   const childName = child?.name ?? 'Your child';
-  // describe → slots pass this as a route param (already decoded).
-  const issueText = (issue ?? '').trim();
+  // From describe, kept in memory (never in the URL): lib/bookingDraft.
+  const [issueText] = useState(getBookingConcern);
 
   async function confirmBooking() {
     if (!child || !doctorId || !dateIso || !time) return;
@@ -142,7 +146,9 @@ export default function ConfirmScreen() {
     setError(null);
     try {
       await releaseHold();
-      router.back();
+      // Back to the times, with a note that the slot was let go.
+      setSlotsNotice('Booking cancelled. The slot is free again. Pick another time when you are ready.');
+      router.dismissTo({ pathname: '/consult/slots', params: { doctorId: doctorId ?? '' } });
     } catch {
       setError("Couldn't cancel the booking. Please try again.");
     }
@@ -241,6 +247,9 @@ export default function ConfirmScreen() {
                 <Text style={typography.meta} numberOfLines={1}>
                   {doctor.specialisation}
                 </Text>
+              ) : null}
+              {doctor?.qualifications && !isPlaceholderQualification(doctor.qualifications) ? (
+                <Text style={typography.caption}>{doctor.qualifications.trim()}</Text>
               ) : null}
               {doctor?.hospital ? (
                 <Text style={typography.caption} numberOfLines={1}>

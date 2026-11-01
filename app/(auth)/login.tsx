@@ -2,7 +2,7 @@
  * Sign in. Email + password, or a code emailed to the parent
  * (SMS is off until DLT is done; the phone screen is kept behind PHONE_AUTH).
  */
-import { router } from 'expo-router';
+import { type Href, router } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
@@ -29,6 +29,7 @@ import {
   useAuth,
   type EmailCodeKind,
 } from '@/context/auth';
+import { takeReturnTo } from '@/lib/authRedirect';
 import { dbg } from '@/lib/debug';
 import { DEMO_FAMILY_PHONE, WEB_DEMO } from '@/lib/webDemo';
 
@@ -52,9 +53,15 @@ function EmailLoginScreen() {
   const [error, setError] = useState<string | null>(null);
 
   function go(isNewUser: boolean) {
+    // A protected link opened while signed out (AuthGate) opens now.
+    const back = takeReturnTo();
     if (isNewUser) {
+      // A brand-new account has nothing to show at that link yet.
       dbg.nav('Login → Onboarding (new user)');
       router.replace('/(onboarding)/parent-details');
+    } else if (back) {
+      dbg.nav(`Login → ${back} (returning user, requested link)`);
+      router.replace(back as Href);
     } else {
       dbg.nav('Login → Tabs (returning user)');
       router.replace('/(tabs)');

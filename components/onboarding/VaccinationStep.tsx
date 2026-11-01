@@ -33,6 +33,9 @@ export interface VaccineDoseCounts {
   laterUnknown: number;
   laterGivenNames: string[];
   laterUnknownNames: string[];
+  /** Past their vaccine's age limit (e.g. Rotavirus after 8 months), not given. */
+  missedAgeLimit: number;
+  missedAgeLimitNames: string[];
 }
 
 /**
@@ -48,11 +51,16 @@ export function vaccineDoseCounts(
   const early = new Set(babyVaccineDoses(path, dob).map((d) => `${d.vaccineName}#${d.doseNumber}`));
   const isEarly = (r: VaccineDoseRow) => early.has(`${r.vaccine_name}#${r.dose_number}`);
   const names = (rows: VaccineDoseRow[]) => Array.from(new Set(rows.map((r) => r.vaccine_name)));
+  // Doses past an age limit get their own line, so they are not counted twice.
+  const missed = new Set(plan.missedAgeLimit.map((r) => `${r.vaccine_name}#${r.dose_number}`));
+  const unknown = plan.unknown.filter((r) => !missed.has(`${r.vaccine_name}#${r.dose_number}`));
   const laterGiven = plan.given.filter((r) => !isEarly(r));
-  const laterUnknown = plan.unknown.filter((r) => !isEarly(r));
+  const laterUnknown = unknown.filter((r) => !isEarly(r));
   return {
     earlyGiven: plan.given.length - laterGiven.length,
-    earlyUnknown: plan.unknown.length - laterUnknown.length,
+    earlyUnknown: unknown.length - laterUnknown.length,
+    missedAgeLimit: plan.missedAgeLimit.length,
+    missedAgeLimitNames: names(plan.missedAgeLimit),
     laterGiven: laterGiven.length,
     laterUnknown: laterUnknown.length,
     laterGivenNames: names(laterGiven),
@@ -80,6 +88,11 @@ export function doseCountLines(c: VaccineDoseCounts, opts: { early?: boolean } =
   if (c.laterUnknown > 0) {
     lines.push(
       `${doses(c.laterUnknown)} of later vaccines (${c.laterUnknownNames.join(', ')}) will be listed to check with your doctor.`,
+    );
+  }
+  if (c.missedAgeLimit > 0) {
+    lines.push(
+      `${doses(c.missedAgeLimit)} of ${c.missedAgeLimitNames.join(', ')} are past the vaccine's age limit. They will be listed to discuss with your doctor, who will advise what to do.`,
     );
   }
   return lines;

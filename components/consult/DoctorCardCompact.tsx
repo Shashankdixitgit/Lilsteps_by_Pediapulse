@@ -4,13 +4,13 @@ import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import type { DoctorRow } from '@/hooks/useDoctors';
 
-/** Last-name initial ("Dr. Emily Chen" -> "C"), not the "D" of "Dr.". */
-function doctorInitial(name: string) {
-  return name.trim().split(' ').slice(-1)[0]?.charAt(0) ?? name.charAt(0);
-}
+import { doctorInitial } from './appointmentFormat';
+
 
 export interface DoctorCardCompactProps {
   doctor: DoctorRow;
+  /** e.g. "MBBS, MD (Pediatrics)" (useDoctorQualifications); omitted when unknown. */
+  qualifications?: string | null;
   onBook: (id: string) => void;
   /**
    * Row inside a parent list card: no own border/radius, hairline top divider
@@ -38,7 +38,7 @@ export function BookPill({ label = 'Book' }: { label?: string }) {
   );
 }
 
-export function DoctorCardCompact({ doctor, onBook, inList, divider }: DoctorCardCompactProps) {
+export function DoctorCardCompact({ doctor, qualifications, onBook, inList, divider }: DoctorCardCompactProps) {
   const available = doctor.is_available;
   const book = () => {
     if (available) onBook(doctor.id);
@@ -50,7 +50,7 @@ export function DoctorCardCompact({ doctor, onBook, inList, divider }: DoctorCar
       scaleTo={0.99}
       bg={AppColors.card}
       bgPressed={AppColors.surfaceContainerLow}
-      accessibilityLabel={`${doctor.name}, ${doctor.specialisation}${available ? '. Book' : '. Unavailable'}`}
+      accessibilityLabel={`${doctor.name}, ${doctor.specialisation}${qualifications ? `, ${qualifications}` : ''}${available ? '. Book' : '. Unavailable'}`}
       style={[styles.row, !inList && styles.standalone, inList && divider && styles.divider]}
     >
       <View style={styles.avatar}>
@@ -63,6 +63,7 @@ export function DoctorCardCompact({ doctor, onBook, inList, divider }: DoctorCar
         <Text style={styles.spec} numberOfLines={1}>
           {doctor.specialisation}
         </Text>
+        {qualifications ? <Text style={styles.quals}>{qualifications}</Text> : null}
       </View>
       {available ? (
         <BookPill />
@@ -115,5 +116,6 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.card,
   },
   pillLabel: { fontFamily: FontFamily.semibold, fontSize: 13, letterSpacing: -0.1, color: AppColors.primary },
+  quals: { fontFamily: FontFamily.regular, fontSize: 12, lineHeight: 16, color: AppColors.muted },
   unavailable: { fontFamily: FontFamily.medium, fontSize: 12, color: AppColors.muted },
 });

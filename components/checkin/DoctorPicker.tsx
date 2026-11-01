@@ -1,11 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { doctorInitial } from '@/components/consult/appointmentFormat';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
-import { doctorHasVideoLink, type DoctorRow } from '@/hooks/useDoctors';
-import { supabase } from '@/lib/supabase';
+import { doctorHasVideoLink, type DoctorRow, useDoctorQualifications } from '@/hooks/useDoctors';
 
 import { spaceSelects } from './spaceKey';
 
@@ -16,43 +14,6 @@ function sentences(parts: (string | null | undefined)[]): string {
     .filter(Boolean)
     .map((p) => (/[.!?]$/.test(p) ? p : `${p}.`))
     .join(' ');
-}
-
-/**
- * R3-10: test doctors carry "Test profile · qualifications to be added".
- * That (or an empty value) is never shown to a parent.
- */
-export function isPlaceholderQualification(q: string | null | undefined): boolean {
-  const t = (q ?? '').trim();
-  return !t || /test profile|to be added/i.test(t);
-}
-
-/**
- * qualifications for the listed doctors (a column parents may read). Read
- * here so the shared doctor query stays as it is; empty while loading.
- */
-function useQualifications(ids: string[]): Map<string, string> {
-  const key = ids.join(',');
-  const [map, setMap] = useState<Map<string, string>>(new Map());
-  useEffect(() => {
-    if (!key) return;
-    let cancelled = false;
-    (async () => {
-      const { data } = await supabase.from('doctors').select('id, qualifications').in('id', key.split(','));
-      if (cancelled || !data) return;
-      const next = new Map<string, string>();
-      for (const row of data as { id: string; qualifications: string | null }[]) {
-        if (row.qualifications && !isPlaceholderQualification(row.qualifications)) {
-          next.set(row.id, row.qualifications.trim());
-        }
-      }
-      setMap(next);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [key]);
-  return map;
 }
 
 export interface DoctorPickerProps {
@@ -72,7 +33,7 @@ export interface DoctorPickerProps {
  * has no video link yet, that the consult is chat only for now (R2-04/R2-18).
  */
 export function DoctorPicker({ doctors, selectedId, onSelect, nextFree, nextFreeLoaded = true }: DoctorPickerProps) {
-  const qualifications = useQualifications(doctors.map((d) => d.id));
+  const qualifications = useDoctorQualifications(doctors.map((d) => d.id));
   return (
     <View style={styles.list}>
       {doctors.map((doc, i) => {

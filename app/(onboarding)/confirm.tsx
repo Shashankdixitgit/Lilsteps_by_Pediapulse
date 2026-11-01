@@ -11,6 +11,7 @@ import { RETURN_TO_CONFIRM } from '@/components/onboarding-shell';
 import { doseCountLines, vaccineDoseCounts } from '@/components/onboarding/VaccinationStep';
 import { HeaderIconButton } from '@/components/ScreenHeader';
 import { AnimatedProgress } from '@/components/ui/AnimatedProgress';
+import { formatWeight } from '@/components/growth/format';
 import { getOnboardingStep } from '@/constants/onboardingSteps';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import {
@@ -629,7 +630,7 @@ export default function ConfirmScreen() {
           {/* Measurements */}
           <SectionCard title="Measurements" onEdit={() => editScreen('/(onboarding)/physical')}>
             <View style={styles.statsRow}>
-              <Stat label="Weight" value={parsedWeight != null ? `${parsedWeight} kg` : '—'} />
+              <Stat label="Weight" value={parsedWeight != null ? `${formatWeight(parsedWeight)} kg` : '—'} />
               <View style={styles.statDivider} />
               <Stat label="Height" value={parsedHeight != null ? `${parsedHeight} cm` : '—'} padded />
               <View style={styles.statDivider} />

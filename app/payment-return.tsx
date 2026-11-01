@@ -48,7 +48,7 @@ function describe(status: PaymentStatus, label?: string): Shown {
       icon: 'time-outline',
       tone: 'calm',
       title: 'Payment not finished',
-      body: 'Your slot is still held for a few minutes. Open the booking again to finish paying.',
+      body: 'Your slot is still held for a few minutes. To finish paying, find it under "Waiting for payment" on Home or in the Consult tab.',
     };
   }
   const lead =

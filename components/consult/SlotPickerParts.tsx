@@ -56,9 +56,14 @@ export interface TimeChip {
   id: string;
   time: string;
   is_available: boolean;
+  /** This family's own unpaid hold: a full-width "Your held slot — finish paying" chip. */
+  ownHold?: boolean;
 }
 
-/** Grid of time chips; taken ones are struck through and marked "Booked". */
+/**
+ * Grid of time chips; taken ones are struck through and marked "Booked".
+ * The family's own held slot is not "Booked": it is tappable and says so.
+ */
 export function TimeSlotGrid<T extends TimeChip>({
   chips,
   selectedId,
@@ -73,6 +78,20 @@ export function TimeSlotGrid<T extends TimeChip>({
       {chips.map((slot) => {
         const unavailable = !slot.is_available;
         const active = selectedId === slot.id;
+        if (slot.ownHold) {
+          return (
+            <Pressable
+              key={slot.id}
+              style={[styles.slotChip, styles.heldChip]}
+              onPress={() => onSelect(slot)}
+              accessibilityRole="button"
+              accessibilityLabel={`${formatSlotTime(slot.time)}. Your held slot. Finish paying`}
+            >
+              <Text style={styles.slotText}>{formatSlotTime(slot.time)}</Text>
+              <Text style={styles.heldLabel}>Your held slot — finish paying</Text>
+            </Pressable>
+          );
+        }
         return (
           <Pressable
             key={slot.id}
@@ -136,5 +155,7 @@ const styles = StyleSheet.create({
   slotText: { fontFamily: FontFamily.semibold, fontSize: 13, color: AppColors.onSurface },
   slotTextDisabled: { color: AppColors.muted, textDecorationLine: 'line-through' },
   slotTextActive: { color: AppColors.onPrimary },
+  heldChip: { flexBasis: '100%', backgroundColor: AppColors.warningSurface, borderColor: AppColors.warningBorder },
+  heldLabel: { fontFamily: FontFamily.medium, fontSize: 12, color: AppColors.warning },
   bookedLabel: { fontFamily: FontFamily.medium, fontSize: 12, color: AppColors.muted },
 });

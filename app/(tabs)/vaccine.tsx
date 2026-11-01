@@ -112,12 +112,15 @@ export default function VaccineScreen() {
   const nextUpcoming = vaccinations.find((v) => v.status === 'upcoming' && !yearlyPast(v));
   const overdueCount = vaccinations.filter((v) => v.status === 'overdue').length;
   const unknownCount = vaccinations.filter((v) => v.status === 'unknown').length;
-  const caughtUp = total > 0 && !nextDue && overdueCount === 0 && unknownCount === 0;
+  // Past a vaccine's age limit (VACCINE_MAX_AGE): not overdue, for the doctor.
+  const missedCount = vaccinations.filter((v) => v.status === 'missed').length;
+  const caughtUp = total > 0 && !nextDue && overdueCount === 0 && unknownCount === 0 && missedCount === 0;
 
   // One calm stats line (absorbs the old Next dose / Status bento cards).
   const statsLine = [
     overdueCount > 0 ? `${overdueCount} overdue` : null,
     unknownCount > 0 ? `${unknownCount} to check with your doctor` : null,
+    missedCount > 0 ? `${missedCount} missed, ask your doctor` : null,
     nextDue
       ? // "Due now" only within a few days; later in the 14-day window is "due soon" (R3-21).
         `${nextDue.scheduled_date <= dueNowUntil ? 'due now' : 'due soon'}: ${doseName(nextDue)}, ${formatDate(nextDue.scheduled_date)}`
@@ -144,7 +147,9 @@ export default function VaccineScreen() {
     const wasDone = vaccinations.find((v) => v.id === id)?.status === 'done';
     // "Caught up" = no due, overdue or unsure rows remain after this mark.
     const remaining = vaccinations.filter(
-      (v) => v.id !== id && (v.status === 'due_soon' || v.status === 'overdue' || v.status === 'unknown'),
+      (v) =>
+        v.id !== id &&
+        (v.status === 'due_soon' || v.status === 'overdue' || v.status === 'unknown' || v.status === 'missed'),
     ).length;
     await markDone(id, date);
     // Changing the date of a dose already given is not a new milestone.
@@ -328,7 +333,12 @@ const STATUS_UI: Record<VaccinationStatus, { tone: StatusTone; label: string }> 
   overdue: { tone: 'danger', label: 'Overdue' },
   upcoming: { tone: 'neutral', label: 'Upcoming' },
   unknown: { tone: 'info', label: 'Not sure' },
+  // Muted, not red: past the vaccine's age limit, the doctor advises.
+  missed: { tone: 'neutral', label: 'Missed — ask your doctor' },
 };
+
+/** Under a missed dose (VACCINE_MAX_AGE). */
+const AGE_LIMIT_NOTE = 'This vaccine has an age limit. Your doctor will advise what to do.';
 
 function isYearly(v: Pick<VaccinationRow, 'vaccine_name'>) {
   return ANNUAL_VACCINE_NAMES.has(v.vaccine_name);
@@ -354,7 +364,7 @@ function doseMeta(v: VaccinationRow) {
   if (isYearly(v) && v.scheduled_date < istTodayDateOnly()) return 'Every year, ask at the next visit';
   // "13 Oct" this year, "13 Oct 2014" otherwise, so an old due date never
   // reads like today.
-  return `${v.status === 'unknown' ? 'Was due' : 'Due'} ${formatDate(v.scheduled_date)}`;
+  return `${v.status === 'unknown' || v.status === 'missed' ? 'Was due' : 'Due'} ${formatDate(v.scheduled_date)}`;
 }
 
 const VaccineListItem = memo(function VaccineListItem({
@@ -370,6 +380,7 @@ const VaccineListItem = memo(function VaccineListItem({
   const displayName = doseName(vaccine);
   const ui = STATUS_UI[status];
   const isDone = status === 'done';
+  const isMissed = status === 'missed';
   const metaStr = doseMeta(vaccine);
 
   // Every row opens its sheet: "Mark given" (any dose not yet given, with a
@@ -381,7 +392,7 @@ const VaccineListItem = memo(function VaccineListItem({
       accessibilityLabel={
         isDone
           ? `${displayName}, ${metaStr}. Change or undo`
-          : `${displayName}, ${ui.label}, ${metaStr}. Mark as given`
+          : `${displayName}, ${ui.label}, ${metaStr}.${isMissed ? ` ${AGE_LIMIT_NOTE}` : ''} Mark as given`
       }
       style={({ pressed }) => [styles.listItem, !isFirst && styles.listItemDivider, pressed && styles.listItemPressed]}
     >
@@ -391,14 +402,17 @@ const VaccineListItem = memo(function VaccineListItem({
           {isDone ? null : <StatusPill dot tone={ui.tone} label={ui.label} />}
           <Text style={typography.meta}>{metaStr}</Text>
         </View>
+        {isMissed ? <Text style={typography.caption}>{AGE_LIMIT_NOTE}</Text> : null}
       </View>
       {isDone ? (
         <View style={styles.statusWrap}>
           <StatusPill dot tone={ui.tone} label={ui.label} />
         </View>
       ) : (
-        <View style={styles.markPill}>
-          <Text style={styles.markPillText}>Mark given</Text>
+        // A missed dose may still have been given elsewhere in time: "Mark
+        // given" stays, as a quieter secondary action.
+        <View style={isMissed ? styles.markLink : styles.markPill}>
+          <Text style={isMissed ? styles.markLinkText : styles.markPillText}>Mark given</Text>
         </View>
       )}
     </Pressable>
@@ -583,6 +597,11 @@ function DoseSheet({
         ) : null
       }
     >
+      {dose?.status === 'missed' ? (
+        <Text style={typography.bodySM}>
+          {AGE_LIMIT_NOTE} If {childName} had this dose somewhere else in time, you can mark it as given.
+        </Text>
+      ) : null}
       {dose?.status === 'unknown' ? (
         <Text style={typography.bodySM}>
           We don&apos;t know if this dose was given. Check {childName}&apos;s vaccination card, then mark it as
@@ -780,6 +799,16 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.semibold,
     fontSize: 13,
     color: AppColors.primary,
+  },
+  markLink: {
+    minHeight: Size.buttonSmall,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  markLinkText: {
+    fontFamily: FontFamily.medium,
+    fontSize: 13,
+    color: AppColors.secondary,
   },
   note: {
     paddingHorizontal: 4,

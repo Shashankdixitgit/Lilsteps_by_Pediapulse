@@ -49,6 +49,43 @@ export function useDoctorVideoLink(doctorId: string | null | undefined): boolean
   return doctorId && state?.id === doctorId ? state.has : null;
 }
 
+/**
+ * R3-10: test doctors carry "Test profile · qualifications to be added".
+ * That (or an empty value) is never shown to a parent.
+ */
+export function isPlaceholderQualification(q: string | null | undefined): boolean {
+  const t = (q ?? '').trim();
+  return !t || /test profile|to be added/i.test(t);
+}
+
+/**
+ * qualifications for the listed doctors (a column parents may read). Read
+ * here so the shared doctor query stays as it is; empty while loading.
+ */
+export function useDoctorQualifications(ids: string[]): Map<string, string> {
+  const key = ids.join(',');
+  const [map, setMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    if (!key) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase.from('doctors').select('id, qualifications').in('id', key.split(','));
+      if (cancelled || !data) return;
+      const next = new Map<string, string>();
+      for (const row of data as { id: string; qualifications: string | null }[]) {
+        if (row.qualifications && !isPlaceholderQualification(row.qualifications)) {
+          next.set(row.id, row.qualifications.trim());
+        }
+      }
+      setMap(next);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
+  return map;
+}
+
 export interface TimeSlotRow {
   id: string;
   doctor_id: string;
