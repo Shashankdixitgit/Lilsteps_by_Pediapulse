@@ -23,17 +23,17 @@ export function SeverityDots({ value, onChange }: SeverityDotsProps) {
       {LEVELS.map((level) => {
         const isFilled = value >= level;
         return (
+          // A 44 x 44 tap area around each 28 px dot (review should-fix 16).
           <Pressable
             key={level}
-            style={[
-              styles.dot,
-              isFilled && { backgroundColor: COLORS[level], borderColor: 'transparent' },
-            ]}
+            style={styles.target}
             onPress={() => onChange(level)}
-            hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={`Severity ${LABELS[level]}`}
-          />
+            accessibilityState={{ selected: value === level }}
+          >
+            <View style={[styles.dot, isFilled && { backgroundColor: COLORS[level], borderColor: 'transparent' }]} />
+          </Pressable>
         );
       })}
       <Text style={styles.label}>{LABELS[value]}</Text>
@@ -42,7 +42,8 @@ export function SeverityDots({ value, onChange }: SeverityDotsProps) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 0 },
+  target: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   dot: {
     width: 28,
     height: 28,

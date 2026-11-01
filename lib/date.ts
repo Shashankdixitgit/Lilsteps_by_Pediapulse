@@ -84,9 +84,28 @@ export function formatDate(
   const date = parseDateOnly(value);
   if (Number.isNaN(date.getTime())) return '';
   const showYear = year === 'always' || date.getFullYear() !== now.getFullYear();
-  return date.toLocaleDateString('en-IN', {
-    day: 'numeric',
-    month: 'short',
-    ...(showYear ? { year: 'numeric' } : {}),
-  });
+  // Built by hand, not toLocaleDateString: Android's ICU writes "10 Sept"
+  // and iOS "10 Sep" for en-IN (review should-fix 14).
+  const dm = `${date.getDate()} ${MONTHS_SHORT[date.getMonth()]}`;
+  return showYear ? `${dm} ${date.getFullYear()}` : dm;
+}
+
+export const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** "Wed" for a Date's local weekday. */
+export function weekdayShort(date: Date): string {
+  return WEEKDAYS_SHORT[date.getDay()];
+}
+
+/**
+ * The app's one time format: "4:55 PM" on every phone (Android's ICU wrote
+ * "4:55 pm", iOS "4:55 PM"; review should-fix 14). Local time of a Date or
+ * an ISO timestamp.
+ */
+export function formatClockTime(value: string | Date): string {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const h = d.getHours();
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(d.getMinutes()).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
 }

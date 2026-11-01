@@ -6,18 +6,23 @@
  *   routes here, and the booking screen underneath does the status check.
  *   If the router does land here (Android can deliver the deep link too),
  *   step back to that screen.
+ * - Android hand-off (?app=lilsteps://payment-return?…): razorpay-return
+ *   sent the Custom Tab here because Chrome can block a redirect into the
+ *   app that no tap started (after a UPI app switch). We try the app link
+ *   and show a "Return to LilSteps" button; the app then checks the payment.
  * - Web: the whole page went to Razorpay (a popup would be blocked), so this
  *   page finishes the job: it asks the server about the booking saved before
  *   leaving (readPendingWebPayment), passing Razorpay's signed return query,
  *   and says what happened. The web origin must be in PAYMENT_RETURN_ORIGINS.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { useHydrated } from '@/components/AuthGate';
 import { GradientButton } from '@/components/gradient-button';
 import { AppColors } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
@@ -65,7 +70,55 @@ function describe(status: PaymentStatus, label?: string): Shown {
   };
 }
 
+/** The app link from the Android hand-off, if it is ours (never an open redirect). */
+export function handoffAppLink(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.length > 1500) return null;
+  return raw.startsWith('lilsteps://payment-return') ? raw : null;
+}
+
 export default function PaymentReturnScreen() {
+  const { app } = useLocalSearchParams<{ app?: string }>();
+  // Pre-rendered without a query string: decide only after hydration.
+  const hydrated = useHydrated();
+  if (!hydrated) return <Checking />;
+  const appLink = Platform.OS === 'web' ? handoffAppLink(app) : null;
+  if (appLink) return <BackToApp link={appLink} />;
+  return <PaymentReturn />;
+}
+
+function Checking() {
+  return (
+    <View style={[styles.screen, styles.loading]}>
+      <ActivityIndicator color={AppColors.primary} />
+      <Text style={typography.meta}>Checking your payment…</Text>
+    </View>
+  );
+}
+
+/** Android hand-off: back into the installed app, which checks the payment. */
+function BackToApp({ link }: { link: string }) {
+  const insets = useSafeAreaInsets();
+  useEffect(() => {
+    // May be blocked without a tap; the button below always works.
+    globalThis.location?.assign(link);
+  }, [link]);
+  return (
+    <View style={[styles.screen, styles.result, { paddingTop: insets.top + 48, paddingBottom: insets.bottom + 16 }]}>
+      <View style={styles.body}>
+        <View style={[styles.icon, styles.iconCalm]}>
+          <Ionicons name="arrow-undo-outline" size={28} color={AppColors.primary} />
+        </View>
+        <Text style={[typography.heading, styles.center]}>Back to LilSteps</Text>
+        <Text style={[typography.body, styles.center]}>
+          Tap below to return to the app. It will check your payment and show your booking.
+        </Text>
+      </View>
+      <GradientButton label="Return to LilSteps" onPress={() => globalThis.location?.assign(link)} />
+    </View>
+  );
+}
+
+function PaymentReturn() {
   const insets = useSafeAreaInsets();
   const { session, loading } = useAuth();
   const [shown, setShown] = useState<Shown | null>(null);
@@ -133,12 +186,7 @@ export default function PaymentReturnScreen() {
     );
   }
 
-  return (
-    <View style={[styles.screen, styles.loading]}>
-      <ActivityIndicator color={AppColors.primary} />
-      <Text style={typography.meta}>Checking your payment…</Text>
-    </View>
-  );
+  return <Checking />;
 }
 
 const styles = StyleSheet.create({

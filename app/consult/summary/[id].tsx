@@ -3,7 +3,7 @@
  * doctor reads (checkin_sessions.ai_summary), opened from the upcoming
  * consult card. `id` is the checkin_sessions id (appointments.ai_summary_id).
  */
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import { AppColors } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { useCheckinSession } from '@/hooks/useCheckin';
 import { typography } from '@/styles/global';
+import { goBack } from '@/lib/navigation';
 
 export default function PreVisitSummaryScreen() {
   const insets = useSafeAreaInsets();
@@ -37,7 +38,7 @@ export default function PreVisitSummaryScreen() {
             {error ?? "We couldn't load the summary."}
           </Text>
           <GradientButton label="Try again" variant="outline" onPress={retry} />
-          <TextButton label="Go back" onPress={() => router.back()} />
+          <TextButton label="Go back" onPress={goBack} />
         </View>
       ) : (
         <ScrollView

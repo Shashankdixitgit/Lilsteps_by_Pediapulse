@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { HeaderIconButton } from '@/components/ScreenHeader';
 import { AppColors, Radius } from '@/constants/theme';
 import { typography } from '@/styles/global';
+import { KEYBOARD_BEHAVIOR } from '@/lib/keyboard';
 
 interface SheetProps {
   visible: boolean;
@@ -37,7 +38,7 @@ export function Sheet({ visible, onClose, title, subtitle, children, footer }: S
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={styles.root} behavior={KEYBOARD_BEHAVIOR}>
         <Pressable
           style={styles.overlay}
           onPress={onClose}

@@ -38,70 +38,98 @@ const TEMPLATES: Record<TemplateKey, RenderedTemplate> = {
     body:
       'LilSteps: Your appointment with {{doctor}} on {{date}} at {{time}} is confirmed. ' +
       'Reply STOP to opt out.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/consult' },
   },
   appointment_cancelled: {
     subject: 'Appointment cancelled',
     body: 'LilSteps: Your appointment with {{doctor}} on {{date}} at {{time}} was cancelled.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/consult' },
   },
   appointment_rescheduled: {
     subject: 'Appointment moved',
     body: 'LilSteps: Your appointment with {{doctor}} is now on {{date}} at {{time}}.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/consult' },
   },
   appointment_reminder_24h: {
     subject: 'Appointment tomorrow',
     body:
       'LilSteps: Reminder — appointment with {{doctor}} tomorrow ({{date}}) at {{time}}.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/consult', channel: 'reminders' },
   },
   appointment_reminder_1h: {
     subject: 'Appointment in 1 hour',
     body:
       'LilSteps: Your appointment with {{doctor}} starts at {{time}} — please be ready.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/consult', channel: 'reminders' },
   },
   prescription_issued: {
     subject: 'New prescription from {{doctor}}',
     body:
       'LilSteps: {{doctor}} has issued a new prescription. Open the app to view.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/records' },
   },
   vaccine_due_soon: {
     subject: 'Vaccine due soon',
     body:
       'LilSteps: {{vaccine}} due for {{child}} on {{date}}. Mark it as given in the app once done.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/vaccine', channel: 'reminders' },
   },
   vaccine_overdue: {
     subject: 'Vaccine not marked as given',
     body:
       'LilSteps: {{vaccine}} for {{child}} was due on {{date}}. Given already? Mark it in the app. If not, ask your paediatrician.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/vaccine' },
   },
   new_message: {
     subject: 'New message from {{doctor}}',
     body: 'LilSteps: {{doctor}} sent you a new message.',
-    data: { type: 'message', conversationId: '{{conversationId}}' },
+    data: { type: 'message', conversationId: '{{conversationId}}', url: '/chat/{{conversationId}}' },
   },
   checkin_summary_ready: {
     subject: 'Check-in summary ready',
     body:
       'LilSteps: Your symptom summary is ready and has been shared with {{doctor}}.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/consult' },
   },
   followup_payment_request: {
     subject: 'Follow-up booked',
     body:
       'LilSteps: {{doctor}} booked a follow-up on {{date}} at {{time}}. Pay in the app to confirm it.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/consult', channel: 'reminders' },
   },
   care_plan_started: {
     subject: 'Your Care Plan has started',
     body: 'LilSteps: Your Care Plan has started. You have 3 video consults to use this month.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/profile/care-plan' },
   },
   care_plan_renewed: {
     subject: 'Your Care Plan has renewed',
     body: 'LilSteps: Your Care Plan renewed. You have 3 video consults to use this month.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/profile/care-plan' },
   },
   care_plan_payment_failed: {
     subject: 'Care Plan payment did not go through',
     body: 'LilSteps: The payment for your Care Plan did not go through. Open the app to check your plan.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/profile/care-plan' },
   },
   care_plan_cancelled: {
     subject: 'Your Care Plan was cancelled',
     body: 'LilSteps: Your Care Plan was cancelled. Open the app to see until when you can use it.',
+    // Push: where a tap opens in the app (review should-fix 2).
+    data: { url: '/profile/care-plan' },
   },
 };
 

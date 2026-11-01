@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
 
   const admin = createAdminClient();
   const caller = await getCaller(req, admin);
-  if (!caller) return jsonResponse({ error: 'Invalid session' }, 401);
+  if (!caller) return jsonResponse({ error: 'Your session has ended. Please sign in again.', code: 'session_ended' }, 401);
 
   // Parents only: the plan belongs to a parents row.
   const { data: parent } = await admin.from('parents').select('id').eq('id', caller.id).maybeSingle();

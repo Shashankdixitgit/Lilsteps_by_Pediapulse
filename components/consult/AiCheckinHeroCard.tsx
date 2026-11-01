@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { GradientButton } from '@/components/gradient-button';
+import { useNarrowLayout } from '@/components/ui/useNarrowLayout';
 import { useCompactWidth } from '@/components/home/useCompactWidth';
 import { Sprout } from '@/components/mascot/Sprout';
 import { HeroCard } from '@/components/ui/HeroCard';
@@ -19,6 +20,9 @@ export function AiCheckinHeroCard({ onStart }: AiCheckinHeroCardProps) {
   // R2-05: at 200% zoom the mascot squeezed the headline to one syllable per
   // line; the decorative Sprout is dropped and the body is never cut.
   const compact = useCompactWidth();
+  // Small phone / larger text: Sprout gives its room to the description,
+  // which is never cut with "…" (review should-fix 11).
+  const narrow = useNarrowLayout();
   return (
     <HeroCard style={styles.card}>
       <View style={styles.row}>
@@ -26,12 +30,12 @@ export function AiCheckinHeroCard({ onStart }: AiCheckinHeroCardProps) {
           <Text style={styles.title}>
             Check in <Text style={styles.titleAccent}>before you book</Text>
           </Text>
-          <Text style={styles.desc} numberOfLines={compact ? undefined : 3}>
+          <Text style={styles.desc}>
             Answer a few questions. We&apos;ll flag warning signs and write a summary for the doctor. It doesn&apos;t
             diagnose.
           </Text>
         </View>
-        {compact ? null : <Sprout mood="care" size={56} />}
+        {compact || narrow ? null : <Sprout mood="care" size={56} />}
       </View>
       <GradientButton label="Start check-in" onPress={onStart} size="md" style={compact ? styles.startBtnFull : styles.startBtn} />
     </HeroCard>

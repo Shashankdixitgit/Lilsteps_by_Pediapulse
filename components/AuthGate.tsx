@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { useAuth } from '@/context/auth';
 import { setReturnTo } from '@/lib/authRedirect';
 import { dbg } from '@/lib/debug';
+import { sessionEndedPending } from '@/lib/sessionEnded';
 
 /**
  * Top-level route groups a signed-out visitor may open. Everything else
@@ -72,8 +73,15 @@ export function AuthGate() {
     }
     if (isPublicRoute(segments)) return;
     if (hadSession.current) {
-      // Signed out (or account deleted) on a protected screen.
       hadSession.current = false;
+      if (sessionEndedPending()) {
+        // The server ended this phone's session: sign in again (the sign-in
+        // screen says why), then come back here.
+        setReturnTo(pathname);
+        router.replace('/(auth)/login');
+        return;
+      }
+      // Signed out (or account deleted) on a protected screen.
       router.replace('/');
       return;
     }

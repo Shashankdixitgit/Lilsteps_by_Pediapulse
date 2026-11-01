@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -6,11 +7,27 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SummaryCard } from '@/components/checkin/SummaryCard';
 import { GradientButton, TextButton } from '@/components/gradient-button';
 import { ScreenHeader } from '@/components/ScreenHeader';
+import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import type { ConsultationRow } from '@/hooks/useConsultations';
+import { formatDate } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
+import { goBack } from '@/lib/navigation';
+
+type LinkedRx = {
+  id: string;
+  issued_at: string;
+  diagnosis: string | null;
+  prescription_items: { medicine: string }[] | null;
+};
+
+/** "Viral fever · PARACETAMOL, SALINE" — what the prescription is for. */
+function rxLine(rx: LinkedRx): string {
+  const meds = (rx.prescription_items ?? []).map((i) => i.medicine).filter(Boolean).join(', ');
+  return [rx.diagnosis?.trim(), meds].filter(Boolean).join(' · ') || 'Prescription';
+}
 
 export default function ConsultDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -20,6 +37,7 @@ export default function ConsultDetailScreen() {
   // here for any child (R2-12). RLS returns only the parent's own children.
   const [consult, setConsult] = useState<ConsultationRow | null>(null);
   const [loading, setLoading] = useState(!!id);
+  const [linkedRx, setLinkedRx] = useState<LinkedRx[]>([]);
   useEffect(() => {
     if (!id) return;
     let cancelled = false;
@@ -29,8 +47,22 @@ export default function ConsultDetailScreen() {
         .select('id, appointment_id, child_id, doctor_name, doctor_specialisation, chief_complaint, outcome, prescription, ai_summary, created_at')
         .eq('id', id)
         .maybeSingle();
+      const row = (data as ConsultationRow | null) ?? null;
+      // Prescriptions issued from the dashboard for this visit (they live in
+      // their own table): linked here so the summary never says "No
+      // prescription issued" next to one in Records (review should-fix 13).
+      let rx: LinkedRx[] = [];
+      if (row?.appointment_id) {
+        const { data: rows } = await supabase
+          .from('prescriptions')
+          .select('id, issued_at, diagnosis, prescription_items(medicine)')
+          .eq('appointment_id', row.appointment_id)
+          .order('issued_at', { ascending: true });
+        rx = (rows as LinkedRx[] | null) ?? [];
+      }
       if (!cancelled) {
-        setConsult((data as ConsultationRow | null) ?? null);
+        setConsult(row);
+        setLinkedRx(rx);
         setLoading(false);
       }
     })();
@@ -54,18 +86,14 @@ export default function ConsultDetailScreen() {
         <ScreenHeader title="Visit summary" />
         <View style={styles.centered}>
           <Text style={[typography.body, styles.centerText]}>Consultation not found.</Text>
-          <TextButton label="Go back" onPress={() => router.back()} />
+          <TextButton label="Go back" onPress={goBack} />
         </View>
       </View>
     );
   }
 
   const { ai_summary: aiSummary, prescription } = consult;
-  const date = new Date(consult.created_at).toLocaleDateString('en-IN', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  const date = formatDate(consult.created_at, { year: 'always' });
   const meta = [date, consult.doctor_name].filter(Boolean).join(' · ');
 
   return (
@@ -91,14 +119,30 @@ export default function ConsultDetailScreen() {
 
         <View style={styles.section}>
           <Text style={typography.headingSM}>Prescription</Text>
+          {linkedRx.map((rx) => (
+            <PressableScale
+              key={rx.id}
+              onPress={() => router.push({ pathname: '/prescriptions/[id]', params: { id: rx.id } })}
+              accessibilityRole="button"
+              accessibilityLabel={`Open prescription${rx.diagnosis ? ` for ${rx.diagnosis}` : ''}`}
+              style={[styles.card, styles.rxCard]}
+            >
+              <Text style={styles.rxLabel}>Rx</Text>
+              <View style={styles.flex}>
+                <Text style={styles.cardText}>{rxLine(rx)}</Text>
+                <Text style={typography.meta}>View prescription</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={AppColors.outline} />
+            </PressableScale>
+          ))}
           {prescription ? (
             <View style={[styles.card, styles.rxCard]}>
               <Text style={styles.rxLabel}>Rx</Text>
               <Text style={[styles.cardText, styles.flex]}>{prescription}</Text>
             </View>
-          ) : (
+          ) : linkedRx.length === 0 ? (
             <Text style={typography.meta}>No prescription issued</Text>
-          )}
+          ) : null}
         </View>
 
         {!!aiSummary && (

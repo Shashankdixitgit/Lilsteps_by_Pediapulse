@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Size } from '@/constants/theme';
-import { formatDate } from '@/lib/date';
+import { formatDate, formatClockTime } from '@/lib/date';
 
 import { doctorInitial } from './appointmentFormat';
 
@@ -39,7 +39,7 @@ function shortStamp(iso: string | null): string {
   const now = new Date();
   const sameDay = d.toDateString() === now.toDateString();
   return sameDay
-    ? d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })
+    ? formatClockTime(d)
     : formatDate(d, { now });
 }
 

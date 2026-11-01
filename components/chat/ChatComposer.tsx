@@ -21,7 +21,7 @@ export interface ChatComposerProps {
 
 /**
  * Shared chat composer (check-in + doctor chat): one 44-high growing field,
- * `surfaceContainer` fill, no border, with a 36 primary-purple send circle inside it.
+ * `surfaceContainer` fill, no border, with a 36 primary-purple send circle in a 44 tap area.
  * Disabled send = `surfaceContainerHigh` fill + `outlineVariant` icon (no
  * faded primary). Web: no browser outline, no resize handle.
  */
@@ -38,7 +38,7 @@ export function ChatComposer({
   style,
 }: ChatComposerProps) {
   // Web: a textarea doesn't grow by itself, so track its content height
-  // (36–120, then it scrolls). Native multiline inputs already grow.
+  // (44–120, then it scrolls). Native multiline inputs already grow.
   const [webHeight, setWebHeight] = useState(INPUT_MIN);
   const height = value ? Math.min(INPUT_MAX, Math.max(INPUT_MIN, webHeight)) : INPUT_MIN;
   return (
@@ -82,24 +82,24 @@ export function ChatComposer({
         accessibilityRole="button"
         accessibilityLabel="Send"
         accessibilityState={{ disabled: sendDisabled }}
-        hitSlop={4}
-        style={({ pressed }) => [
-          styles.send,
-          sendDisabled && styles.sendDisabled,
-          pressed && !sendDisabled && styles.sendPressed,
-        ]}
+        // A 44 x 44 tap area around the 36 circle (review should-fix 16).
+        style={styles.sendTarget}
       >
-        <Ionicons
-          name="arrow-up"
-          size={18}
-          color={sendDisabled ? AppColors.outlineVariant : AppColors.onPrimary}
-        />
+        {({ pressed }) => (
+          <View style={[styles.send, sendDisabled && styles.sendDisabled, pressed && !sendDisabled && styles.sendPressed]}>
+            <Ionicons
+              name="arrow-up"
+              size={18}
+              color={sendDisabled ? AppColors.outlineVariant : AppColors.onPrimary}
+            />
+          </View>
+        )}
       </Pressable>
     </View>
   );
 }
 
-const INPUT_MIN = 36;
+const INPUT_MIN = 44;
 const INPUT_MAX = 120;
 
 const styles = StyleSheet.create({
@@ -111,15 +111,15 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     borderCurve: 'continuous',
     paddingLeft: 16,
-    paddingRight: 4,
-    paddingVertical: 4,
+    paddingRight: 0,
+    paddingVertical: 0,
   },
   input: {
     flex: 1,
     minHeight: INPUT_MIN,
     maxHeight: INPUT_MAX,
-    paddingTop: Platform.OS === 'ios' ? 9 : 7,
-    paddingBottom: 7,
+    paddingTop: Platform.OS === 'ios' ? 13 : 11,
+    paddingBottom: 11,
     fontFamily: FontFamily.regular,
     fontSize: 16, // 16 keeps iOS from zooming on focus
     lineHeight: 22,
@@ -128,6 +128,7 @@ const styles = StyleSheet.create({
       ? ({ outlineWidth: 0, resize: 'none' } as object)
       : null),
   },
+  sendTarget: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   send: {
     width: 36,
     height: 36,

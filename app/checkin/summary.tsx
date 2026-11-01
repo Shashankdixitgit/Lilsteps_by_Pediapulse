@@ -24,7 +24,7 @@ import { AppColors, CanvasFade, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
 import { linkConversationToAppointment, useAppointments } from '@/hooks/useAppointments';
 import { useCheckinSession } from '@/hooks/useCheckin';
-import { SLOT_NOT_KEPT_TEXT, useConsultCheckout } from '@/hooks/useConsultCheckout';
+import { confirmReleaseSlot, SLOT_NOT_KEPT_TEXT, SLOT_RELEASED_TEXT, useConsultCheckout } from '@/hooks/useConsultCheckout';
 import { CONSULT_PRICE_LABEL, findOwnHoldForCheckin } from '@/lib/consultPayment';
 import { creditsLeft } from '@/lib/carePlan';
 import { useCarePlan } from '@/hooks/useCarePlan';
@@ -33,6 +33,8 @@ import { doctorHasVideoLink, type DoctorRow, useDoctors, useTimeSlots } from '@/
 import { fetchFreeSlotsOn, useNextFreeSlots } from '@/hooks/useEarliestSlots';
 import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
+import { goBack } from '@/lib/navigation';
+import { useBackGuard } from '@/hooks/useBackGuard';
 
 function callEmergency() {
   Linking.openURL('tel:112').catch(() => {});
@@ -87,6 +89,7 @@ export default function CheckinSummaryScreen() {
   const [openingChat, setOpeningChat] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [bookingError, setBookingError] = useState<string | null>(null);
+  const [releasedNote, setReleasedNote] = useState<string | null>(null);
 
   const days = useMemo(() => getNextDays(), []);
   // R2-18: each doctor's next free time on the picker.
@@ -129,6 +132,8 @@ export default function CheckinSummaryScreen() {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [bookedId, setBookedId] = useState<string | null>(null);
   const confirmed = bookedId !== null;
+  // Booked: back goes Home, never into the booking steps again.
+  useBackGuard(confirmed, 'home');
   const { checkout, checkoutWithPlan, adoptHold, releaseHold, paying: booking, notice: payNotice, awaitingPayment } =
     useConsultCheckout();
   // Care Plan consults left this month (0 without a plan), offered before ₹449 (0053).
@@ -326,10 +331,12 @@ export default function CheckinSummaryScreen() {
   }
 
   async function cancelResumed() {
+    if (!(await confirmReleaseSlot())) return;
     setBookingError(null);
     try {
       await releaseHold();
       setResumed(null);
+      setReleasedNote(SLOT_RELEASED_TEXT);
       refetchSlots();
       nextFreeSlots.refetch();
       setFreeVersion((v) => v + 1);
@@ -464,7 +471,7 @@ export default function CheckinSummaryScreen() {
 
   return (
     <View style={styles.screen}>
-      <CheckinHeader title="Pre-visit summary" onBack={() => router.back()} />
+      <CheckinHeader title="Pre-visit summary" onBack={goBack} />
 
       <ScrollView
         contentContainerStyle={[
@@ -678,9 +685,9 @@ export default function CheckinSummaryScreen() {
             <Text style={[typography.bodySM, styles.errorText, styles.footerError]} accessibilityRole="alert">
               {bookingError}
             </Text>
-          ) : payNotice ? (
+          ) : payNotice || releasedNote ? (
             <Text style={[typography.bodySM, styles.footerError]} accessibilityLiveRegion="polite" aria-live="polite">
-              {payNotice}
+              {payNotice ?? releasedNote}
             </Text>
           ) : null}
           {resumed && !selectedSlot ? (

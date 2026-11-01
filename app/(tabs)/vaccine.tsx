@@ -17,6 +17,7 @@ import { HeroCard } from '@/components/ui/HeroCard';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { StatusPill, type StatusTone } from '@/components/ui/StatusPill';
 import { Sticker } from '@/components/ui/Sticker';
+import { useNarrowLayout } from '@/components/ui/useNarrowLayout';
 import { BRACKET_LABELS } from '@/constants/bracketConfig';
 import {
   ANNUAL_VACCINE_NAMES,
@@ -40,6 +41,7 @@ export default function VaccineScreen() {
   // Room for the floating tab bar + AI button (R2-17).
   const tabBarSpace = useTabBarSpace();
   const { bracket, child } = useChild();
+  const narrow = useNarrowLayout();
   const {
     vaccinations: rows,
     loading,
@@ -214,16 +216,18 @@ export default function VaccineScreen() {
               {bracketLabel ? <Text style={typography.eyebrow}>{bracketLabel}</Text> : null}
               <Text style={styles.heroTitle}>Vaccination progress</Text>
             </View>
-            {caughtUp ? <Sprout mood="cheer" size={56} /> : null}
+            {/* Small phone / larger text: Sprout gives its room to the title,
+                so it never breaks as "Vaccinatio / n" (review must-fix 4). */}
+            {caughtUp && !narrow ? <Sprout mood="cheer" size={56} /> : null}
           </View>
 
-          <View style={styles.heroMetricRow}>
+          <View style={[styles.heroMetricRow, narrow && styles.heroMetricRowNarrow]}>
             <Text style={typography.number}>
               {doneCount}
               <Text style={typography.unit}> of {total} given</Text>
             </Text>
             {caughtUp ? (
-              <View style={styles.caughtUpSticker}>
+              <View style={[styles.caughtUpSticker, narrow && styles.caughtUpStickerNarrow]}>
                 <Sticker icon="star" size={24} />
                 <Text style={styles.caughtUpText}>Caught up</Text>
               </View>
@@ -364,7 +368,9 @@ function doseMeta(v: VaccinationRow) {
   if (isYearly(v) && v.scheduled_date < istTodayDateOnly()) return 'Every year, ask at the next visit';
   // "13 Oct" this year, "13 Oct 2014" otherwise, so an old due date never
   // reads like today.
-  return `${v.status === 'unknown' || v.status === 'missed' ? 'Was due' : 'Due'} ${formatDate(v.scheduled_date)}`;
+  // The schedule spans years: the year is always shown, so an overdue
+  // "Due 13 Jan" is never read as next January (review should-fix 15).
+  return `${v.status === 'unknown' || v.status === 'missed' ? 'Was due' : 'Due'} ${formatDate(v.scheduled_date, { year: 'always' })}`;
 }
 
 const VaccineListItem = memo(function VaccineListItem({
@@ -664,7 +670,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0 },
 
   hero: {
     gap: 12,
@@ -691,6 +697,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  heroMetricRowNarrow: { flexWrap: 'wrap' },
+  caughtUpStickerNarrow: { marginLeft: 0 },
   caughtUpSticker: {
     marginLeft: 'auto',
     flexDirection: 'row',

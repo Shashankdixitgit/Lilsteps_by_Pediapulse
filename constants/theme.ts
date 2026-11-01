@@ -230,7 +230,7 @@ export const Size = {
   buttonPrimary: 48,
   buttonLarge: 56,
   buttonSmall: 32,
-  iconBtn: 40,
+  iconBtn: 44,
   iconWell: 36,
   header: 52,
   /** Icon glyph sizes: header 22, list row 18, inline/meta 14. */

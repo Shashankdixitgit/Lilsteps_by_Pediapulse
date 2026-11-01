@@ -5,6 +5,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { formatDate, parseDateOnly, toDateOnlyString } from '@/lib/date';
+import { pickedDate } from '@/lib/datePicker';
 
 interface DateFieldProps {
   label: string;
@@ -26,6 +27,7 @@ interface DateFieldProps {
 export function DateField({ label, value, onChange, min, max, placeholder = 'Choose a date' }: DateFieldProps) {
   const [androidOpen, setAndroidOpen] = useState(false);
   const [iosOpen, setIosOpen] = useState(false);
+  const [iosDraft, setIosDraft] = useState<Date | null>(null);
   const minDate = min ? parseDateOnly(min) : undefined;
   const maxDate = max ? parseDateOnly(max) : undefined;
   const empty = !value;
@@ -76,21 +78,49 @@ export function DateField({ label, value, onChange, min, max, placeholder = 'Cho
             <Ionicons name="chevron-down" size={16} color={AppColors.onSurfaceVariant} />
           </Pressable>
           {iosOpen ? (
-            <DateTimePicker
-              value={date}
-              mode="date"
-              display="inline"
-              minimumDate={minDate}
-              maximumDate={maxDate}
-              onChange={(_, d) => {
-                if (d) {
-                  setIosOpen(false);
-                  onChange(toDateOnlyString(d));
-                }
-              }}
-              accessibilityLabel={label}
-              themeVariant="light"
-            />
+            <View style={styles.iosInline}>
+              {/* The inline calendar stays open while the parent changes the
+                  month or year; nothing is saved until Done (review should-fix 17). */}
+              <DateTimePicker
+                value={iosDraft ?? date}
+                mode="date"
+                display="inline"
+                minimumDate={minDate}
+                maximumDate={maxDate}
+                onChange={(event, d) => {
+                  const picked = pickedDate(event, d);
+                  if (picked) setIosDraft(picked);
+                }}
+                accessibilityLabel={label}
+                themeVariant="light"
+                accentColor={AppColors.primary}
+              />
+              <View style={styles.iosActions}>
+                <Pressable
+                  onPress={() => {
+                    setIosOpen(false);
+                    setIosDraft(null);
+                  }}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  style={styles.iosAction}
+                >
+                  <Text style={styles.iosCancel}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => {
+                    onChange(toDateOnlyString(iosDraft ?? date));
+                    setIosOpen(false);
+                    setIosDraft(null);
+                  }}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  style={styles.iosAction}
+                >
+                  <Text style={styles.iosDone}>Done</Text>
+                </Pressable>
+              </View>
+            </View>
           ) : null}
         </>
       ) : Platform.OS === 'ios' ? (
@@ -102,11 +132,13 @@ export function DateField({ label, value, onChange, min, max, placeholder = 'Cho
             display="compact"
             minimumDate={minDate}
             maximumDate={maxDate}
-            onChange={(_, d) => {
-              if (d) onChange(toDateOnlyString(d));
+            onChange={(event, d) => {
+              const picked = pickedDate(event, d);
+              if (picked) onChange(toDateOnlyString(picked));
             }}
             accessibilityLabel={label}
             themeVariant="light"
+            accentColor={AppColors.primary}
           />
         </View>
       ) : (
@@ -128,9 +160,11 @@ export function DateField({ label, value, onChange, min, max, placeholder = 'Cho
               display="default"
               minimumDate={minDate}
               maximumDate={maxDate}
-              onChange={(_, d) => {
+              onChange={(event, d) => {
                 setAndroidOpen(false);
-                if (d) onChange(toDateOnlyString(d));
+                // Cancel sends 'dismissed' with the starting date: not a choice.
+                const picked = pickedDate(event, d);
+                if (picked) onChange(toDateOnlyString(picked));
               }}
             />
           ) : null}
@@ -169,4 +203,9 @@ const styles = StyleSheet.create({
     color: AppColors.onSurface,
   },
   placeholderText: { color: AppColors.placeholder },
+  iosInline: { gap: 4 },
+  iosActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 8 },
+  iosAction: { minHeight: 44, minWidth: 64, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  iosCancel: { fontFamily: FontFamily.medium, fontSize: 15, color: AppColors.onSurfaceVariant },
+  iosDone: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.secondary },
 });

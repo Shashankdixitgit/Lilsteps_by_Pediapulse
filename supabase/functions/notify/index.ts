@@ -76,7 +76,7 @@ Deno.serve(async (req) => {
 
   const admin = createAdminClient();
   const caller = await getCaller(req, admin);
-  if (!caller) return jsonResponse({ error: 'Invalid session' }, 401);
+  if (!caller) return jsonResponse({ error: 'Your session has ended. Please sign in again.', code: 'session_ended' }, 401);
 
   let body: any;
   try {

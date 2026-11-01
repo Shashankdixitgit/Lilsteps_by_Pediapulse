@@ -30,11 +30,12 @@ import { supabase } from '@/lib/supabase';
 import { getBookingConcern, setSlotsNotice } from '@/lib/bookingDraft';
 import { linkConversationToAppointment, useAppointments } from '@/hooks/useAppointments';
 import { useCarePlan } from '@/hooks/useCarePlan';
-import { useConsultCheckout } from '@/hooks/useConsultCheckout';
+import { confirmReleaseSlot, useConsultCheckout } from '@/hooks/useConsultCheckout';
 import { CARE_PLAN_CONSULTS, creditsLeft, viewOf } from '@/lib/carePlan';
 import { CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 import { useConversations } from '@/hooks/useConversations';
 import { isPlaceholderQualification } from '@/hooks/useDoctors';
+import { useBackGuard } from '@/hooks/useBackGuard';
 
 interface DoctorInfo {
   name: string;
@@ -102,6 +103,8 @@ export default function ConfirmScreen() {
   // The booked appointment's id (set on success); the chat is linked to it.
   const [bookedId, setBookedId] = useState<string | null>(null);
   const confirmed = bookedId !== null;
+  // Booked: back goes Home, never into the booking steps again.
+  useBackGuard(confirmed, 'home');
 
   useEffect(() => {
     if (!doctorId) return;
@@ -181,6 +184,7 @@ export default function ConfirmScreen() {
   }
 
   async function cancelHold() {
+    if (!(await confirmReleaseSlot())) return;
     setError(null);
     try {
       await releaseHold();
@@ -281,21 +285,14 @@ export default function ConfirmScreen() {
               <Text style={styles.avatarText}>{initial}</Text>
             </View>
             <View style={styles.docText}>
-              <Text style={styles.docName} numberOfLines={1}>
-                {doctor?.name ?? 'Doctor'}
-              </Text>
-              {doctor?.specialisation ? (
-                <Text style={typography.meta} numberOfLines={1}>
-                  {doctor.specialisation}
-                </Text>
-              ) : null}
+              {/* Wraps, never "Dr. Madhav C…" (review must-fix 6). */}
+              <Text style={styles.docName}>{doctor?.name ?? 'Doctor'}</Text>
+              {doctor?.specialisation ? <Text style={typography.meta}>{doctor.specialisation}</Text> : null}
               {doctor?.qualifications && !isPlaceholderQualification(doctor.qualifications) ? (
                 <Text style={typography.caption}>{doctor.qualifications.trim()}</Text>
               ) : null}
               {doctor?.hospital ? (
-                <Text style={typography.caption} numberOfLines={1}>
-                  {doctor.hospital}
-                </Text>
+                <Text style={typography.caption}>{doctor.hospital}</Text>
               ) : null}
             </View>
           </View>

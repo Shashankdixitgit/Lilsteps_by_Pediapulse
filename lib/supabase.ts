@@ -3,6 +3,8 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import "react-native-url-polyfill/auto";
 
+import { isSessionEndedResponse, markSessionEnded } from "./sessionEnded";
+
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -118,7 +120,46 @@ const ExpoSecureStoreAdapter = {
   },
 };
 
+function requestUrl(input: RequestInfo | URL): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+/** True when the request carried a signed-in user's token (not the anon key). */
+function hasUserToken(init?: RequestInit): boolean {
+  const headers = new Headers(init?.headers);
+  const auth = headers.get("Authorization") ?? "";
+  const token = auth.replace(/^Bearer\s+/i, "");
+  return !!token && token !== supabaseAnonKey;
+}
+
+let endingSession = false;
+
+/**
+ * Every request goes through here. A 401 from one of our Edge Functions with
+ * the parent's token means this phone's session has ended on the server:
+ * sign this phone out (local only) so AuthGate sends the parent to sign-in
+ * with a plain message (lib/sessionEnded, mobile review must-fix 8).
+ */
+const sessionAwareFetch: typeof fetch = async (input, init) => {
+  const res = await fetch(input, init);
+  if (!endingSession && isSessionEndedResponse(requestUrl(input), res.status, hasUserToken(init))) {
+    endingSession = true;
+    markSessionEnded();
+    // Not awaited: the caller still gets its response (and shows the message).
+    void supabase.auth
+      .signOut({ scope: "local" })
+      .catch(() => undefined)
+      .finally(() => {
+        endingSession = false;
+      });
+  }
+  return res;
+};
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: { fetch: sessionAwareFetch },
   auth: {
     storage: ExpoSecureStoreAdapter,
     autoRefreshToken: true,

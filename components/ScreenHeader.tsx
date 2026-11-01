@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
 import { ReactNode } from 'react';
 import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import { AppColors, FontFamily, Size } from '@/constants/theme';
+import { goBack } from '@/lib/navigation';
 
 interface ScreenHeaderProps {
   /** 17 SemiBold, left-aligned next to the back button. */
@@ -35,7 +35,7 @@ export function ScreenHeader({ title, subtitle, onBack, hideBack, backDisabled, 
       {hideBack ? null : (
         <HeaderIconButton
           icon="arrow-back"
-          onPress={onBack ?? (() => router.back())}
+          onPress={onBack ?? goBack}
           disabled={backDisabled}
           accessibilityLabel="Go back"
         />

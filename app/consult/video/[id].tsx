@@ -34,6 +34,7 @@ import { useConversations } from '@/hooks/useConversations';
 import { MAX_RESCHEDULES, RESCHEDULE_CUTOFF_MINUTES } from '@/lib/consultPayment';
 import { supabase } from '@/lib/supabase';
 import { layout, typography } from '@/styles/global';
+import { goBack } from '@/lib/navigation';
 
 interface VideoAppointment {
   id: string;
@@ -226,7 +227,7 @@ export default function ParentVideoScreen() {
     if (appt.status === 'awaiting_payment') {
       return (
         <StatusBlock icon="card-outline" title="This booking isn't paid yet" body={when}>
-          <TextButton label="Back" onPress={() => router.back()} />
+          <TextButton label="Back" onPress={goBack} />
         </StatusBlock>
       );
     }
@@ -234,7 +235,7 @@ export default function ParentVideoScreen() {
     if (appt.status === 'cancelled') {
       return (
         <StatusBlock icon="close-circle-outline" title="This consult was cancelled" body={when}>
-          <TextButton label="Back" onPress={() => router.back()} />
+          <TextButton label="Back" onPress={goBack} />
         </StatusBlock>
       );
     }

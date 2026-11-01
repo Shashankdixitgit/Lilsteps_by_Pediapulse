@@ -7,6 +7,14 @@
     "expo-linking": "./stubs/expo-linking.ts",
     "expo-web-browser": "./stubs/expo-web-browser.ts",
     "react-native": "./stubs/react-native.ts",
-    "@/lib/consultPayment": "../../lib/consultPayment.ts"
+    "@/lib/consultPayment": "../../lib/consultPayment.ts",
+    "@/lib/paymentBrowser": "../../lib/paymentBrowser.ts",
+    "@/lib/sessionEnded": "../../lib/sessionEnded.ts",
+    "@/lib/datePicker": "../../lib/datePicker.ts",
+    "@/lib/authRedirect": "../../lib/authRedirect.ts",
+    "@/lib/prescriptionDoctor": "../../lib/prescriptionDoctor.ts",
+    "@/lib/pushRoutes": "../../lib/pushRoutes.ts",
+    "@/lib/webDemo": "../../lib/webDemo.ts",
+    "react-native-safe-area-context": "./stubs/safe-area.ts"
   }
 }

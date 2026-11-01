@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
 
   const admin = createAdminClient();
   const caller = await getCaller(req, admin);
-  if (!caller) return jsonResponse({ error: 'Invalid session' }, 401);
+  if (!caller) return jsonResponse({ error: 'Your session has ended. Please sign in again.', code: 'session_ended' }, 401);
 
   let body: any;
   try {
@@ -212,7 +212,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    if (action === 'start') return await start(admin, appt, body?.returnUrl);
+    if (action === 'start') return await start(admin, appt, body?.returnUrl, body?.handoff === true);
     if (action === 'status') return await status(admin, appt, callbackFrom(body?.callback));
     if (action === 'use_plan') return await usePlan(admin, appt);
     if (action === 'cancel') return await cancel(admin, appt, isDoctor ? 'doctor' : 'parent');
@@ -231,7 +231,7 @@ Deno.serve(async (req) => {
 
 // ── start ───────────────────────────────────────────────────────────────────
 
-async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise<Response> {
+async function start(admin: any, appt: Appointment, returnUrl: unknown, handoff = false): Promise<Response> {
   if (typeof returnUrl !== 'string' || !isAllowedReturnUrl(returnUrl)) {
     return jsonResponse({ error: 'Invalid returnUrl' }, 400);
   }
@@ -277,7 +277,7 @@ async function start(admin: any, appt: Appointment, returnUrl: unknown): Promise
   }
 
   const expireBy = new Date(now + LINK_MINUTES * MINUTE);
-  const made = await createLinkForHold(admin, appt, returnUrl, expireBy);
+  const made = await createLinkForHold(admin, appt, returnUrl, expireBy, handoff);
   if ('error' in made) return made.error;
 
   // The hold covers the whole life of the link, plus a little for the webhook.
@@ -304,6 +304,8 @@ async function createLinkForHold(
   appt: Pick<Appointment, 'id' | 'parent_id' | 'doctors'>,
   returnUrl: string,
   expireBy: Date,
+  /** Android app: return through the web hand-off page (razorpay-return). */
+  handoff = false,
 ): Promise<{ url: string } | { error: Response }> {
   const { data: row, error } = await admin
     .from('payments')
@@ -322,7 +324,11 @@ async function createLinkForHold(
   if (error || !row) throw new Error(`payments insert: ${error?.message}`);
 
   const callbackUrl =
-    `${Deno.env.get('SUPABASE_URL')}/functions/v1/razorpay-return?to=${encodeURIComponent(returnUrl)}`;
+    `${Deno.env.get('SUPABASE_URL')}/functions/v1/razorpay-return?to=${encodeURIComponent(returnUrl)}` +
+    (handoff ? '&handoff=1' : '');
+  // Razorpay's page shows only "Expire by" with a clock time; say plainly
+  // that this is the deadline that keeps the slot (mobile review should-fix 5).
+  const payBy = formatEmailTime(istParts(expireBy).time);
   // Prefill Razorpay's page with the parent's sign-in email (and phone, if any).
   const contact = await parentContact(admin, appt.parent_id);
   let link;
@@ -331,7 +337,7 @@ async function createLinkForHold(
       paymentId: row.id,
       appointmentId: appt.id,
       expireBy,
-      description: `Video consult with ${appt.doctors?.name ?? 'your doctor'}`.slice(0, 2048),
+      description: `Video consult with ${appt.doctors?.name ?? 'your doctor'}. Pay by ${payBy} IST to keep your slot.`.slice(0, 2048),
       callbackUrl,
       contact: contact.phone ?? null,
       email: contact.email ?? null,

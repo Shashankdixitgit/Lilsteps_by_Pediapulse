@@ -25,8 +25,10 @@ import { analytics, crash } from '@/lib/observability';
 import { AppColors } from '@/constants/theme';
 
 /**
- * Web on a wide window: the app is a phone app, so it keeps a phone-width
- * column (centred) instead of stretching cards across a desktop screen.
+ * A wide window (desktop web, and Android tablets / foldables, where Android
+ * 16 ignores the portrait lock): the app is a phone app, so it keeps a
+ * phone-width column (centred) instead of stretching cards across the screen
+ * (review should-fix 21). On a phone the column is simply the full width.
  */
 const WEB_MAX_WIDTH = 520;
 
@@ -135,20 +137,22 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   page: {
     flex: 1,
-    backgroundColor: Platform.OS === 'web' ? AppColors.surfaceContainerLow : AppColors.surface,
+    // Outside the column on a wide screen (desktop web, tablet, unfolded phone).
+    backgroundColor: AppColors.surfaceContainerLow,
   },
-  column:
-    Platform.OS === 'web'
+  column: {
+    flex: 1,
+    width: '100%',
+    maxWidth: WEB_MAX_WIDTH,
+    alignSelf: 'center',
+    overflow: 'hidden',
+    backgroundColor: AppColors.surface,
+    ...(Platform.OS === 'web'
       ? {
-          flex: 1,
-          width: '100%',
-          maxWidth: WEB_MAX_WIDTH,
-          alignSelf: 'center',
-          overflow: 'hidden',
-          backgroundColor: AppColors.surface,
           borderLeftWidth: StyleSheet.hairlineWidth,
           borderRightWidth: StyleSheet.hairlineWidth,
           borderColor: AppColors.border,
         }
-      : { flex: 1 },
+      : null),
+  },
 });

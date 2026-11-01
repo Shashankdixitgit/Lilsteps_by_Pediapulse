@@ -21,16 +21,22 @@ export const MIN_LABELLED_TAB_W = 36;
 /** Gap kept free for the AI button between the left and right tabs. */
 export const AI_SPACER_W = AI_BTN_SIZE + 20;
 
+/** Largest text scale for tab labels (12 → ~16); the bar grows with it. */
+export const TAB_LABEL_MAX_SCALE = 1.35;
+
 /**
  * Narrow window (small phone at 200% zoom): the AI button moves above the bar
  * at the right, so the four tabs share the full width and keep their labels.
  */
-export function isCompactTabBar(windowWidth: number): boolean {
-  return (windowWidth - BAR_CHROME_W - AI_SPACER_W) / 4 < 44;
+export function isCompactTabBar(windowWidth: number, fontScale = 1): boolean {
+  const tabW = (windowWidth - BAR_CHROME_W - AI_SPACER_W) / 4;
+  // Larger text: the longest label ("Records", 12 px x the capped text
+  // scale) must fit, or labels were cut ("Gro…") and ran together
+  // ("HomeGro…") (review should-fix 9). Then the AI button moves above.
+  const labelW = 7 * 0.62 * 12 * Math.min(Math.max(1, fontScale), TAB_LABEL_MAX_SCALE);
+  return tabW < 44 || (fontScale > 1 && tabW < labelW);
 }
 
-/** Largest text scale for tab labels (12 → ~16); the bar grows with it. */
-export const TAB_LABEL_MAX_SCALE = 1.35;
 /** Tab label line height at 100% text. */
 const TAB_LABEL_LINE = 16;
 
@@ -54,7 +60,7 @@ export function tabBarSpace(windowWidth: number, insetBottom: number, fontScale 
   // sits above the bar; reserve the full button height above it so content
   // on either side of the button stays readable. Compact: the whole button
   // sits above the bar, plus an 8px gap and its 8px offset.
-  const overhang = isCompactTabBar(windowWidth) ? button + 16 : button;
+  const overhang = isCompactTabBar(windowWidth, fontScale) ? button + 16 : button;
   return Math.ceil(bottomPadding + barHeight + overhang + BREATHING_ROOM * scale);
 }
 
@@ -69,7 +75,7 @@ export function tabBarRightEdgeCover(windowWidth: number, insetBottom: number, f
   const bottomPadding = Math.max(insetBottom, 12);
   const barHeight = TAB_BAR_HEIGHT + TAB_LABEL_LINE * (Math.min(scale, TAB_LABEL_MAX_SCALE) - 1);
   const button = AI_BTN_SIZE + 2 * AI_BTN_RING;
-  return Math.ceil(bottomPadding + barHeight + (isCompactTabBar(windowWidth) ? button + 16 : 0));
+  return Math.ceil(bottomPadding + barHeight + (isCompactTabBar(windowWidth, fontScale) ? button + 16 : 0));
 }
 
 export function useTabBarSpace(): number {

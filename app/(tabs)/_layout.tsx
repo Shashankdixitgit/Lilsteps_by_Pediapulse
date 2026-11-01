@@ -63,8 +63,8 @@ const LONGEST_LABEL_CHARS = 7;
  * label to fit. Only a window too narrow for even that falls back to icons,
  * with the label kept as the accessible name.
  */
-function tabMetrics(windowWidth: number) {
-  const compact = isCompactTabBar(windowWidth);
+function tabMetrics(windowWidth: number, fontScale = 1) {
+  const compact = isCompactTabBar(windowWidth, fontScale);
   const spacer = compact ? 0 : AI_SPACER_W;
   const tabW = Math.max(0, (windowWidth - BAR_CHROME_W - spacer) / 4);
   const fitted = tabW / (LONGEST_LABEL_CHARS * 0.62);
@@ -139,8 +139,8 @@ function TabIcon({
 
 function CustomTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
-  const metrics = tabMetrics(windowWidth);
+  const { width: windowWidth, fontScale } = useWindowDimensions();
+  const metrics = tabMetrics(windowWidth, fontScale);
   const [layouts, setLayouts] = useState<Record<string, TabLayout>>({});
   const prevIndex = useRef(state.index);
 
@@ -416,7 +416,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // A little side padding so neighbouring labels never run together.
   tabLabel: {
+    paddingHorizontal: 2,
+    textAlign: 'center',
     fontFamily: FontFamily.medium,
     fontSize: 12,
     lineHeight: 16,

@@ -8,7 +8,7 @@
  * note in the chat with the doctor.
  */
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +29,7 @@ import { firstFreeDayIndex } from '@/hooks/useEarliestSlots';
 import { MAX_RESCHEDULES, RESCHEDULE_CUTOFF_MINUTES, rescheduleConsult } from '@/lib/consultPayment';
 import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
+import { goBack } from '@/lib/navigation';
 
 // Slots exist 14 clinic (IST) days ahead (0030 rolling generator).
 const SLOT_DAYS = 14;
@@ -146,7 +147,7 @@ export default function RescheduleScreen() {
       return (
         <View style={styles.center}>
           <Text style={[typography.body, styles.centerText]}>We couldn&apos;t find this consult.</Text>
-          <TextButton label="Go back" onPress={() => router.back()} />
+          <TextButton label="Go back" onPress={goBack} />
         </View>
       );
     }
@@ -163,7 +164,7 @@ export default function RescheduleScreen() {
             {movedTo} with {doctorName}. Nothing more to pay, and the video link stays the same.
             {hasEmail ? " We'll email you the new time." : ''}
           </Text>
-          <GradientButton label="Done" onPress={() => router.back()} style={styles.wide} />
+          <GradientButton label="Done" onPress={goBack} style={styles.wide} />
         </View>
       );
     }
@@ -171,7 +172,7 @@ export default function RescheduleScreen() {
       return (
         <View style={styles.center}>
           <Text style={[typography.body, styles.centerText]}>{blocked}</Text>
-          <TextButton label="Go back" onPress={() => router.back()} />
+          <TextButton label="Go back" onPress={goBack} />
         </View>
       );
     }

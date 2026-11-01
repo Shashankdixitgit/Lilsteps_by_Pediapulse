@@ -1,6 +1,8 @@
+import { Ionicons } from '@expo/vector-icons';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { PressableScale } from '@/components/ui/PressableScale';
+import { useNarrowLayout } from '@/components/ui/useNarrowLayout';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import type { DoctorRow } from '@/hooks/useDoctors';
 
@@ -40,6 +42,7 @@ export function BookPill({ label = 'Book' }: { label?: string }) {
 
 export function DoctorCardCompact({ doctor, qualifications, onBook, inList, divider }: DoctorCardCompactProps) {
   const available = doctor.is_available;
+  const narrow = useNarrowLayout();
   const book = () => {
     if (available) onBook(doctor.id);
   };
@@ -57,16 +60,17 @@ export function DoctorCardCompact({ doctor, qualifications, onBook, inList, divi
         <Text style={styles.avatarText}>{doctorInitial(doctor.name)}</Text>
       </View>
       <View style={styles.text}>
-        <Text style={styles.name} numberOfLines={1}>
-          {doctor.name}
-        </Text>
-        <Text style={styles.spec} numberOfLines={1}>
-          {doctor.specialisation}
-        </Text>
+        {/* Never cut with "…" (review must-fix 6): names wrap. */}
+        <Text style={styles.name}>{doctor.name}</Text>
+        <Text style={styles.spec}>{doctor.specialisation}</Text>
         {qualifications ? <Text style={styles.quals}>{qualifications}</Text> : null}
       </View>
       {available ? (
-        <BookPill />
+        narrow ? (
+          <Ionicons name="chevron-forward" size={18} color={AppColors.outline} />
+        ) : (
+          <BookPill />
+        )
       ) : (
         <Text style={styles.unavailable}>Unavailable</Text>
       )}

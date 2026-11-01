@@ -931,10 +931,13 @@ const styles = StyleSheet.create({
     marginHorizontal: -20,
     marginBottom: -16,
   },
+  // The whole row (box + sentence) is the tap target, at least 44 high
+  // (review should-fix 16).
   checkboxRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 10,
+    minHeight: 44,
   },
   checkbox: {
     width: 22,

@@ -7,8 +7,9 @@
  *
  * Flow: hold_slot holds the slot ('awaiting_payment') → startConsultPayment
  * returns a Razorpay Payment Link →
- *  - native: we open it in an auth session that closes when Razorpay
- *    redirects back to RETURN_PATH, then ask the server for the status;
+ *  - native: we open it in an auth session (lib/paymentBrowser: ephemeral
+ *    on iOS, so no sign-in alert) that closes when Razorpay redirects back
+ *    to RETURN_PATH, then ask the server for the status;
  *  - web: a popup opened after two network calls is blocked, so the whole
  *    page goes to Razorpay and app/payment-return.tsx picks up from the
  *    booking saved in sessionStorage (PENDING_KEY).
@@ -16,13 +17,17 @@
  * and also sends the confirmation SMS and makes the Meet link.
  */
 import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
+import { openPaymentPage } from '@/lib/paymentBrowser';
+import { isSessionEndedError, SESSION_ENDED_TEXT } from '@/lib/sessionEnded';
 import { supabase } from '@/lib/supabase';
 import { SUPPORT_EMAIL } from '@/lib/support';
 
 export const CONSULT_PRICE_LABEL = '₹449';
+
+/** Gap between status checks after the payment page closes (tests shorten it). */
+export const paymentRecheckMs = { value: 2000 };
 
 /** app/payment-return.tsx — where Razorpay sends the browser back. */
 export const RETURN_PATH = 'payment-return';
@@ -71,6 +76,8 @@ const CALLBACK_KEYS = [
 ] as const;
 
 async function errorText(error: unknown, fallback: string): Promise<string> {
+  // The session ended on the server: the app is signing out (lib/sessionEnded).
+  if (isSessionEndedError(error)) return SESSION_ENDED_TEXT;
   const context = (error as { context?: Response } | null)?.context;
   if (context && typeof context.json === 'function') {
     try {
@@ -170,7 +177,8 @@ export async function payForConsult(appointmentId: string, label?: string): Prom
   let started: { url?: string; state?: PaymentState };
   try {
     started = await call<{ url?: string; state?: PaymentState }>(
-      { action: 'start', appointmentId, returnUrl },
+      // Android: come back through the web hand-off page (razorpay-return).
+      { action: 'start', appointmentId, returnUrl, handoff: Platform.OS === 'android' },
       PAYMENT_PAGE_FAILED_TEXT,
     );
   } catch (e) {
@@ -185,13 +193,23 @@ export async function payForConsult(appointmentId: string, label?: string): Prom
     return { state: 'redirecting' };
   }
 
-  const result = await WebBrowser.openAuthSessionAsync(started.url, returnUrl);
-  const returnedUrl = result.type === 'success' ? result.url : null;
+  // iOS: an ephemeral session (no "wants to use rzp.io to Sign In" alert);
+  // the page also closes by itself if the server hears "paid" first.
+  const { returnedUrl } = await openPaymentPage(
+    started.url,
+    returnUrl,
+    Platform.OS === 'ios'
+      ? async () => (await checkConsultPayment(appointmentId)).state === 'paid'
+      : undefined,
+  );
 
-  // The webhook can land a moment after the browser closes: ask a few times.
+  // The webhook can land a moment after the browser closes, and on Android
+  // the redirect back can be blocked after a UPI app switch (no returned
+  // URL even though the parent paid): keep asking for a while either way.
   let last = await checkConsultPayment(appointmentId, returnedUrl);
-  for (let i = 0; i < 3 && last.state === 'pending' && returnedUrl; i++) {
-    await new Promise((r) => setTimeout(r, 2000));
+  const tries = returnedUrl ? 5 : 3;
+  for (let i = 0; i < tries && last.state === 'pending'; i++) {
+    await new Promise((r) => setTimeout(r, paymentRecheckMs.value));
     last = await checkConsultPayment(appointmentId, returnedUrl);
   }
   return last;

@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { AuthError, Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { dbg } from '@/lib/debug';
-import { WEB_DEMO } from '@/lib/webDemo';
+import { demoLimitText, WEB_DEMO } from '@/lib/webDemo';
 import { analytics, crash } from '@/lib/observability';
 import { haptic } from '@/components/ui/useMotion';
 
@@ -425,6 +425,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     if (error || !data?.ok) {
       dbg.authError('demo-signup', error ?? data);
+      // Too many demo sign-ups this hour (often a team on one office Wi-Fi):
+      // say so, and point to the sample family (mobile review must-fix 7).
+      const status = (error as { context?: { status?: number } } | null)?.context?.status;
+      if (status === 429) return { error: demoLimitText(), needsCode: false, isNewUser: false };
       return { error: AUTH_COPY.generic, needsCode: false, isNewUser: false };
     }
     const signIn = await supabase.auth.signInWithPassword({ email, password });
@@ -591,7 +595,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     dbg.auth('signOut');
-    await supabase.auth.signOut();
+    // This phone only. A global sign-out revoked the parent's other phones
+    // too, which then failed with "Invalid session" (mobile review must-fix 8).
+    await supabase.auth.signOut({ scope: 'local' });
     setSession(null);
     setHasChildren(null);
   }

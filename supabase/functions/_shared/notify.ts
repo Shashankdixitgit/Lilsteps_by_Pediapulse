@@ -124,7 +124,17 @@ async function sendExpoPush(
       'Accept-Encoding': 'gzip, deflate',
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ to: token, title, body, data, sound: 'default' }),
+    // Reminders go to the app's high-importance Android channel and as
+    // high priority, so they pop up (review should-fix 2). An app without
+    // that channel yet falls back to its default one.
+    body: JSON.stringify({
+      to: token,
+      title,
+      body,
+      data,
+      sound: 'default',
+      ...(data?.channel === 'reminders' ? { channelId: 'reminders', priority: 'high' } : null),
+    }),
   });
 
   if (!res.ok) {

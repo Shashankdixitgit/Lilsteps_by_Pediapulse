@@ -1,5 +1,5 @@
 /** Phone + SMS sign-in, used only when PHONE_AUTH is on (SMS needs DLT first). */
-import { type Href, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,9 +13,11 @@ import { AppColors } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
 import { DEMO_LOGIN, toMobileDigits, useAuth } from '@/context/auth';
 import { takeReturnTo } from '@/lib/authRedirect';
+import { openReturnTo } from '@/lib/navigation';
 import { dbg } from '@/lib/debug';
 import { DEMO_FAMILY_PHONE, DEMO_OTP, WEB_DEMO } from '@/lib/webDemo';
 import { formatPhone, isValidPhone, normalisePhone } from '@/lib/phone';
+import { SESSION_ENDED_TEXT, takeSessionEnded } from '@/lib/sessionEnded';
 
 export function PhoneLoginScreen() {
   const insets = useSafeAreaInsets();
@@ -27,7 +29,8 @@ export function PhoneLoginScreen() {
   const [otp, setOtp] = useState(WEB_DEMO ? DEMO_OTP : '');
   const [step, setStep] = useState<'phone' | 'otp'>('phone');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Sent here because the server ended this phone's session (lib/sessionEnded).
+  const [error, setError] = useState<string | null>(() => (takeSessionEnded() ? SESSION_ENDED_TEXT : null));
   // The code box takes focus as soon as the code is sent (R2-17). Native
   // uses autoFocus; on web it was lost while the step changed, so the field
   // (the only one-time-code input) is focused once it is on the page.
@@ -96,7 +99,8 @@ export function PhoneLoginScreen() {
       // A protected link opened while signed out (AuthGate) opens now.
       const back = takeReturnTo();
       dbg.nav(`Login → ${back ?? 'Tabs'} (returning user)`);
-      router.replace((back ?? '/(tabs)') as Href);
+      if (back) openReturnTo(back);
+      else router.replace('/(tabs)');
     }
   }
 

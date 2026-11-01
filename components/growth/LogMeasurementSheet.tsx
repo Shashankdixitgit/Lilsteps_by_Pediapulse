@@ -163,6 +163,9 @@ export function LogMeasurementSheet({
             accessibilityLabel={`${childName}'s weight in kilograms`}
             error={weightCheck.error}
           />
+          {/* Each warning sits under its own field, also when the two fields
+              stack on a narrow phone (review should-fix 19). */}
+          {weightCheck.warning ? <MeasureWarning text={weightCheck.warning} /> : null}
         </View>
         <View style={styles.cell}>
           <TextInputField
@@ -176,10 +179,9 @@ export function LogMeasurementSheet({
             accessibilityLabel={`${childName}'s ${heightLabel.toLowerCase()} in centimetres`}
             error={heightCheck.error}
           />
+          {heightCheck.warning ? <MeasureWarning text={heightCheck.warning} /> : null}
         </View>
       </View>
-      {weightCheck.warning ? <MeasureWarning text={weightCheck.warning} /> : null}
-      {heightCheck.warning ? <MeasureWarning text={heightCheck.warning} /> : null}
 
       <DateField label="Date measured" value={date} onChange={setDate} min={dob ?? undefined} max={today} />
 
@@ -212,13 +214,13 @@ function MeasureWarning({ text }: { text: string }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  cell: { flexGrow: 1, flexBasis: 140, minWidth: 0 },
+  cell: { flexGrow: 1, flexBasis: 140, minWidth: 0, gap: 6 },
   multiline: { minHeight: 84, paddingTop: 12 },
   center: { textAlign: 'center' },
   deleteBtn: { alignSelf: 'center' },
   errorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   errorText: { fontFamily: FontFamily.medium, fontSize: 12, color: AppColors.danger, flexShrink: 1 },
-  warningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: -8, marginLeft: 2 },
+  warningRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginLeft: 2 },
   warningIcon: { marginTop: 1 },
   warningText: { ...typography.caption, color: AppColors.warning, flex: 1 },
 });

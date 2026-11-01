@@ -115,6 +115,10 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.card,
     borderWidth: 1,
     borderColor: AppColors.border,
+    // A long answer (a milestone sentence) wraps inside its chip instead of
+    // running off the screen edge (mobile review must-fix 5).
+    maxWidth: '100%',
+    flexShrink: 1,
   },
   chipSelected: {
     backgroundColor: AppColors.mintSurface,
@@ -125,6 +129,7 @@ const styles = StyleSheet.create({
     backgroundColor: AppColors.surfaceContainer,
   },
   chipText: {
+    flexShrink: 1,
     fontFamily: FontFamily.medium,
     fontSize: 13,
     lineHeight: 18,

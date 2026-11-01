@@ -17,6 +17,8 @@ export interface CancelledConsultItemProps {
   byDoctor: boolean;
   /** Hairline top divider when stacked inside one parent list card. */
   divider?: boolean;
+  /** Pill style: cancelled (default) or waiting for the doctor's notes. */
+  tone?: 'cancelled' | 'waiting';
 }
 
 /**
@@ -32,6 +34,7 @@ export function CancelledConsultItem({
   statusLabel,
   byDoctor,
   divider,
+  tone = 'cancelled',
 }: CancelledConsultItemProps) {
   const meta = `${whenLabel(date, time)} · ${doctorName}`;
   const title = concern?.trim() || 'Consultation';
@@ -39,16 +42,18 @@ export function CancelledConsultItem({
     <View
       style={[styles.row, divider && styles.divider]}
       accessible
-      accessibilityLabel={`${title}, ${meta}. ${statusLabel}${byDoctor ? ', cancelled by the doctor' : ''}`}
+      accessibilityLabel={`${title}, ${meta}. ${statusLabel}${byDoctor && tone === 'cancelled' ? ', cancelled by the doctor' : ''}`}
     >
-      <Text style={styles.title} numberOfLines={1}>
+      <Text style={styles.title} numberOfLines={2}>
         {title}
       </Text>
-      <Text style={styles.meta} numberOfLines={1}>
-        {meta}
-      </Text>
+      <Text style={styles.meta}>{meta}</Text>
       <View style={styles.pillRow}>
-        <StatusPill tone="neutral" icon="close-circle-outline" label={statusLabel} />
+        <StatusPill
+          tone={tone === 'waiting' ? 'info' : 'neutral'}
+          icon={tone === 'waiting' ? 'time-outline' : 'close-circle-outline'}
+          label={statusLabel}
+        />
         {byDoctor ? <Text style={styles.meta}>by the doctor</Text> : null}
       </View>
     </View>

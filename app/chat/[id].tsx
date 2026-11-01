@@ -19,8 +19,9 @@ import { layout, typography } from '@/styles/global';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/auth';
 import { useMessages } from '@/hooks/useMessages';
-import { formatDate } from '@/lib/date';
+import { formatDate, formatClockTime } from '@/lib/date';
 import { clinicToday, formatSlotTime } from '@/components/consult/appointmentFormat';
+import { KEYBOARD_BEHAVIOR } from '@/lib/keyboard';
 
 interface ConversationInfo {
   id: string;
@@ -31,10 +32,10 @@ interface ConversationInfo {
   consult_today: string | null;
 }
 
-/** Message time, 12h en-IN ("2:05 pm"); adds the date for older days. */
+/** Message time, one format on every phone ("2:05 PM"); adds the date for older days. */
 function formatTime(iso: string) {
   const d = new Date(iso);
-  const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const time = formatClockTime(d);
   if (d.toDateString() === new Date().toDateString()) return time;
   return `${formatDate(d)}, ${time}`;
 }
@@ -132,7 +133,7 @@ export default function ChatScreen() {
 
       <KeyboardAvoidingView
         style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        behavior={KEYBOARD_BEHAVIOR}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         {loading ? (

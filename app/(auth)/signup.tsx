@@ -51,6 +51,15 @@ function EmailSignupScreen() {
   const [step, setStep] = useState<'details' | 'code'>('details');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A problem with one field is shown under that field (red border), and goes
+  // away as soon as the parent edits it (review should-fix 20).
+  const [fieldError, setFieldError] = useState<{ field: 'name' | 'email' | 'password'; message: string } | null>(null);
+  const errorFor = (field: 'name' | 'email' | 'password') =>
+    fieldError?.field === field ? fieldError.message : undefined;
+  const edit = (field: 'name' | 'email' | 'password', set: (v: string) => void) => (v: string) => {
+    set(v);
+    if (fieldError?.field === field) setFieldError(null);
+  };
 
   /** New parent: stamp the name they typed onto the parents row, then onboarding. */
   async function finish(isNewUser: boolean) {
@@ -73,20 +82,22 @@ function EmailSignupScreen() {
 
   async function handleCreate() {
     if (loading) return; // Enter and the button can both fire
+    setError(null);
     if (!name.trim()) {
-      setError('Please enter your name');
+      setFieldError({ field: 'name', message: 'Please enter your name' });
       return;
     }
     const e = normaliseEmail(email);
     if (!isValidEmail(e)) {
-      setError('Enter your email address (e.g. priya@gmail.com)');
+      setFieldError({ field: 'email', message: 'Enter your email address (e.g. priya@gmail.com)' });
       return;
     }
     const problem = passwordProblem(password);
     if (problem) {
-      setError(problem);
+      setFieldError({ field: 'password', message: problem });
       return;
     }
+    setFieldError(null);
     setLoading(true);
     setError(null);
     const r = await signUpWithEmail(name, e, password);
@@ -175,11 +186,18 @@ function EmailSignupScreen() {
           autoCapitalize="words"
           autoComplete="name"
           value={name}
-          onChangeText={setName}
+          onChangeText={edit('name', setName)}
           returnKeyType="next"
+          error={errorFor('name')}
         />
-        <EmailField value={email} onChangeText={setEmail} />
-        <PasswordField value={password} onChangeText={setPassword} onSubmit={handleCreate} isNew />
+        <EmailField value={email} onChangeText={edit('email', setEmail)} error={errorFor('email')} />
+        <PasswordField
+          value={password}
+          onChangeText={edit('password', setPassword)}
+          onSubmit={handleCreate}
+          isNew
+          error={errorFor('password')}
+        />
       </View>
       <AuthError message={error} />
       <GradientButton label="Create account" loading={loading} onPress={handleCreate} style={authStyles.submitButton} />

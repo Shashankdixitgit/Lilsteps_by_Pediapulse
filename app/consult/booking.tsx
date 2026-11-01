@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { doctorInitial, whenLabel } from '@/components/consult/appointmentFormat';
 import { BookPill } from '@/components/consult/DoctorCardCompact';
+import { useNarrowLayout } from '@/components/ui/useNarrowLayout';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
@@ -137,6 +138,17 @@ function nextFreeText(next: FreeSlot | null, loading: boolean): string | null {
   return loading ? null : 'No free times in the next 2 weeks';
 }
 
+/**
+ * Names, clinics and times are never cut with "…" (review must-fix 6): on a
+ * small phone or with larger text the Book pill gives its room to the text
+ * and a chevron shows the whole row is the button.
+ */
+function BookAffordance() {
+  const narrow = useNarrowLayout();
+  if (!narrow) return <BookPill />;
+  return <Ionicons name="chevron-forward" size={18} color={AppColors.outline} />;
+}
+
 /** First row: book whichever doctor is free soonest. */
 function EarliestRow({
   earliest,
@@ -166,14 +178,10 @@ function EarliestRow({
         <Ionicons name="flash-outline" size={Size.iconRow} color={AppColors.primary} />
       </View>
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>
-          Earliest available doctor
-        </Text>
-        <Text style={typography.meta} numberOfLines={2}>
-          {sub}
-        </Text>
+        <Text style={styles.name}>Earliest available doctor</Text>
+        <Text style={typography.meta}>{sub}</Text>
       </View>
-      {earliest ? <BookPill /> : null}
+      {earliest ? <BookAffordance /> : null}
     </PressableScale>
   );
 }
@@ -211,19 +219,11 @@ function DoctorRowItem({
         <Text style={styles.avatarText}>{initial}</Text>
       </View>
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>
-          {doc.name}
-        </Text>
-        {meta ? (
-          <Text style={typography.meta} numberOfLines={1}>
-            {meta}
-          </Text>
-        ) : null}
+        <Text style={styles.name}>{doc.name}</Text>
+        {meta ? <Text style={typography.meta}>{meta}</Text> : null}
         {qualifications ? <Text style={typography.caption}>{qualifications}</Text> : null}
         {nextText ? (
-          <Text style={[typography.caption, next && styles.nextFree]} numberOfLines={1}>
-            {nextText}
-          </Text>
+          <Text style={[typography.caption, next && styles.nextFree]}>{nextText}</Text>
         ) : null}
         {noVideoLink ? (
           <View style={styles.noLinkRow}>
@@ -232,7 +232,7 @@ function DoctorRowItem({
           </View>
         ) : null}
       </View>
-      <BookPill />
+      <BookAffordance />
     </PressableScale>
   );
 }

@@ -5,7 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { GradientButton } from '@/components/gradient-button';
 import { StatusPill } from '@/components/ui/StatusPill';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
-import { SLOT_NOT_KEPT_TEXT, useConsultCheckout } from '@/hooks/useConsultCheckout';
+import { confirmReleaseSlot, SLOT_NOT_KEPT_TEXT, SLOT_RELEASED_TEXT, useConsultCheckout } from '@/hooks/useConsultCheckout';
 import { cancelConsult, CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 
 import { CONSULT_MINUTES, doctorInitial, doctorShortName, whenLabel } from './appointmentFormat';
@@ -57,6 +57,7 @@ export function PendingPaymentCard({
   const [cancelling, setCancelling] = useState(false);
   /** The payment page didn't open and the hold was let go: only the message stays. */
   const [released, setReleased] = useState(false);
+  const [releasedNote, setReleasedNote] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const when = whenLabel(date, time);
   const left = minutesLeft(holdExpiresAt, now);
@@ -89,11 +90,15 @@ export function PendingPaymentCard({
   }
 
   async function cancel() {
+    if (!(await confirmReleaseSlot(when))) return;
     setError(null);
     setCancelling(true);
     try {
       await cancelConsult(appointmentId);
-      onSettled();
+      // Say so before the card goes (review should-fix 6).
+      setReleased(true);
+      setReleasedNote(true);
+      setTimeout(onSettled, 2500);
     } catch {
       setError("Couldn't cancel the booking. Please try again.");
     } finally {
@@ -152,9 +157,9 @@ export function PendingPaymentCard({
           accessibilityLabel={`Cancel the unpaid booking with ${doctorShortName(doctorName)}, ${when}`}
         />
       )}
-      {notice || error ? (
+      {notice || error || releasedNote ? (
         <Text style={[styles.hint, error ? styles.error : null]} accessibilityRole="alert">
-          {error ?? notice}
+          {error ?? (releasedNote ? SLOT_RELEASED_TEXT : notice)}
         </Text>
       ) : null}
     </View>

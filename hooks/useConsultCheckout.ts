@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
+import { confirmAsync } from '@/lib/confirm';
+
 import {
   bookWithCarePlan,
   cancelConsult,
@@ -18,6 +20,20 @@ import {
 
 /** Shown when the payment page could not be opened; the hold is dropped. */
 export const SLOT_NOT_KEPT_TEXT = "Couldn't open the payment page. Your slot was not kept — please try again.";
+
+/**
+ * Ask before giving an unpaid slot back (review should-fix 6): Cancel sits
+ * right under the big pay button, and one tap used to release the slot.
+ */
+export function confirmReleaseSlot(when?: string): Promise<boolean> {
+  return confirmAsync(
+    'Release this slot?',
+    `${when ? `${when} will` : 'This time will'} be offered to other families. You can book another time later.`,
+    { confirmLabel: 'Release slot', cancelLabel: 'Keep it', destructive: true },
+  );
+}
+
+export const SLOT_RELEASED_TEXT = 'Slot released. You can book another time whenever you like.';
 
 /** The slot a hold is for; a hold for another target is dropped first. */
 export interface HoldTarget {

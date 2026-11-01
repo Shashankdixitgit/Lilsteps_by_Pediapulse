@@ -6,7 +6,7 @@
  * Clinic time is IST (no DST), and time_slots store IST wall-clock times, so
  * everything here is computed in Asia/Kolkata regardless of device zone.
  */
-import { formatDate } from '@/lib/date';
+import { formatDate, weekdayShort } from '@/lib/date';
 
 export const CLINIC_TZ = 'Asia/Kolkata';
 const IST_OFFSET = '+05:30';
@@ -75,7 +75,7 @@ export function relativeDay(iso: string, now: Date = new Date()): 'today' | 'tom
 /** Short weekday for an ISO date ("Wed"). */
 function weekday(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-IN', { weekday: 'short', timeZone: 'UTC' });
+  return weekdayShort(new Date(y, m - 1, d));
 }
 
 /**

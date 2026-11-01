@@ -241,6 +241,7 @@ const styles = StyleSheet.create({
   },
   textBtn: {
     minHeight: 44,
+    minWidth: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',

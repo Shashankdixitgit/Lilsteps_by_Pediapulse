@@ -25,7 +25,7 @@ import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { useAuth } from '@/context/auth';
 import { useChild } from '@/context/child';
 import { useHealthNotes, type HealthNoteRow } from '@/hooks/useHealthNotes';
-import { formatDate } from '@/lib/date';
+import { formatDate, formatClockTime } from '@/lib/date';
 import { supabase } from '@/lib/supabase';
 import { typography } from '@/styles/global';
 import { WEB_DEMO } from '@/lib/webDemo';
@@ -40,10 +40,10 @@ const SEVERITY: Record<number, { label: string; tone: StatusTone }> = {
   4: { label: 'Urgent', tone: 'danger' },
 };
 
-/** "Today · 4:05 pm", "12 Oct · 9:30 am" (en-IN, device time). */
+/** "Today · 4:05 PM", "12 Oct · 9:30 AM" (en-IN, device time). */
 function formatStamp(value: string | Date): string {
   const d = value instanceof Date ? value : new Date(value);
-  const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true });
+  const time = formatClockTime(d);
   const day = d.toDateString() === new Date().toDateString() ? `Today, ${formatDate(d)}` : formatDate(d);
   return `${day} · ${time}`;
 }

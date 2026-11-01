@@ -23,6 +23,7 @@ import { HeaderChildAvatar } from '@/components/HeaderChildAvatar';
 import { TabScreenLayout } from '@/components/TabScreenLayout';
 import { useTabBarSpace } from '@/components/home/tabBarSpace';
 import { useCompactWidth } from '@/components/home/useCompactWidth';
+import { useNarrowLayout } from '@/components/ui/useNarrowLayout';
 import { TextButton } from '@/components/gradient-button';
 import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { useChild } from '@/context/child';
@@ -58,6 +59,7 @@ export default function GrowthScreen() {
   const [selectedTab, setChartTab] = useState<ChartTab>('weight');
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('All');
   const compact = useCompactWidth();
+  const narrowLayout = useNarrowLayout();
   const [showSheet, setShowSheet] = useState(false);
   // The entry being edited; null = logging a new one.
   const [editing, setEditing] = useState<GrowthRow | null>(null);
@@ -267,8 +269,9 @@ export default function GrowthScreen() {
           style={({ pressed }) => [styles.logBtn, pressed && styles.logBtnPressed]}
         >
           <Ionicons name="add" size={18} color={AppColors.secondary} />
-          {/* At 200% zoom the header has no room for the word; the icon keeps its label (A3). */}
-          {compact ? null : <Text style={styles.logLabel}>Log</Text>}
+          {/* Small phone / larger text: no room for the word next to the
+              child's name, so the icon keeps its label (A3, review should-fix 10). */}
+          {compact || narrowLayout ? null : <Text style={styles.logLabel}>Log</Text>}
         </Pressable>
         <HeaderChildAvatar />
       </View>
@@ -417,7 +420,7 @@ export default function GrowthScreen() {
           ) : (
             <View style={styles.historyCard}>
               <View style={styles.historyHeader}>
-                <Text style={styles.historyHeaderCell}>Date</Text>
+                {narrowLayout ? null : <Text style={styles.historyHeaderCell}>Date</Text>}
                 <Text style={styles.historyHeaderCell}>Weight</Text>
                 <Text style={styles.historyHeaderCell}>{heightWord}</Text>
                 <View style={styles.historyHeaderSpacer} />
@@ -453,7 +456,7 @@ export default function GrowthScreen() {
 
 const styles = StyleSheet.create({
   headerTitle: { flexShrink: 1 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0 },
   logBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -525,14 +528,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignSelf: 'center',
-    minHeight: 32,
+    minHeight: 50,
     padding: 3,
     borderRadius: Radius.full,
     backgroundColor: AppColors.surfaceContainer,
   },
+  // 44 high: easy to tap (review should-fix 16).
   filterChip: {
     minWidth: 52,
-    minHeight: 26,
+    minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 12,
