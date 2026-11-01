@@ -75,7 +75,7 @@ test.describe('Booking → queue → consultation lifecycle', () => {
       .eq('id', DOCTOR_ID);
 
     await signInAsDoctor(page);
-    await page.goto(`/consultations/${apptId}`);
+    await page.goto(`./consultations/${apptId}`);
 
     const startVideo = page.getByRole('link', { name: /^start video$/i });
     await expect(startVideo).toBeVisible();

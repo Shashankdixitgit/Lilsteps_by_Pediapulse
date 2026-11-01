@@ -32,6 +32,9 @@ export async function proxy(req: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // nextUrl.pathname excludes the basePath ('/doctor/login' -> '/login'), and
+  // redirects built from req.nextUrl.clone() put it back. Never build a
+  // redirect with new URL('/x', req.url): that drops the basePath.
   const path = req.nextUrl.pathname;
   const isLoginRoute = path.startsWith('/login');
   // /v/<code> is the public video room (used by parents via the mobile app),
@@ -67,8 +70,12 @@ export async function proxy(req: NextRequest) {
   }
 
   if (user && isLoginRoute) {
-    const target = safeNext(req.nextUrl.searchParams.get('next'));
-    return NextResponse.redirect(new URL(target, req.nextUrl.origin));
+    // Clone keeps the basePath (/doctor); new URL(target, origin) would drop it.
+    const target = new URL(safeNext(req.nextUrl.searchParams.get('next')), 'http://n');
+    const url = req.nextUrl.clone();
+    url.pathname = target.pathname;
+    url.search = target.search;
+    return NextResponse.redirect(url);
   }
 
   return res;

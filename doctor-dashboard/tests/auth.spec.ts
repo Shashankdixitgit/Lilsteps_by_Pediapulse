@@ -9,7 +9,7 @@ const PASSWORD = process.env.DOCTOR_PASSWORD!;
 
 test.describe('Doctor auth', () => {
   test('rejects bad credentials', async ({ page }) => {
-    await page.goto('/login');
+    await page.goto('./login');
     await page.getByLabel(/email/i).fill('not-a-doctor@example.com');
     await page.getByLabel(/password/i).fill('wrong-password');
     await page.getByRole('button', { name: /enter/i }).click();
@@ -21,7 +21,7 @@ test.describe('Doctor auth', () => {
   });
 
   test('signs in a real doctor and lands on the queue', async ({ page }) => {
-    await page.goto('/login');
+    await page.goto('./login');
     await page.getByLabel(/email/i).fill(EMAIL);
     await page.getByLabel(/password/i).fill(PASSWORD);
     await page.getByRole('button', { name: /enter/i }).click();
@@ -37,7 +37,7 @@ test.describe('Doctor auth', () => {
   });
 
   test('sign-out returns to /login', async ({ page }) => {
-    await page.goto('/login');
+    await page.goto('./login');
     await page.getByLabel(/email/i).fill(EMAIL);
     await page.getByLabel(/password/i).fill(PASSWORD);
     await page.getByRole('button', { name: /enter/i }).click();
