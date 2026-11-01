@@ -17,12 +17,14 @@ test.describe('Availability flow', () => {
     await page.getByRole('link', { name: /^availability$/i }).click();
     await expect(page).toHaveURL(/\/availability/);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(/availability/i);
-    await expect(page.getByRole('heading', { name: /generate/i, level: 2 })).toBeVisible();
+    await page.getByRole('button', { name: /add slots/i }).click();
+    await expect(page.getByRole('heading', { name: /add slots/i, level: 2 })).toBeVisible();
   });
 
   test('generate window creates slots and they show in the list', async ({ page }) => {
     await signInAsDoctor(page);
     await page.goto('./availability');
+    await page.getByRole('button', { name: /add slots/i }).click();
 
     // Fields don't have htmlFor/id, so position rather than label.
     const numbers = page.locator('input[type=number]');

@@ -8,8 +8,11 @@ function todayIso() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
-export function GenerateForm() {
-  const [startDate, setStartDate] = useState(todayIso());
+export function GenerateForm({ defaultStartDate }: { defaultStartDate?: string }) {
+  const [startDate, setStartDate] = useState(() => {
+    const today = todayIso();
+    return defaultStartDate && defaultStartDate > today ? defaultStartDate : today;
+  });
   const [days, setDays] = useState(7);
   // Clinic hours: mornings 10–13, evenings 17–20.
   const [startHour, setStartHour] = useState(10);
@@ -37,16 +40,7 @@ export function GenerateForm() {
   }
 
   return (
-    <div className="space-y-6 border-t border-[var(--hairline)] pt-6">
-      <div>
-        <h2 className="font-display text-[28px] leading-tight tracking-[-0.02em] text-[var(--ink)]">
-          <span className="font-display-italic">Generate</span> a window
-        </h2>
-        <p className="mt-2 font-display-italic text-[15px] text-[var(--ink-2)]">
-          Bulk-create slots for the next several days. Duplicates are skipped.
-        </p>
-      </div>
-
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">Clinic hours</span>
         {PRESETS.map((p) => (
@@ -65,7 +59,7 @@ export function GenerateForm() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
         <Field label="Start date" htmlFor="gen-start-date">
           <input
             id="gen-start-date"

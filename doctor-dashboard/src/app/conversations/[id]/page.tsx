@@ -125,76 +125,50 @@ export default async function ConversationPage({
     else grouped.push({ day, items: [m] });
   });
 
-  return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 sm:px-8">
-      {/* Editorial conversation header */}
-      <header className="py-10 fade-up">
-        <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
-          Patient
-        </div>
-        <h1 className="mt-2 flex flex-wrap items-center gap-3 font-display text-[36px] leading-tight text-[var(--ink)]">
-          {child?.name ?? 'Unknown'}
-          {urgentAppt && <UrgencyBadge urgency="urgent" />}
-        </h1>
-        {child && (
-          <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-            {computeAge(child.dob)} · {child.sex}
-          </p>
-        )}
-        <p
-          className={`mt-2 text-[14px] ${
-            (allergies && allergies.length > 0) || allergiesNotKnown
-              ? 'font-semibold text-[var(--ink)]'
-              : 'text-[var(--ink-3)]'
-          }`}
-        >
-          {allergies && allergies.length > 0
-            ? `⚠ Allergies: ${allergies.map(allergyText).join(', ')}`
-            : allergiesNotKnown
-              ? `⚠ ${noAllergiesLabel(true)}.`
-              : noAllergiesLabel(false)}
-        </p>
-        {urgentAppt && (
-          <p
-            role="note"
-            className="mt-3 border-l-[3px] border-[var(--ink)] bg-[var(--paper-soft)] px-4 py-2 text-[14px] leading-[1.5] text-[var(--ink)]"
-          >
-            <span className="font-semibold">Urgent visit</span> booked for {formatDayShort(urgentAppt.date)}{' '}
-            {formatSlotTime(urgentAppt.time)}. The AI check-in flagged this child to be seen today.{' '}
-            <Link href={`/consultations/${urgentAppt.id}`} className="link-underline">
-              Open the visit
-            </Link>
-          </p>
-        )}
-        <p className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-[var(--ink-3)]">
-          Parent ·{' '}
-          <span className="normal-case tracking-normal">
-            {chatParentLabel(conversation.parents)}
-          </span>
-        </p>
+  const hasAllergies = !!allergies && allergies.length > 0;
+  const allergyFlag = hasAllergies || allergiesNotKnown;
 
-        <div className="mt-7 flex flex-wrap items-center gap-3">
+  return (
+    <>
+      {/* Thread header: who, safety flags, quick actions */}
+      <header className="shrink-0 border-b border-[var(--hairline)] bg-[var(--card)] px-4 py-3 sm:px-5">
+        <div className="flex items-start gap-2">
+          <Link
+            href="/conversations"
+            aria-label="Back to all conversations"
+            className="-ml-1.5 mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full text-[var(--ink-2)] hover:bg-[var(--paper-soft)] md:hidden"
+          >
+            <svg aria-hidden viewBox="0 0 16 16" className="h-4 w-4">
+              <path d="M10 3.5 5.5 8l4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </Link>
+          <div className="min-w-0 flex-1">
+            <h2 className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[18px] font-semibold leading-tight text-[var(--ink)]">
+              <span className="truncate">{child?.name ?? 'Unknown'}</span>
+              {child && (
+                <span className="text-[13px] font-normal text-[var(--ink-3)]">
+                  {computeAge(child.dob)} · {child.sex}
+                </span>
+              )}
+              {urgentAppt && <UrgencyBadge urgency="urgent" />}
+            </h2>
+            <p className="mt-0.5 truncate text-[13px] text-[var(--ink-3)]">Parent · {chatParentLabel(conversation.parents)}</p>
+            <p className={`mt-1 text-[12.5px] ${allergyFlag ? 'font-semibold text-[var(--alert)]' : 'text-[var(--ink-3)]'}`}>
+              {hasAllergies
+                ? `⚠ Allergies: ${allergies.map(allergyText).join(', ')}`
+                : allergiesNotKnown
+                  ? `⚠ ${noAllergiesLabel(true)}.`
+                  : noAllergiesLabel(false)}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
           {consult && (
-            <Link href={`/consultations/${consult.id}`} className="editorial-btn-ghost">
-              Consultation · {formatDayShort(consult.date)} {formatSlotTime(consult.time)}
+            <Link href={`/consultations/${consult.id}`} className="editorial-btn-ghost btn-sm">
+              Open consult · {formatDayShort(consult.date)} {formatSlotTime(consult.time)}
             </Link>
           )}
-          {meetLink ? (
-            <a
-              href={meetLink}
-              target="_blank"
-              rel="noreferrer"
-              className="btn-go"
-            >
-              Start video
-            </a>
-          ) : null}
-          <Link
-            href={`/prescriptions?child=${child?.id ?? ''}`}
-            className="editorial-btn-ghost"
-          >
-            View prescriptions
-          </Link>
           <Link
             // A no-show visit can't carry a prescription (0050); the chat alone can.
             href={`/prescriptions/new?child=${child?.id ?? ''}${
@@ -202,72 +176,92 @@ export default async function ConversationPage({
                 ? `&appointment=${consult.id}`
                 : ''
             }`}
-            className="btn-peach"
+            className="btn-peach btn-sm"
           >
             Issue prescription
           </Link>
+          {meetLink ? (
+            <a href={meetLink} target="_blank" rel="noreferrer" className="btn-go btn-sm">
+              Start video
+            </a>
+          ) : null}
+          <Link
+            href={`/prescriptions?child=${child?.id ?? ''}`}
+            className="link-underline ml-1 text-[12.5px] font-medium text-[var(--ink-2)] hover:text-[var(--ink)]"
+          >
+            Past prescriptions
+          </Link>
         </div>
+
+        {urgentAppt && (
+          <p
+            role="note"
+            className="mt-2.5 rounded-lg border-l-[3px] border-[var(--ink)] bg-[var(--paper-soft)] px-3 py-2 text-[13px] leading-[1.45] text-[var(--ink)]"
+          >
+            <span className="font-semibold">Urgent visit</span> booked for {formatDayShort(urgentAppt.date)}{' '}
+            {formatSlotTime(urgentAppt.time)}. The AI check-in flagged this child to be seen today.{' '}
+            <Link href={`/consultations/${urgentAppt.id}`} className="link-underline font-medium">
+              Open the visit
+            </Link>
+          </p>
+        )}
       </header>
 
-      <section className="flex-1 border-t border-[var(--hairline)] py-10">
+      {/* Messages: their own scroll area, newest at the bottom */}
+      <section
+        data-thread-scroll
+        aria-label="Messages"
+        className="min-h-0 flex-1 overflow-y-auto bg-[var(--paper)] px-3 py-5 sm:px-6"
+      >
         {grouped.length === 0 ? (
-          <p className="py-16 text-center font-display text-[18px] text-[var(--ink-3)]">
-            No messages yet.
-          </p>
+          <p className="py-16 text-center text-[15px] text-[var(--ink-3)]">No messages yet. Say hello below.</p>
         ) : (
-          <div className="space-y-10">
+          <div className="space-y-6">
             {grouped.map((g) => (
               <div key={g.day}>
-                <div className="mb-6 flex items-baseline gap-3">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--ink-4)]">
+                <div className="mb-4 flex justify-center">
+                  <span className="rounded-full border border-[var(--hairline)] bg-[var(--card)] px-3 py-1 text-[11.5px] font-medium text-[var(--ink-3)]">
                     {g.day}
                   </span>
-                  <span className="h-px flex-1 bg-[var(--hairline)]" />
                 </div>
-                <ul className="space-y-4">
-                  {g.items.map((m) => (
-                    <li
-                      key={m.id}
-                      className={`flex ${
-                        m.sender === 'doctor' ? 'justify-end' : 'justify-start'
-                      }`}
-                    >
-                      <div
-                        className={`min-w-0 max-w-[78%] ${
-                          m.sender === 'doctor'
-                            ? 'border-r-2 border-[var(--ink)] pr-4 text-right'
-                            : 'border-l-2 border-[var(--accent)] pl-4'
-                        }`}
-                      >
-                        <div className="whitespace-pre-wrap font-sans text-[15.5px] leading-[1.55] text-[var(--ink)] [overflow-wrap:anywhere]">
-                          {m.content}
-                        </div>
+                <ul className="space-y-1.5">
+                  {g.items.map((m, i) => {
+                    const mine = m.sender === 'doctor';
+                    // Only the last of a run from one side shows its time.
+                    const next = g.items[i + 1];
+                    const endOfRun = !next || next.sender !== m.sender;
+                    return (
+                      <li key={m.id} className={`flex flex-col ${mine ? 'items-end' : 'items-start'} ${endOfRun ? 'pb-2' : ''}`}>
                         <div
-                          className={`mt-1.5 flex items-baseline gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--ink-4)] ${
-                            m.sender === 'doctor' ? 'justify-end' : ''
+                          className={`max-w-[85%] whitespace-pre-wrap px-3.5 py-2 text-[15px] leading-[1.45] text-[var(--ink)] [overflow-wrap:anywhere] sm:max-w-[70%] ${
+                            mine
+                              ? `rounded-2xl border border-[var(--ink)]/80 bg-[var(--lilac)] ${endOfRun ? 'rounded-br-md' : ''}`
+                              : `rounded-2xl border border-[var(--hairline-strong)] bg-[var(--card)] ${endOfRun ? 'rounded-bl-md' : ''}`
                           }`}
                         >
-                          <span>{m.sender === 'doctor' ? 'You' : 'Parent'}</span>
-                          <span className="text-[var(--hairline-strong)]">·</span>
-                          <span>{formatClock(m.created_at)}</span>
+                          {m.content}
                         </div>
-                      </div>
-                    </li>
-                  ))}
+                        {endOfRun && (
+                          <div className="mt-1 px-1 text-[11.5px] text-[var(--ink-4)]">
+                            {mine ? 'You' : 'Parent'} · {formatClock(m.created_at)}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             ))}
           </div>
         )}
+        <ScrollToLatest
+          count={messages?.length ?? 0}
+          lastFromDoctor={messages?.[messages.length - 1]?.sender === 'doctor'}
+        />
       </section>
 
       <Composer conversationId={id} />
-      {/* After the composer, so the newest message lands just above it. */}
-      <ScrollToLatest
-        count={messages?.length ?? 0}
-        lastFromDoctor={messages?.[messages.length - 1]?.sender === 'doctor'}
-      />
       <MessagesRealtime conversationId={id} />
-    </main>
+    </>
   );
 }
