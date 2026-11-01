@@ -64,13 +64,12 @@ export default async function SettingsPage() {
 
       <section className="border-t border-[var(--hairline)] pt-8">
         <h2 className="mb-2 font-display text-[22px] leading-tight text-[var(--ink)]">
-          Your video room
+          Your backup video room <span className="text-[15px] text-[var(--ink-3)]">(optional)</span>
         </h2>
         <p className="mb-5 text-[15px] leading-[1.55] text-[var(--ink-3)]">
-          Parents join this Google Meet room for every video consult with you.
-          {googleEmail
-            ? ' Google Calendar is connected, so bookings get their own Meet link and this room is the backup.'
-            : ''}
+          Every paid consult gets its own Google Meet room automatically, so you don&apos;t need to
+          set anything here. Add a room of your own only as a backup: it is used if a consult&apos;s
+          room could not be made.
         </p>
         <MeetLinkForm initialLink={meetLink} />
       </section>
@@ -93,9 +92,8 @@ export default async function SettingsPage() {
           <GoogleLink initialEmail={googleEmail} />
         ) : (
           <p className="text-[15px] leading-[1.55] text-[var(--ink-3)]">
-            Not switched on for this clinic yet. When it is, you can connect Google Calendar here
-            and every booking will get its own Meet link. Until then, parents use your video room
-            above.
+            Not needed: each paid consult already gets its own Meet room from the clinic account.
+            Connecting your own Google Calendar is not switched on for this clinic.
           </p>
         )}
       </section>

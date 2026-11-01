@@ -36,7 +36,7 @@ export type CalEvent = {
   status: string;
   /** Today's open visit whose slot has started. */
   late: boolean;
-  /** An open visit on a past day: still to be closed. */
+  /** An open visit whose slot is over (past day, or today after its end): still to be closed. */
   needsClosing: boolean;
 };
 
@@ -45,6 +45,8 @@ export type NextUp = {
   urgency: Urgency | undefined;
   when: string;
   meetLink: string | null;
+  /** The visit's video window (15 min before to 90 min after the start). */
+  video: 'before' | 'open' | 'closed';
 };
 
 type Nav = { anchor: string; view: CalendarView; month: string };
@@ -335,17 +337,41 @@ function DayColumn({
               color: s.text,
             }}
           >
-            <span className={`block truncate text-[12.5px] font-semibold ${e.kind === 'closed' ? 'line-through decoration-1' : ''}`}>
-              {e.childName}
-              {e.late && <span className="ml-1.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#b93d27]">Late</span>}
-            </span>
-            <span className="block truncate text-[11px] opacity-80">{compact ? minutesToLabel(e.start) : timeRange}</span>
+            {compact ? (
+              // Week view: columns are ~80px wide, so the first name only
+              // (full name in the title and aria-label), wrapping to two lines.
+              <>
+                <span
+                  className={`line-clamp-2 text-[12px] font-semibold leading-[1.15] [overflow-wrap:anywhere] ${e.kind === 'closed' ? 'line-through decoration-1' : ''}`}
+                >
+                  {firstName(e.childName)}
+                </span>
+                <span className="flex items-center gap-1 truncate text-[10px] leading-[1.2]">
+                  {/* Late / not closed: a red dot here (the word is in the title and aria-label). */}
+                  {e.late && <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#b93d27]" />}
+                  <span className="truncate opacity-80">{minutesToLabel(e.start)}</span>
+                </span>
+              </>
+            ) : (
+              <>
+                <span className={`block truncate text-[12.5px] font-semibold ${e.kind === 'closed' ? 'line-through decoration-1' : ''}`}>
+                  {e.childName}
+                  {e.late && <span className="ml-1.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.08em] text-[#b93d27]">Late</span>}
+                </span>
+                <span className="block truncate text-[11px] opacity-80">{timeRange}</span>
+              </>
+            )}
           </Link>
         );
       })}
       {isToday && <NowLine startHour={startHour} endHour={endHour} hourPx={HOUR_PX} />}
     </div>
   );
+}
+
+/** "Zara-Quinn Mehta" -> "Zara-Quinn": week-view blocks are too narrow for full names. */
+function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
 }
 
 function Agenda({ days, byDay, today }: { days: string[]; byDay: Map<string, CalEvent[]>; today: string }) {
@@ -409,7 +435,7 @@ function Agenda({ days, byDay, today }: { days: string[]; byDay: Map<string, Cal
 }
 
 function NextUpCard({ nextUp }: { nextUp: NextUp }) {
-  const { event: e, when, meetLink, urgency } = nextUp;
+  const { event: e, when, meetLink, urgency, video } = nextUp;
   const s = KIND_STYLE[e.kind];
   return (
     <div>
@@ -427,19 +453,21 @@ function NextUpCard({ nextUp }: { nextUp: NextUp }) {
         {urgency && urgency !== 'routine' && <UrgencyBadge urgency={urgency} className="mt-3" />}
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
-        {meetLink ? (
+        {video === 'open' && meetLink && (
           <a href={meetLink} target="_blank" rel="noreferrer" className="btn-go btn-sm">
             Join video
           </a>
-        ) : (
-          <Link href="/settings" className="btn-peach btn-sm">
-            Set video link
-          </Link>
         )}
         <Link href={`/consultations/${e.id}`} className="editorial-btn-ghost btn-sm">
           Open visit
         </Link>
       </div>
+      {video === 'before' && (
+        <p className="mt-2 text-[12px] text-[var(--ink-3)]">Video opens 15 min before the start.</p>
+      )}
+      {video === 'open' && !meetLink && (
+        <p className="mt-2 text-[12px] text-[var(--ink-3)]">No video link yet for this visit.</p>
+      )}
     </div>
   );
 }

@@ -13,7 +13,7 @@ import {
   shiftMonth,
   timeToMinutes,
 } from '@/lib/calendar';
-import { getCurrentDoctor, hasVideoLink } from '@/lib/doctor';
+import { getCurrentDoctor } from '@/lib/doctor';
 import {
   computeAge,
   formatDayLong,
@@ -24,12 +24,12 @@ import {
   nowIstTime,
   relativeDayLabel,
   todayIst,
+  videoWindow,
 } from '@/lib/format';
 import { Suspense } from 'react';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { FlashToast } from './flash-toast';
 import { CarePlanBadge, LateBadge, UrgencyBadge } from './urgency-badge';
-import { VideoLinkBanner } from './video-link-banner';
 import { Schedule, type CalEvent, type NextUp } from './schedule/schedule';
 
 type QueueRow = {
@@ -226,9 +226,16 @@ export default async function QueuePage({
     fetchConcerns(supabase, [...new Set(allRows.map((r) => r.id))]),
     fetchUrgencies(supabase, allRows),
   ]);
-  // Newest first: yesterday's unclosed visit is the one the doctor remembers.
+  // A visit needs closing once its 30-minute slot is over (IST) and it is
+  // still open: past days, and today's visits whose slot has ended. While the
+  // slot runs it is "in progress" (Next up), not overdue.
+  const now = nowIstTime();
+  const nowMinutes = timeToMinutes(now);
+  const slotOver = (r: QueueRow): boolean =>
+    r.date < today || (r.date === today && timeToMinutes(r.time) + SLOT_MINUTES <= nowMinutes);
+  // Newest first: today's unclosed visit is the one the doctor remembers.
   const overdue = rows
-    .filter((a) => a.date < today)
+    .filter(slotOver)
     .sort((a, b) => `${b.date}T${b.time}`.localeCompare(`${a.date}T${a.time}`));
   // Urgent visits first within today (R2-11): an urgent 3-week-old used to sit
   // below a routine visit just because its slot was later. The rows arrive
@@ -240,13 +247,11 @@ export default async function QueuePage({
   const later = rows.filter((a) => a.date > today);
 
   // Today's open visits whose slot has started are marked Late.
-  const now = nowIstTime();
   const lateIds = new Set(todays.filter((a) => a.time <= now).map((a) => a.id));
 
   const today_str = formatDayLong(new Date().toISOString()).toUpperCase();
   const todayReady = todays.filter((a) => a.summary_ready).length;
 
-  const nowMinutes = timeToMinutes(now);
   const toEvent = (r: QueueRow): CalEvent => ({
     id: r.id,
     date: r.date,
@@ -257,7 +262,7 @@ export default async function QueuePage({
     kind: eventKind(r.status, urgencies.get(r.id), !!r.ai_summary_id),
     status: r.status,
     late: lateIds.has(r.id),
-    needsClosing: r.status === 'upcoming' && r.date < today,
+    needsClosing: r.status === 'upcoming' && slotOver(r),
   });
   const events = rangeRows.map(toEvent);
 
@@ -281,8 +286,10 @@ export default async function QueuePage({
         event: toEvent(ahead[0]),
         urgency: urgencies.get(ahead[0].id),
         when: whenLabel(ahead[0]),
-        // Per-appointment Calendar-event Meet link, else the doctor's permanent room.
+        // Per-appointment Meet room (made for every paid consult), else the
+        // doctor's own backup room.
         meetLink: ahead[0].meet_link ?? doctor.defaultMeetLink ?? null,
+        video: videoWindow(ahead[0].status, ahead[0].date, ahead[0].time),
       }
     : null;
   const after = ahead.slice(1, 4).map((r) => ({ event: toEvent(r), when: whenLabel(r) }));
@@ -302,8 +309,6 @@ export default async function QueuePage({
         </div>
         <h1 className="mt-2 font-display text-[40px] leading-tight text-[var(--ink)]">Schedule</h1>
       </header>
-
-      {!hasVideoLink(doctor) && <VideoLinkBanner className="mt-8" />}
 
       {!error && (
         <Schedule

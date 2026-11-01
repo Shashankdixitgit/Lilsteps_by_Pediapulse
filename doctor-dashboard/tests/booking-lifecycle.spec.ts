@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { istNowPlus } from '../src/lib/format';
 import { signInAsDoctor } from './_helpers';
 import {
   ADMIN_SKIP_REASON,
@@ -57,8 +58,9 @@ test.describe('Booking → queue → consultation lifecycle', () => {
   test('start video falls back to default link when no per-appointment link', async ({ page }) => {
     const parent = await createTestParent();
     const childId = await createTestChild(parent.userId);
-    const date = isoOffsetDays(1);
-    const time = '12:00:00';
+    // Start video shows only inside the visit's video window (15 min before
+    // to 90 min after the start), so book a slot that started 5 minutes ago.
+    const { date, time } = istNowPlus(-5);
     await createTestSlot(date, time);
     const apptId = await bookTestAppointment({
       parentId: parent.userId,
