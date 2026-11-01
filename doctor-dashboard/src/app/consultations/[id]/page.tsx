@@ -17,6 +17,7 @@ import { CancelFollowupButton } from './cancel-followup-button';
 import { SlotPicker } from './slot-picker';
 import { fetchOpenSlots } from '@/lib/open-slots';
 import { OpenChatButton } from './open-chat-button';
+import { PrescriptionCard, type PrescriptionCardData } from '../../prescriptions/prescription-card';
 import { VisitNotesForm } from './visit-notes';
 
 type AppointmentRow = {
@@ -52,12 +53,7 @@ type CheckinSession = { id: string; ai_summary: CheckinSummary | null; initial_c
 
 type CheckinMessageRow = { id: string; role: string; content: string; created_at: string };
 
-type PrescriptionRow = {
-  id: string;
-  issued_at: string;
-  notes: string | null;
-  prescription_items: { id: string; medicine: string; dose: string; frequency: string; duration: string | null; notes: string | null; position: number }[];
-};
+type PrescriptionRow = PrescriptionCardData;
 
 type HealthNoteRow = {
   id: string;
@@ -178,7 +174,7 @@ export default async function ConsultationPage({
     fetchConcerns(supabase, [appointment.id]),
     supabase.from('health_notes').select('id, category, content, severity, noted_at').eq('child_id', child.id).order('noted_at', { ascending: false }).limit(HEALTH_NOTES_LIMIT).returns<HealthNoteRow[]>(),
     fetchAllergiesNotKnown(supabase, child.id),
-    supabase.from('prescriptions').select('id, issued_at, notes, prescription_items(id, medicine, dose, frequency, duration, notes, position)').eq('appointment_id', appointment.id).order('issued_at', { ascending: true }).returns<PrescriptionRow[]>(),
+    supabase.from('prescriptions').select('id, issued_at, notes, appointment_id, doctor_name, qualifications, registration_number, prescription_items(id, medicine, dose, frequency, duration, notes, position)').eq('appointment_id', appointment.id).order('issued_at', { ascending: true }).returns<PrescriptionRow[]>(),
     // The full check-in conversation behind the summary. Needs a doctor
     // SELECT policy on checkin_messages; without one this is simply empty.
     appointment.ai_summary_id
@@ -558,32 +554,8 @@ export default async function ConsultationPage({
               <Empty>None issued yet.</Empty>
             ) : (
               <div className="space-y-4">
-                {prescriptions.map((p, i) => (
-                  <div key={p.id}>
-                    <div className="text-[12px] text-[var(--ink-3)]">
-                      ℞ {i + 1} · {formatDateTime(p.issued_at)}
-                    </div>
-                    <ul className="mt-1 list-disc space-y-1 pl-5 text-[14px] text-[var(--ink)]">
-                      {[...p.prescription_items]
-                        .sort((a, b) => a.position - b.position)
-                        .map((it) => (
-                          <li key={it.id}>
-                            <span className="font-medium">{it.medicine}</span>
-                            <span className="text-[var(--ink-3)]">
-                              {' '}
-                              · {it.dose} · {it.frequency}
-                              {it.duration ? ` · ${it.duration}` : ''}
-                            </span>
-                            {it.notes && (
-                              <span className="block whitespace-pre-line break-words text-[13px] text-[var(--ink-2)]">
-                                {it.notes}
-                              </span>
-                            )}
-                          </li>
-                        ))}
-                    </ul>
-                    {p.notes && <p className="mt-1 whitespace-pre-line break-words text-[13px] text-[var(--ink-3)]">Note: {p.notes}</p>}
-                  </div>
+                {prescriptions.map((p) => (
+                  <PrescriptionCard key={p.id} rx={p} child={{ name: child.name, dob: child.dob }} linkConsult={false} />
                 ))}
               </div>
             )}

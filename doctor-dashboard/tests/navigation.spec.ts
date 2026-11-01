@@ -20,9 +20,7 @@ test.describe('Dashboard navigation', () => {
   test('queue → conversations → prescriptions via nav', async ({ page }) => {
     await page.getByRole('link', { name: /^messages\b/i }).click();
     await expect(page).toHaveURL(/\/conversations/);
-    await expect(page.getByRole('heading', { level: 1 })).toContainText(
-      /conversations/i,
-    );
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(/messages/i);
 
     await page.getByRole('link', { name: /^prescriptions$/i }).click();
     await expect(page).toHaveURL(/\/prescriptions/);

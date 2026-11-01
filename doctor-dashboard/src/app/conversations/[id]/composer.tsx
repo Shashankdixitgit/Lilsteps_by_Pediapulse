@@ -37,52 +37,47 @@ export function Composer({ conversationId }: { conversationId: string }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="sticky bottom-0 border-t border-[var(--hairline)] bg-[var(--paper)]/95 backdrop-blur-sm"
+      className="shrink-0 border-t border-[var(--hairline)] bg-[var(--card)] px-3 pb-3 pt-2.5 sm:px-5"
     >
-      <div className="flex items-end gap-4 py-5">
-        <div className="flex-1">
-          <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">
-            Reply
-          </div>
-          <textarea
-            ref={textareaRef}
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="A reply, in your own words…"
-            aria-label="Reply"
-            maxLength={MAX_MESSAGE}
-            readOnly={pending}
-            rows={2}
-            className="editorial-input resize-none"
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                (e.currentTarget.form as HTMLFormElement).requestSubmit();
-              }
-            }}
-          />
-          <div className="mt-1.5 flex justify-between gap-3 font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--ink-4)]">
-            <span>⌘/Ctrl + Enter to send</span>
-            {draft.length > 3500 && (
-              <span aria-live="polite" className={draft.length >= MAX_MESSAGE ? 'text-[var(--alert)]' : undefined}>
-                {draft.length} / {MAX_MESSAGE}
-              </span>
-            )}
-          </div>
-        </div>
+      {error && (
+        <p role="alert" className="mb-2 rounded-lg border border-[var(--alert)]/40 bg-[var(--peach)]/40 px-3 py-1.5 text-[12.5px] text-[var(--alert)]">
+          {error}
+        </p>
+      )}
+      <div className="flex items-end gap-2">
+        <textarea
+          ref={textareaRef}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder="Write a reply…"
+          aria-label="Reply"
+          maxLength={MAX_MESSAGE}
+          readOnly={pending}
+          rows={Math.min(6, Math.max(1, draft.split('\n').length))}
+          className="max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-2xl border border-[var(--hairline-strong)] bg-[var(--paper)] px-4 py-2.5 text-[15px] leading-[1.45] text-[var(--ink)] placeholder:text-[var(--ink-4)] focus:border-[var(--ink)] focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-soft)]"
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              (e.currentTarget.form as HTMLFormElement).requestSubmit();
+            }
+          }}
+        />
         <button
           type="submit"
           disabled={pending || draft.trim().length === 0}
-          className="editorial-btn shrink-0"
+          className="editorial-btn h-[2.75rem] shrink-0 !rounded-full"
         >
           {pending ? 'Sending…' : 'Send'}
         </button>
       </div>
-      {error && (
-        <p role="alert" className="border-l-2 border-[var(--alert)] pl-3 pb-3 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--alert)]">
-          {error}
-        </p>
-      )}
+      <div className="mt-1 flex justify-between gap-3 px-1 text-[11px] text-[var(--ink-4)]">
+        <span className="hidden sm:inline">⌘/Ctrl + Enter to send</span>
+        {draft.length > 3500 && (
+          <span aria-live="polite" className={`ml-auto ${draft.length >= MAX_MESSAGE ? 'text-[var(--alert)]' : ''}`}>
+            {draft.length} / {MAX_MESSAGE}
+          </span>
+        )}
+      </div>
     </form>
   );
 }

@@ -8,8 +8,18 @@ function todayIso() {
   return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 }
 
-export function GenerateForm() {
-  const [startDate, setStartDate] = useState(todayIso());
+export function GenerateForm({
+  defaultStartDate,
+  onGenerated,
+}: {
+  defaultStartDate?: string;
+  /** Called after a successful run, with the start date and the success message. */
+  onGenerated?: (startDate: string, message: string) => void;
+}) {
+  const [startDate, setStartDate] = useState(() => {
+    const today = todayIso();
+    return defaultStartDate && defaultStartDate > today ? defaultStartDate : today;
+  });
   const [days, setDays] = useState(7);
   // Clinic hours: mornings 10–13, evenings 17–20.
   const [startHour, setStartHour] = useState(10);
@@ -23,30 +33,31 @@ export function GenerateForm() {
   function submit() {
     setFeedback(null);
     startTransition(async () => {
-      const res = await generateSlotsAction({
-        startDate,
-        days,
-        startHour,
-        endHour,
-        intervalMinutes: interval,
-        skipSundays,
-      });
-      if (res.error) setFeedback({ kind: 'err', msg: res.error });
-      else setFeedback({ kind: 'ok', msg: `Generated ${res.inserted ?? 0} new slot${res.inserted === 1 ? '' : 's'}` });
+      let res: { error?: string; inserted?: number };
+      try {
+        res = await generateSlotsAction({
+          startDate,
+          days,
+          startHour,
+          endHour,
+          intervalMinutes: interval,
+          skipSundays,
+        });
+      } catch {
+        res = { error: "Couldn't reach the server. Check your connection and try again." };
+      }
+      if (res.error) {
+        setFeedback({ kind: 'err', msg: res.error });
+        return;
+      }
+      const msg = `Generated ${res.inserted ?? 0} new slot${res.inserted === 1 ? '' : 's'}`;
+      if (onGenerated) onGenerated(startDate, msg);
+      else setFeedback({ kind: 'ok', msg });
     });
   }
 
   return (
-    <div className="space-y-6 border-t border-[var(--hairline)] pt-6">
-      <div>
-        <h2 className="font-display text-[28px] leading-tight tracking-[-0.02em] text-[var(--ink)]">
-          <span className="font-display-italic">Generate</span> a window
-        </h2>
-        <p className="mt-2 font-display-italic text-[15px] text-[var(--ink-2)]">
-          Bulk-create slots for the next several days. Duplicates are skipped.
-        </p>
-      </div>
-
+    <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--ink-3)]">Clinic hours</span>
         {PRESETS.map((p) => (
@@ -65,7 +76,7 @@ export function GenerateForm() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
         <Field label="Start date" htmlFor="gen-start-date">
           <input
             id="gen-start-date"

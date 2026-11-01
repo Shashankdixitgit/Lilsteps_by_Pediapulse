@@ -51,11 +51,9 @@ export function UnreadBadge() {
 
   if (count === 0) return null;
   return (
-    <span
-      aria-label={`${count} unread`}
-      className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--ink)] px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none tracking-normal text-[var(--paper)]"
-    >
-      {count > 99 ? '99+' : count}
+    <span className="ml-1.5 inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-[var(--ink)] px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-none tracking-normal text-[var(--paper)]">
+      <span aria-hidden>{count > 99 ? '99+' : count}</span>
+      <span className="sr-only">, {count} unread</span>
     </span>
   );
 }

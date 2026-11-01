@@ -30,6 +30,7 @@ import { Suspense } from 'react';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { FlashToast } from './flash-toast';
 import { CarePlanBadge, LateBadge, UrgencyBadge } from './urgency-badge';
+import { CollapsibleSection } from './collapsible-section';
 import { Schedule, type CalEvent, type NextUp } from './schedule/schedule';
 
 type QueueRow = {
@@ -335,6 +336,8 @@ export default async function QueuePage({
           {overdue.length > 0 && (
             <QueueTable
               title="Needs closing"
+              storageKey={`lilsteps:home:${doctor.doctorId}:needs-closing`}
+              defaultOpen
               hint="Past visits not yet marked complete or no-show"
               rows={overdue}
               concerns={concerns}
@@ -344,6 +347,8 @@ export default async function QueuePage({
           {recentlyClosed.length > 0 && (
             <QueueTable
               title="Recently closed"
+              storageKey={`lilsteps:home:${doctor.doctorId}:recently-closed`}
+              defaultOpen={false}
               hint={`${recentlyClosed.length} in the last ${CLOSED_LOOKBACK_DAYS} days`}
               rows={recentlyClosed}
               concerns={concerns}
@@ -377,9 +382,14 @@ function QueueTable({
   closed,
   emptyTitle,
   emptyBody,
+  storageKey,
+  defaultOpen,
 }: {
   title: string;
   hint: string;
+  /** localStorage key that remembers whether the section is open. */
+  storageKey: string;
+  defaultOpen: boolean;
   rows: (QueueRow & { closedAt?: string | null })[];
   concerns: Map<string, string>;
   urgencies: Map<string, Urgency>;
@@ -391,13 +401,7 @@ function QueueTable({
   emptyBody?: string;
 }) {
   return (
-    <section className="mt-10 fade-up">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 className="font-display text-[20px] text-[var(--ink)]">{title}</h2>
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-[var(--ink-3)]">
-          {hint}
-        </span>
-      </div>
+    <CollapsibleSection title={title} count={rows.length} hint={hint} storageKey={storageKey} defaultOpen={defaultOpen}>
 
       {rows.length === 0 ? (
         <div className="mt-5 rounded-xl border border-dashed border-[var(--hairline-strong)] bg-[var(--card)] py-14 text-center">
@@ -494,6 +498,6 @@ function QueueTable({
           })}
         </div>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }
