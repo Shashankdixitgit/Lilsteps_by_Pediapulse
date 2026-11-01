@@ -93,6 +93,15 @@ function classesOfAllergy(allergy: string): DrugClass[] {
   );
 }
 
+/**
+ * What the allergy check should look at for one prescription row: the
+ * generic name and the brand, so a brand-only match ("Augmentin") is caught.
+ */
+export function allergyCheckText(medicine: string, brand?: string | null): string {
+  const b = brand?.trim();
+  return b ? `${medicine.trim()} (${b})` : medicine.trim();
+}
+
 export function findAllergyClashes(medicine: string, allergies: AllergyInput[]): AllergyClash[] {
   const med = compact(medicine);
   if (med.length < 3) return [];

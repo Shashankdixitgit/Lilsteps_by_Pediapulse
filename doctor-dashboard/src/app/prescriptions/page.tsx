@@ -20,7 +20,9 @@ export default async function PrescriptionsPage({
   let q = supabase
     .from('prescriptions')
     .select(
-      'id, issued_at, notes, child_id, appointment_id, doctor_name, qualifications, registration_number, appointments(date, time), children(id, name, dob, parents(name)), prescription_items(id, medicine, dose, frequency, duration, notes, position)',
+      // `*` so the 0055 columns (diagnosis, advice, follow-up; brand, strength,
+      // route, timing) show once the migration is applied, and nothing breaks before.
+      '*, appointments(date, time), children(id, name, dob, parents(name)), prescription_items(*)',
     )
     .order('issued_at', { ascending: false });
 
