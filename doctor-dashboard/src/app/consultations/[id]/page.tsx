@@ -174,7 +174,7 @@ export default async function ConsultationPage({
     fetchConcerns(supabase, [appointment.id]),
     supabase.from('health_notes').select('id, category, content, severity, noted_at').eq('child_id', child.id).order('noted_at', { ascending: false }).limit(HEALTH_NOTES_LIMIT).returns<HealthNoteRow[]>(),
     fetchAllergiesNotKnown(supabase, child.id),
-    supabase.from('prescriptions').select('id, issued_at, notes, appointment_id, doctor_name, qualifications, registration_number, prescription_items(id, medicine, dose, frequency, duration, notes, position)').eq('appointment_id', appointment.id).order('issued_at', { ascending: true }).returns<PrescriptionRow[]>(),
+    supabase.from('prescriptions').select('*, prescription_items(*)').eq('appointment_id', appointment.id).order('issued_at', { ascending: true }).returns<PrescriptionRow[]>(),
     // The full check-in conversation behind the summary. Needs a doctor
     // SELECT policy on checkin_messages; without one this is simply empty.
     appointment.ai_summary_id

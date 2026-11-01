@@ -10,6 +10,11 @@ export interface PrescriptionItemRow {
   duration: string | null;
   notes: string | null;
   position: number;
+  /** Migration 0055; null on older prescriptions. */
+  brand?: string | null;
+  strength?: string | null;
+  route?: string | null;
+  timing?: string | null;
 }
 
 export interface PrescriptionRow {
@@ -26,6 +31,13 @@ export interface PrescriptionRow {
   doctor_name?: string | null;
   registration_number?: string | null;
   qualifications?: string | null;
+  /** Clinical note, advice and follow-up (migration 0055); null on older prescriptions. */
+  chief_complaints?: string | null;
+  examination?: string | null;
+  diagnosis?: string | null;
+  advice?: string | null;
+  follow_up_date?: string | null;
+  follow_up_text?: string | null;
   // joined
   doctors?: { name: string; specialisation: string };
   prescription_items?: PrescriptionItemRow[];

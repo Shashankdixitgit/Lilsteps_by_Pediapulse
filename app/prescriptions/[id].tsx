@@ -39,6 +39,12 @@ type AllergyLite = { name: string; severity: string | null };
 
 const REGISTRATION_MISSING = 'Registration no. to be added';
 
+/** Generic name, with the brand after it when the doctor gave one (0055). */
+function medicineName(it: { medicine: string; brand?: string | null }): string {
+  const brand = it.brand?.trim();
+  return brand ? `${it.medicine} (${brand})` : it.medicine;
+}
+
 function allergyLine(a: AllergyLite): string {
   const s = a.severity?.trim();
   return s && s.toLowerCase() !== 'unknown' ? `${a.name} (${s})` : a.name;
@@ -113,6 +119,18 @@ export default function PrescriptionDetailScreen() {
     : null;
   const child = prescription?.children ?? null;
   const items = prescription?.prescription_items ?? [];
+  // Since migration 0055 the doctor's diagnosis, advice and follow-up are on
+  // the prescription; older ones have none of them and show as before.
+  const diagnosis = prescription?.diagnosis?.trim() || null;
+  const advice = prescription?.advice?.trim() || null;
+  const followUp = prescription
+    ? [
+        prescription.follow_up_date ? formatDate(prescription.follow_up_date, { year: 'always' }) : null,
+        prescription.follow_up_text?.trim(),
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : '';
 
   const credentials = [doctor?.specialisation, doctor?.qualifications?.trim()].filter(Boolean).join(' · ');
   const registration = doctor?.registration_number?.trim()
@@ -141,9 +159,15 @@ export default function PrescriptionDetailScreen() {
       registration,
       issuedDate ? `Issued ${issuedDate}` : '',
       '',
+      diagnosis ? `Diagnosis: ${diagnosis}` : '',
+      '',
       ...items.map((it) =>
-        [it.medicine, it.dose, it.frequency, it.duration, it.notes].filter((x) => x && String(x).trim()).join(' · '),
+        [medicineName(it), it.strength, it.dose, it.route, it.frequency, it.timing, it.duration, it.notes]
+          .filter((x) => x && String(x).trim())
+          .join(' · '),
       ),
+      advice ? `\nSpecial instructions: ${advice}` : '',
+      followUp ? `Follow-up: ${followUp}` : '',
       prescription.notes ? `\nDoctor's notes: ${prescription.notes}` : '',
     ];
     const message = lines.filter((l, i) => l !== '' || lines[i - 1] !== '').join('\n').trim();
@@ -221,6 +245,13 @@ export default function PrescriptionDetailScreen() {
             </View>
           </View>
 
+          {!!diagnosis && (
+            <View style={[styles.card, styles.notesCard]}>
+              <Text style={typography.sectionLabel}>Diagnosis</Text>
+              <Text style={[typography.body, styles.notesText]}>{diagnosis}</Text>
+            </View>
+          )}
+
           {items.length > 0 && (
             <View style={layout.section}>
               <Text style={typography.headingSM}>Medicines</Text>
@@ -229,15 +260,35 @@ export default function PrescriptionDetailScreen() {
                   <Fragment key={item.id}>
                     {index > 0 && <View style={styles.divider} />}
                     <View style={styles.item}>
-                      <Text style={typography.title}>{item.medicine}</Text>
+                      <Text style={typography.title}>{medicineName(item)}</Text>
+                      {!!item.strength?.trim() && <Text style={typography.meta}>{item.strength.trim()}</Text>}
                       <Text style={typography.bodySM}>
-                        {item.dose} · {item.frequency}
-                        {item.duration ? ` · ${item.duration}` : ''}
+                        {[item.dose, item.route, item.frequency, item.timing, item.duration]
+                          .filter((x) => x && String(x).trim())
+                          .join(' · ')}
                       </Text>
                       {!!item.notes && <Text style={typography.meta}>{item.notes}</Text>}
                     </View>
                   </Fragment>
                 ))}
+              </View>
+            </View>
+          )}
+
+          {!!advice && (
+            <View style={layout.section}>
+              <Text style={typography.headingSM}>Special instructions</Text>
+              <View style={[styles.card, styles.notesCard, styles.adviceCard]}>
+                <Text style={[typography.body, styles.notesText]}>{advice}</Text>
+              </View>
+            </View>
+          )}
+
+          {!!followUp && (
+            <View style={[styles.card, styles.patientCard]}>
+              <View style={styles.factRow}>
+                <Text style={[typography.sectionLabel, styles.factLabel]}>Follow-up</Text>
+                <Text style={[typography.bodySM, styles.factValue]}>{followUp}</Text>
               </View>
             </View>
           )}
@@ -279,6 +330,7 @@ const styles = StyleSheet.create({
   factLabel: { flexShrink: 1 },
   factValue: { flexShrink: 1, color: AppColors.onSurface },
 
-  notesCard: { padding: 16 },
+  notesCard: { padding: 16, gap: 4 },
+  adviceCard: { borderLeftWidth: 3, borderLeftColor: AppColors.primary },
   notesText: { color: AppColors.onSurface },
 });

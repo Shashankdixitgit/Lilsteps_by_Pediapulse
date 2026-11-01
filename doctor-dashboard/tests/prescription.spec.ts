@@ -36,17 +36,21 @@ test.describe('Issue prescription', () => {
     await signInAsDoctor(page);
     await page.goto(`./prescriptions/new?child=${childId}`);
 
-    // First medicine prefilled fieldset
-    await page.locator('input[placeholder*="Paracetamol"]').first().fill('Paracetamol');
-    await page.locator('input[placeholder*="Dose"]').first().fill('5ml');
-    await page.locator('input[placeholder*="times a day"]').first().fill('3 times a day');
-    await page.locator('input[placeholder*="days"]').first().fill('5 days');
+    // Diagnosis is required (Telemedicine Practice Guidelines 2020).
+    await page.getByLabel(/diagnosis/i).fill('Acute pharyngitis (provisional)');
+
+    // First medicine row
+    await page.locator('#rx-0-medicine').fill('Paracetamol');
+    await page.locator('#rx-0-dose').fill('5ml');
+    await page.locator('#rx-0-frequency').fill('3 times a day');
+    await page.locator('#rx-0-duration').fill('5 days');
 
     // Add a second
     await page.getByRole('button', { name: /add another medicine/i }).click();
-    await page.locator('input[placeholder*="Paracetamol"]').nth(1).fill('Ibuprofen');
-    await page.locator('input[placeholder*="Dose"]').nth(1).fill('2.5ml');
-    await page.locator('input[placeholder*="times a day"]').nth(1).fill('twice a day');
+    await page.locator('#rx-1-medicine').fill('Ibuprofen');
+    await page.locator('#rx-1-dose').fill('2.5ml');
+    await page.locator('#rx-1-frequency').fill('twice a day');
+    await page.locator('#rx-1-duration').fill('3 days');
 
     await page.getByRole('button', { name: /issue prescription/i }).click();
 
@@ -56,12 +60,13 @@ test.describe('Issue prescription', () => {
     const sb = admin();
     const { data: rx } = await sb
       .from('prescriptions')
-      .select('id, prescription_items(medicine)')
+      .select('id, diagnosis, prescription_items(medicine)')
       .eq('child_id', childId)
       .order('created_at', { ascending: false })
       .limit(1)
-      .maybeSingle<{ id: string; prescription_items: { medicine: string }[] }>();
+      .maybeSingle<{ id: string; diagnosis: string | null; prescription_items: { medicine: string }[] }>();
 
-    expect(rx?.prescription_items?.map((i) => i.medicine).sort()).toEqual(['Ibuprofen', 'Paracetamol']);
+    expect(rx?.prescription_items?.map((i) => i.medicine).sort()).toEqual(['IBUPROFEN', 'PARACETAMOL']);
+    expect(rx?.diagnosis).toBe('Acute pharyngitis (provisional)');
   });
 });
