@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Size } from '@/constants/theme';
+import { formatDate } from '@/lib/date';
 
 export interface ConsultHistoryItemProps {
   id: string;
@@ -30,7 +31,7 @@ export function ConsultHistoryItem({
   divider,
 }: ConsultHistoryItemProps) {
   const d = new Date(createdAt);
-  const date = `${d.getDate()} ${d.toLocaleDateString('en-IN', { month: 'short' })}`;
+  const date = formatDate(d);
   const meta = doctorName ? `${date} · ${doctorName}` : date;
 
   return (

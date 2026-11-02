@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useNarrowLayout } from '@/components/ui/useNarrowLayout';
 import { AppColors, FontFamily } from '@/constants/theme';
 import type { GrowthRow } from '@/hooks/useGrowth';
 import { formatDate } from '@/lib/date';
@@ -24,6 +25,7 @@ export function MeasurementRow({
   onPress?: () => void;
   heightLabel?: string;
 }) {
+  const narrow = useNarrowLayout();
   // A record: always "13 Oct 2026" (en-IN, local date).
   const dateStr = formatDate(entry.measured_at, { year: 'always' });
   const weightStr = entry.weight == null ? '—' : `${formatWeight(entry.weight)} kg`;
@@ -39,8 +41,11 @@ export function MeasurementRow({
       accessibilityLabel={`${dateStr}: weight ${weightStr}, ${heightLabel.toLowerCase()} ${heightStr}${note ? `. Note: ${note}` : ''}${onPress ? '. Edit' : ''}`}
       style={({ pressed }) => [styles.row, pressed && styles.pressed]}
     >
+      {/* Small phone / larger text: the date gets its own line, so it never
+          touches the weight or wraps on some rows only (review should-fix 8). */}
+      {narrow ? <Text style={typography.meta}>{dateStr}</Text> : null}
       <View style={styles.cells}>
-        <Text style={[typography.meta, styles.cell]}>{dateStr}</Text>
+        {narrow ? null : <Text style={[typography.meta, styles.cell]}>{dateStr}</Text>}
         <Text style={[styles.value, styles.cell]}>{weightStr}</Text>
         <Text style={[styles.value, styles.cell]}>{heightStr}</Text>
         <View style={styles.chevron}>

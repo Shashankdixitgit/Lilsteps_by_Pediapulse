@@ -25,15 +25,17 @@
 
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
 import { createMeetForAppointment, type MeetAppointment } from '../_shared/meet.ts';
-import { createAdminClient, getCaller } from '../_shared/supabase.ts';
+import { createAdminClient, callerFailureResponse, resolveCaller } from '../_shared/supabase.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   const admin = createAdminClient();
-  const caller = await getCaller(req, admin);
-  if (!caller) return jsonResponse({ error: 'Invalid session' }, 401);
+  // Bad / expired token: 401 session_ended. Auth service down: 503 (try again).
+  const resolved = await resolveCaller(req, admin);
+  if ('failure' in resolved) return callerFailureResponse(resolved.failure);
+  const caller = resolved.user;
 
   let body: { appointmentId?: string };
   try {

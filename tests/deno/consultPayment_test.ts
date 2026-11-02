@@ -9,14 +9,19 @@
 // return page.
 import { assertEquals } from 'jsr:@std/assert@1';
 import { Platform } from 'react-native';
-import { opened, setNextResult } from 'expo-web-browser';
+import { dismissed, opened, openedOptions, resetBrowser, setNextResult } from 'expo-web-browser';
 import { invoked, setInvokeHandler } from '@/lib/supabase';
 import {
   clearPendingWebPayment,
   payForConsult,
+  paymentRecheckMs,
   readPendingWebPayment,
   rescheduleConsult,
 } from '../../lib/consultPayment.ts';
+import { paymentPagePoll } from '../../lib/paymentBrowser.ts';
+
+paymentRecheckMs.value = 5;
+paymentPagePoll.everyMs = 5;
 
 const LINK = 'https://rzp.io/rzp/test123';
 
@@ -103,4 +108,61 @@ Deno.test('payment page cannot open: a PaymentPageError (the hook then releases 
   }
   assertEquals(caught instanceof PaymentPageError, true);
   assertEquals((caught as Error).message.startsWith("Couldn't open the payment page."), true);
+});
+
+// Mobile review must-fix 3: no "LilSteps wants to use rzp.io to Sign In".
+Deno.test('iOS: the payment page opens in an ephemeral session (no sign-in alert)', async () => {
+  Platform.OS = 'ios';
+  resetBrowser();
+  fakeServer('paid');
+  setNextResult({ type: 'cancel' });
+  await payForConsult('appt-5');
+  assertEquals(openedOptions, [{ preferEphemeralSession: true }]);
+});
+
+// should-fix 4: the Android app asks for the hand-off page, and a payment
+// whose redirect never came back is still found by checking again.
+Deno.test('Android: hand-off requested; no returned URL, still re-checked until paid', async () => {
+  Platform.OS = 'android';
+  resetBrowser();
+  invoked.length = 0;
+  let checks = 0;
+  setInvokeHandler((_name, body) => {
+    if (body.action === 'start') return { url: LINK };
+    if (body.action === 'status') return { state: ++checks >= 3 ? 'paid' : 'pending' };
+    return {};
+  });
+  setNextResult({ type: 'cancel' }); // the parent closed a blank page
+  const result = await payForConsult('appt-6');
+  assertEquals(invoked[0].body.handoff, true);
+  assertEquals(result.state, 'paid');
+  assertEquals(checks, 3);
+});
+
+Deno.test('iOS: start does not ask for the hand-off page', async () => {
+  Platform.OS = 'ios';
+  invoked.length = 0;
+  fakeServer('paid');
+  setNextResult({ type: 'cancel' });
+  await payForConsult('appt-7');
+  assertEquals(invoked[0].body.handoff, false);
+});
+
+Deno.test('iOS: page closed by the app once paid; light polls read the stored status only', async () => {
+  Platform.OS = 'ios';
+  resetBrowser();
+  invoked.length = 0;
+  let polls = 0;
+  setInvokeHandler((_name, body) => {
+    if (body.action === 'start') return { url: LINK };
+    if (body.action === 'status') return { state: ++polls >= 5 ? 'paid' : 'pending' };
+    return {};
+  });
+  setNextResult('holdOpen');
+  const result = await payForConsult('appt-8');
+  assertEquals(result.state, 'paid');
+  assertEquals(dismissed, 1);
+  const statuses = invoked.filter((c) => c.body.action === 'status').map((c) => c.body.stored === true);
+  // Polls 1-3 stored only, 4th a full check, 5th stored (paid), then the final full check.
+  assertEquals(statuses, [true, true, true, false, true, false]);
 });

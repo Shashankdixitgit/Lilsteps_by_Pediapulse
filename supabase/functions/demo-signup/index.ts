@@ -19,8 +19,19 @@ import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
 import { createAdminClient } from '../_shared/supabase.ts';
 
 const DEMO_EMAIL_RE = /^phone-(\d{10})@demo\.lilsteps\.dev$/;
-const DEMO_SIGNUPS_PER_HOUR = 60;
-const DEMO_SIGNUPS_PER_IP = 5;
+// A client team testing together shares one office Wi-Fi (one IP): 5 an hour
+// ran out in minutes (mobile review must-fix 7). Still capped, and only
+// fixed-password @demo.lilsteps.dev accounts can be made at all.
+const DEMO_SIGNUPS_PER_HOUR = 150;
+const DEMO_SIGNUPS_PER_IP = 25;
+
+/** A limit was hit: a 429 the app turns into plain words (code 'demo_limit'). */
+function limitReached(): Response {
+  return jsonResponse(
+    { error: 'Too many demo accounts were created in the last hour. Please try again later.', code: 'demo_limit' },
+    429,
+  );
+}
 
 /** The caller's IP as the Supabase gateway reports it (first X-Forwarded-For hop). */
 function callerIp(req: Request): string {
@@ -55,7 +66,7 @@ Deno.serve(async (req) => {
     console.error('[demo-signup] ip limit failed', ipErr.message);
     return jsonResponse({ error: 'Could not create the demo account' }, 500);
   }
-  if (!ipAllowed) return jsonResponse({ error: 'Too many demo accounts' }, 429);
+  if (!ipAllowed) return limitReached();
 
   const since = new Date(Date.now() - 3600_000).toISOString();
   const { count, error: countErr } = await admin
@@ -67,7 +78,7 @@ Deno.serve(async (req) => {
     console.error('[demo-signup] count failed', countErr.message);
     return jsonResponse({ error: 'Could not create the demo account' }, 500);
   }
-  if ((count ?? 0) >= DEMO_SIGNUPS_PER_HOUR) return jsonResponse({ error: 'Too many demo accounts' }, 429);
+  if ((count ?? 0) >= DEMO_SIGNUPS_PER_HOUR) return limitReached();
 
   const { error } = await admin.auth.admin.createUser({
     email,

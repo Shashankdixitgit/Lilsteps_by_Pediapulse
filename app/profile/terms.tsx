@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LegalDocument, type LegalSection } from '@/components/legal-document';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { AppColors } from '@/constants/theme';
+import { CARE_PLAN_CONSULTS, CARE_PLAN_PRICE_LABEL } from '@/lib/carePlan';
 import { CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 import { EMERGENCY_NUMBER, REFUND_POLICY_URL, SUPPORT_EMAIL } from '@/lib/support';
 
@@ -97,6 +98,8 @@ const SECTIONS: readonly LegalSection[] = [
       'If you cancel less than 2 hours before the start, or do not join the consult, the fee is not refunded.',
       'If the doctor cancels, you get a full refund.',
       'Refunds go back to the card, UPI or account you paid with and usually take 5–7 working days to reach you.',
+      `Care Plan: ${CARE_PLAN_PRICE_LABEL} a month for ${CARE_PLAN_CONSULTS} video consults, renewed each month by AutoPay until you cancel. If you cancel, it does not renew and stays active until the end of the month you paid for. A month already paid for is not refunded.`,
+      'If you delete your account, your Care Plan stops straight away: AutoPay ends and nothing more is charged. The month already paid for is not refunded.',
     ],
     paragraphs: ['This is a summary. Our full refund policy is on our website.'],
     link: { label: 'Read the full refund policy', url: REFUND_POLICY_URL },

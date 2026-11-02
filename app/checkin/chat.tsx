@@ -28,6 +28,8 @@ import { typography } from '@/styles/global';
 import { useChild } from '@/context/child';
 import { useCheckin } from '@/hooks/useCheckin';
 import { WEB_DEMO } from '@/lib/webDemo';
+import { useBackGuard } from '@/hooks/useBackGuard';
+import { goBack } from '@/lib/navigation';
 
 function callEmergency() {
   Linking.openURL('tel:112').catch(() => {});
@@ -70,6 +72,8 @@ export default function CheckinChatScreen() {
   const checkin = useCheckin(child);
   const [inputText, setInputText] = useState(WEB_DEMO ? 'Since yesterday evening. She is drinking fluids well.' : '');
   const [generatingSummary, setGeneratingSummary] = useState(false);
+  // No leaving by Android back / swipe while the summary is being made.
+  useBackGuard(generatingSummary, 'wait');
   const [started, setStarted] = useState(false);
   const [refetchingChild, setRefetchingChild] = useState(false);
   // R3-06: height of the pinned bar (composer / Call 112), so the list can
@@ -167,7 +171,7 @@ export default function CheckinChatScreen() {
 
   return (
     <View style={styles.root}>
-      <CheckinHeader onBack={() => router.back()} backDisabled={generatingSummary} showStatusDot />
+      <CheckinHeader onBack={goBack} backDisabled={generatingSummary} showStatusDot />
 
       <KeyboardAvoidingView
         style={styles.keyboardView}

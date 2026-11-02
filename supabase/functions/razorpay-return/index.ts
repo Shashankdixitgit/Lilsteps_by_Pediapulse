@@ -7,38 +7,31 @@
 // browser; the app then asks consult-payment for the status, which verifies
 // the signature and checks the link with Razorpay. Nothing is recorded here.
 //
+// Android hand-off (`handoff=1`, set by the Android app): after a UPI app
+// switch, Chrome Custom Tabs can refuse a redirect to lilsteps:// that no tap
+// started, and the parent is left on a blank page (mobile review should-fix
+// 4). Edge Functions on *.supabase.co may not serve HTML, so when a web
+// origin is configured (first of PAYMENT_RETURN_ORIGINS) we send the browser
+// to the web app's /payment-return?app=… page instead, which tries the app
+// link and shows a "Return to LilSteps" button (a tap is always allowed).
+// With no web origin configured, the redirect goes straight to the app as
+// before.
+//
 // Public: deploy with --no-verify-jwt (Razorpay's redirect carries no token).
 // `to` must pass isAllowedReturnUrl, so this is not an open redirect.
 
-import { isAllowedReturnUrl } from './allow.ts';
-
-const PASS_ON = [
-  'razorpay_payment_id',
-  'razorpay_payment_link_id',
-  'razorpay_payment_link_reference_id',
-  'razorpay_payment_link_status',
-  'razorpay_signature',
-];
+import { returnLocation } from './location.ts';
 
 function page(message: string, status: number): Response {
-  const html =
-    '<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">' +
-    `<title>LilSteps</title><p style="font:16px system-ui;margin:40px 20px">${message}</p>`;
-  return new Response(html, { status, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+  // Plain text: *.supabase.co does not serve HTML from Edge Functions.
+  return new Response(message, { status, headers: { 'Content-Type': 'text/plain; charset=utf-8' } });
 }
 
 Deno.serve((req) => {
   if (req.method !== 'GET') return page('Not found.', 404);
-  const url = new URL(req.url);
-  const to = url.searchParams.get('to') ?? '';
-  if (!isAllowedReturnUrl(to)) {
+  const location = returnLocation(req.url, Deno.env.get('PAYMENT_RETURN_ORIGINS'));
+  if (!location) {
     return page('Payment received by Razorpay. Please go back to the LilSteps app.', 400);
   }
-
-  const target = new URL(to);
-  for (const key of PASS_ON) {
-    const v = url.searchParams.get(key);
-    if (v !== null) target.searchParams.set(key, v.slice(0, 200));
-  }
-  return new Response(null, { status: 303, headers: { Location: target.toString() } });
+  return new Response(null, { status: 303, headers: { Location: location } });
 });

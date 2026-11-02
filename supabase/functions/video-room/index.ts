@@ -26,7 +26,7 @@
 // deno-lint-ignore-file no-explicit-any
 import { create as createJwt, getNumericDate } from 'https://deno.land/x/djwt@v3.0.2/mod.ts';
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
-import { createAdminClient, getCaller } from '../_shared/supabase.ts';
+import { createAdminClient, callerFailureResponse, resolveCaller } from '../_shared/supabase.ts';
 
 const HMS_API = 'https://api.100ms.live/v2';
 
@@ -90,8 +90,10 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   const admin = createAdminClient();
-  const caller = await getCaller(req, admin);
-  if (!caller) return jsonResponse({ error: 'Invalid session' }, 401);
+  // Bad / expired token: 401 session_ended. Auth service down: 503 (try again).
+  const resolved = await resolveCaller(req, admin);
+  if ('failure' in resolved) return callerFailureResponse(resolved.failure);
+  const caller = resolved.user;
 
   let body: { appointmentId?: string };
   try {

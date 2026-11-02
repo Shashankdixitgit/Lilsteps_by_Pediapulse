@@ -31,6 +31,11 @@ function doseName(v: Pick<VaccinationRow, 'vaccine_name' | 'dose_label'>) {
   return v.dose_label ? `${v.vaccine_name} (${v.dose_label})` : v.vaccine_name;
 }
 
+/** Overdue doses, never counting the yearly flu shot (same rule as the card). */
+export function overdueVaccineCount(vaccinations: Pick<VaccinationRow, 'status' | 'vaccine_name'>[]): number {
+  return vaccinations.filter((v) => v.status === 'overdue' && !ANNUAL_VACCINE_NAMES.has(v.vaccine_name)).length;
+}
+
 /**
  * Home summary of the Vaccines tab. Same "next" rule as the tab (first dose
  * due in the next 14 days, else the first upcoming one, never the yearly flu
@@ -84,7 +89,7 @@ export function VaccinationCard({ vaccinations, loading, error, onRetry, onViewS
       )
     : [];
   // The yearly flu shot is never "overdue" or "to check", same as the Vaccines tab (O2).
-  const overdueCount = vaccinations.filter((v) => v.status === 'overdue' && !isYearly(v)).length;
+  const overdueCount = overdueVaccineCount(vaccinations);
   const unknownCount = vaccinations.filter((v) => v.status === 'unknown' && !isYearly(v)).length;
   // Past a vaccine's age limit: never in the overdue count, a calm pill instead.
   const missedCount = vaccinations.filter((v) => v.status === 'missed').length;
@@ -107,14 +112,25 @@ export function VaccinationCard({ vaccinations, loading, error, onRetry, onViewS
     );
   }
 
-  const title = !next
+  // Overdue doses are the headline (review should-fix 1): "17 vaccines
+  // overdue", with the next due date as the detail line.
+  const nextTitle = !next
     ? overdueCount + unknownCount + missedCount > 0
       ? 'Nothing else coming up'
       : 'Lovely work, nothing due right now'
     : sameDay.length > 1
       ? `${sameDay.length} vaccines due ${nextDate}`
       : `${doseName(next)} due ${nextDate}`;
-  const detail = sameDay.length > 1 ? sameDay.map(doseName).join(', ') : null;
+  const title =
+    overdueCount > 0 ? `${overdueCount} vaccine${overdueCount === 1 ? '' : 's'} overdue · ask your doctor` : nextTitle;
+  const detail =
+    overdueCount > 0
+      ? next
+        ? `Next: ${nextTitle}`
+        : null
+      : sameDay.length > 1
+        ? sameDay.map(doseName).join(', ')
+        : null;
   const fluText = fluReminder ? 'Yearly flu shot: ask at the next visit' : null;
   const pillText = pills.map((p) => p.label).join(', ');
   // A refresh failed but older rows are on screen: say so instead of hiding it.

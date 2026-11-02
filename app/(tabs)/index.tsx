@@ -18,7 +18,8 @@ import { mentalHealthFromAnswers, useOnboardingAnswers } from '@/components/home
 import { LatestCheckinCard, useLatestUnbookedCheckin } from '@/components/home/LatestCheckinCard';
 import { NewPrescriptionCard } from '@/components/home/NewPrescriptionCard';
 import { PrimaryCtaCard } from '@/components/home/PrimaryCtaCard';
-import { VaccinationCard } from '@/components/home/VaccinationCard';
+import { NotificationPrimer } from '@/components/home/NotificationPrimer';
+import { overdueVaccineCount, VaccinationCard } from '@/components/home/VaccinationCard';
 import { AppointmentCard } from '@/components/consult/AppointmentCard';
 import { PendingPaymentCard } from '@/components/consult/PendingPaymentCard';
 import { doctorInitial } from '@/components/consult/appointmentFormat';
@@ -209,6 +210,20 @@ export default function HomeScreen() {
     if (careProviders.length === 3) break;
   }
 
+  const vaccinesOverdue = overdueVaccineCount(vaccinations) > 0;
+  const vaccineSection = (
+    <View style={styles.section}>
+      <SectionHeader title="Vaccines" />
+      <VaccinationCard
+        vaccinations={vaccinations}
+        loading={vaccinesLoading}
+        error={vaccinesError}
+        onRetry={refetchVaccines}
+        onViewSchedule={() => router.navigate('/(tabs)/vaccine')}
+      />
+    </View>
+  );
+
   return (
     <View style={styles.screen}>
       <ScrollView
@@ -234,6 +249,9 @@ export default function HomeScreen() {
         ) : null}
 
         {allergies.length > 0 ? <AllergyBanner allergies={allergies} /> : null}
+
+        {/* Overdue vaccines are urgent: near the top, not last (review should-fix 1). */}
+        {vaccinesOverdue ? vaccineSection : null}
 
         {newRx ? (
           <NewPrescriptionCard
@@ -291,6 +309,8 @@ export default function HomeScreen() {
         />
 
         <HealthLogCard childName={childName} onPress={() => router.push('/health-log')} />
+
+        <NotificationPrimer />
 
         {/* Shown once the child has any consult, so past visits and doctor
             messages (Consult tab) stay reachable with nothing upcoming. */}
@@ -364,16 +384,7 @@ export default function HomeScreen() {
           </View>
         ) : null}
 
-        <View style={styles.section}>
-          <SectionHeader title="Vaccines" />
-          <VaccinationCard
-            vaccinations={vaccinations}
-            loading={vaccinesLoading}
-            error={vaccinesError}
-            onRetry={refetchVaccines}
-            onViewSchedule={() => router.navigate('/(tabs)/vaccine')}
-          />
-        </View>
+        {vaccinesOverdue ? null : vaccineSection}
 
         {careProviders.length > 0 ? (
           <CareTeam providers={careProviders} onProviderPress={handleProviderPress} />
@@ -449,8 +460,11 @@ const styles = StyleSheet.create({
     flex: 1,
     color: AppColors.danger,
   },
+  // 44 high like every tap target (review should-fix 16); the negative
+  // margin keeps the section title row as tight as before.
   sectionLink: {
-    minHeight: 32,
+    minHeight: 44,
     paddingVertical: 0,
+    marginVertical: -6,
   },
 });

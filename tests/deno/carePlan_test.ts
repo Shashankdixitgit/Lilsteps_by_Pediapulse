@@ -2,10 +2,15 @@
 //   deno test --no-check --allow-env --import-map=tests/deno/import_map.json tests/deno/
 import { assertEquals } from 'jsr:@std/assert@1';
 import { Platform } from 'react-native';
-import { opened, setNextResult } from 'expo-web-browser';
-import { invoked, setInvokeHandler } from '@/lib/supabase';
+import { dismissed, opened, openedOptions, resetBrowser, setNextResult } from 'expo-web-browser';
+import { invoked, setInvokeHandler, setRpcHandler } from '@/lib/supabase';
 import { type CarePlan, subscribeToCarePlan, takePendingCarePlan, viewOf } from '../../lib/carePlan.ts';
 import { bookWithCarePlan } from '../../lib/consultPayment.ts';
+import { planRecheckMs } from '../../lib/carePlan.ts';
+import { paymentPagePoll } from '../../lib/paymentBrowser.ts';
+
+planRecheckMs.value = 5;
+paymentPagePoll.everyMs = 5;
 
 const PAGE = 'https://rzp.io/rzp/sub123';
 const plan = (over: Partial<CarePlan> = {}): CarePlan => ({
@@ -75,4 +80,56 @@ Deno.test('booking with the plan: one call, no amount sent', async () => {
   setInvokeHandler(() => ({ state: 'paid', plan: true }));
   assertEquals(await bookWithCarePlan('appt-9'), { state: 'paid', plan: true });
   assertEquals(invoked, [{ name: 'consult-payment', body: { action: 'use_plan', appointmentId: 'appt-9' } }]);
+});
+
+// Mobile review must-fix 13: Razorpay's subscription page has no redirect
+// back; the app closes it once the server confirms the plan.
+Deno.test('subscribe, iOS: page closed by the app when the plan is confirmed; ephemeral session', async () => {
+  Platform.OS = 'ios';
+  resetBrowser();
+  invoked.length = 0;
+  let reads = 0;
+  setInvokeHandler((_n, body) => (body.action === 'subscribe' ? { url: PAGE } : { plan: plan() }));
+  // The stored plan (get_my_care_plan) confirms on the 2nd light poll.
+  setRpcHandler(() => (++reads >= 2 ? plan() : plan({ status: 'created', credits_left: null, credits_total: null })));
+  setNextResult('holdOpen');
+  const r = await subscribeToCarePlan();
+  assertEquals(dismissed, 1, 'closed by the app, no "Cancel" tap');
+  assertEquals(openedOptions, [{ preferEphemeralSession: true }]);
+  assertEquals(r.state === 'done' && viewOf(r.plan).kind, 'active');
+  // Light polls read the stored plan; no Razorpay check (care-plan status) was needed.
+  assertEquals(invoked.map((c) => c.name === 'care-plan' ? c.body.action : c.name), ['subscribe', 'rpc:get_my_care_plan', 'rpc:get_my_care_plan']);
+});
+
+Deno.test('subscribe, iOS: every 4th poll is a full check with Razorpay', async () => {
+  Platform.OS = 'ios';
+  resetBrowser();
+  invoked.length = 0;
+  setRpcHandler(() => plan({ status: 'created', credits_left: null, credits_total: null }));
+  setInvokeHandler((_n, body) => (body.action === 'subscribe' ? { url: PAGE } : { plan: plan() }));
+  setNextResult('holdOpen');
+  const r = await subscribeToCarePlan();
+  assertEquals(dismissed, 1);
+  assertEquals(r.state === 'done' && viewOf(r.plan).kind, 'active');
+  assertEquals(invoked.map((c) => c.name === 'care-plan' ? c.body.action : c.name), [
+    'subscribe',
+    'rpc:get_my_care_plan',
+    'rpc:get_my_care_plan',
+    'rpc:get_my_care_plan',
+    'status',
+  ]);
+});
+
+Deno.test('subscribe, Android: closed by the parent, slow confirmation is waited for', async () => {
+  Platform.OS = 'android';
+  resetBrowser();
+  let checks = 0;
+  setInvokeHandler((_n, body) =>
+    body.action === 'subscribe'
+      ? { url: PAGE }
+      : { plan: ++checks >= 4 ? plan() : plan({ status: 'created', credits_left: null, credits_total: null }) },
+  );
+  setNextResult({ type: 'cancel' });
+  const r = await subscribeToCarePlan();
+  assertEquals(r.state === 'done' && viewOf(r.plan).kind, 'active', 'no "Not finished yet" for a slow webhook');
 });

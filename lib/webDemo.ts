@@ -20,3 +20,14 @@ export const DEMO_FAMILY_PHONE = process.env.EXPO_PUBLIC_WEB_DEMO_PHONE ?? '';
 
 export const DEMO_PARENT_NAME = 'Priya Sharma';
 export const DEMO_OTP = '123456';
+
+/**
+ * Sign-up refused because too many demo accounts were made this hour (the
+ * demo-signup function's 429). Points to the sample family when there is one.
+ */
+export function demoLimitText(hasSampleFamily: boolean = !!DEMO_FAMILY_PHONE): string {
+  const lead = 'Too many demo accounts were created in the last hour, often because a team is testing on one Wi-Fi.';
+  return hasSampleFamily
+    ? `${lead} Please try again later, or go back and tap "I already have an account" to open the sample family.`
+    : `${lead} Please try again later.`;
+}

@@ -118,14 +118,18 @@ export function EmailField({
   onChangeText,
   onSubmit,
   returnKeyType = 'next',
+  error,
 }: {
   value: string;
   onChangeText: (v: string) => void;
   onSubmit?: () => void;
   returnKeyType?: 'next' | 'go';
+  /** Shown under the field, which turns red. */
+  error?: string;
 }) {
   return (
     <TextInputField
+      error={error}
       label="Email"
       placeholder="you@example.com"
       keyboardType="email-address"
@@ -148,17 +152,21 @@ export function PasswordField({
   onSubmit,
   isNew = false,
   label = 'Password',
+  error,
 }: {
   value: string;
   onChangeText: (v: string) => void;
   onSubmit?: () => void;
   isNew?: boolean;
   label?: string;
+  /** Shown under the field, which turns red (review should-fix 20). */
+  error?: string;
 }) {
   const [shown, setShown] = useState(false);
   return (
     <View>
       <TextInputField
+        error={error}
         label={label}
         hint={isNew ? 'At least 8 characters, with upper-case and lower-case letters and a number' : undefined}
         placeholder={isNew ? 'Choose a password' : 'Your password'}
@@ -177,7 +185,6 @@ export function PasswordField({
         style={styles.showToggle}
         accessibilityRole="button"
         accessibilityLabel={shown ? 'Hide password' : 'Show password'}
-        hitSlop={10}
       >
         <Text style={styles.linkText}>{shown ? 'Hide password' : 'Show password'}</Text>
       </Pressable>
@@ -190,9 +197,8 @@ export function AuthLink({ label, onPress, center }: { label: string; onPress: (
   return (
     <Pressable
       onPress={onPress}
-      style={center ? styles.centerLink : undefined}
+      style={[styles.target, center && styles.centerLink]}
       accessibilityRole="button"
-      hitSlop={10}
     >
       <Text style={center ? styles.resendText : styles.linkText}>{label}</Text>
     </Pressable>
@@ -242,10 +248,9 @@ export function ResendLink({ onResend }: { onResend: () => Promise<boolean> }) {
     <Pressable
       onPress={tap}
       disabled={busy || left > 0}
-      style={styles.centerLink}
+      style={[styles.target, styles.centerLink]}
       accessibilityRole="button"
       accessibilityState={{ disabled: busy || left > 0 }}
-      hitSlop={10}
     >
       <Text style={[styles.resendText, left > 0 || busy ? styles.resendWaiting : null]}>{label}</Text>
     </Pressable>
@@ -253,17 +258,21 @@ export function ResendLink({ onResend }: { onResend: () => Promise<boolean> }) {
 }
 
 export function TermsLine({ verb }: { verb: 'continuing' | 'signing up' }) {
+  // Two real buttons (44 high), not inline links in 12 px text, so they are
+  // easy to tap (review should-fix 16).
   return (
-    <Text style={styles.termsText}>
-      By {verb}, you agree to our{' '}
-      <Text style={styles.termsLink} accessibilityRole="link" onPress={() => router.push('/profile/terms')}>
-        Terms of Service
-      </Text>
-      {' '}and{' '}
-      <Text style={styles.termsLink} accessibilityRole="link" onPress={() => router.push('/profile/privacy')}>
-        Privacy Policy
-      </Text>
-    </Text>
+    <View style={styles.terms}>
+      <Text style={styles.termsText}>By {verb}, you agree to our</Text>
+      <View style={styles.termsRow}>
+        <Pressable onPress={() => router.push('/profile/terms')} accessibilityRole="link" style={styles.target}>
+          <Text style={[styles.termsText, styles.termsLink]}>Terms of Service</Text>
+        </Pressable>
+        <Text style={styles.termsText}>and</Text>
+        <Pressable onPress={() => router.push('/profile/privacy')} accessibilityRole="link" style={styles.target}>
+          <Text style={[styles.termsText, styles.termsLink]}>Privacy Policy</Text>
+        </Pressable>
+      </View>
+    </View>
   );
 }
 
@@ -271,7 +280,7 @@ export function FooterPrompt({ text, link, onPress }: { text: string; link: stri
   return (
     <>
       <Text style={styles.footerText}>{text}</Text>
-      <Pressable onPress={onPress} accessibilityRole="link" hitSlop={10}>
+      <Pressable onPress={onPress} accessibilityRole="link" style={styles.target}>
         <Text style={styles.linkText}>{link}</Text>
       </Pressable>
     </>
@@ -286,8 +295,8 @@ export const authStyles = StyleSheet.create({
     marginTop: 24,
   },
   links: {
-    marginTop: 16,
-    gap: 14,
+    marginTop: 8,
+    gap: 0,
     alignItems: 'center',
   },
 });
@@ -329,11 +338,24 @@ const styles = StyleSheet.create({
   },
   showToggle: {
     alignSelf: 'flex-end',
-    marginTop: 8,
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  // Every small text button is at least 44 high (review should-fix 16).
+  target: {
+    minHeight: 44,
+    minWidth: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
   },
   centerLink: {
     alignSelf: 'center',
   },
+  terms: { marginTop: 12, alignItems: 'center' },
+  termsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 4 },
   resendText: {
     fontFamily: 'Inter_600SemiBold',
     fontSize: 15,
@@ -349,7 +371,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: AppColors.muted,
     textAlign: 'center',
-    marginTop: 12,
   },
   termsLink: {
     color: AppColors.secondary,

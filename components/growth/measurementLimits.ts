@@ -26,6 +26,13 @@ const PLAUSIBLE_BY_AGE: { underMonths: number; weight: [number, number]; height:
   { underMonths: 192, weight: [22, 110], height: [125, 195] },
 ];
 
+/**
+ * Far outside the age range is not "unusual" but impossible (0.5 kg for a
+ * 9-month-old): blocked like the absolute limits (review should-fix 19).
+ * The factors leave a wide margin past the 1st-99th percentile ranges above.
+ */
+const IMPOSSIBLE_FACTOR = { kg: { low: 0.5, high: 2 }, cm: { low: 0.6, high: 1.4 } } as const;
+
 /** Typical value per age band, used only as a placeholder ("e.g. 4.2"). */
 const EXAMPLE_BY_AGE: { underMonths: number; weight: string; height: string }[] = [
   { underMonths: 1, weight: '3.4', height: '50' },
@@ -106,12 +113,18 @@ export function checkMeasure(
   if (Number.isNaN(value)) return { error: 'Enter a number, e.g. 12.5' };
   const plausible = plausibleRange(unit, dob, onDate);
   const limits = unit === 'kg' ? WEIGHT_LIMITS : HEIGHT_LIMITS;
-  const outOfLimits = value < limits.min || value > limits.max;
+  const f = IMPOSSIBLE_FACTOR[unit];
+  // Not below the range in the first 6 months: a premature baby can be tiny.
+  const months = ageOn(dob, onDate)?.totalMonths ?? 0;
+  const impossibleForAge =
+    !!plausible && ((months >= 6 && value < plausible[0] * f.low) || value > plausible[1] * f.high);
+  const outOfLimits = value < limits.min || value > limits.max || impossibleForAge;
   const unusual = !!plausible && (value < plausible[0] || value > plausible[1]);
   const meant = outOfLimits || unusual ? likelyMeant(value, unit, plausible) : null;
   const hint = meant != null ? ` Did you mean ${meant} ${unit}?` : '';
   if (outOfLimits) {
-    return { error: `${value} ${unit} doesn't look right.${hint || ' Please check the number.'}`, suggestion: meant };
+    const why = impossibleForAge && !hint ? ` That can't be right for ${ageText(dob, onDate)}. Please check the number.` : '';
+    return { error: `${value} ${unit} doesn't look right.${hint || why || ' Please check the number.'}`, suggestion: meant };
   }
   if (unusual) {
     return {

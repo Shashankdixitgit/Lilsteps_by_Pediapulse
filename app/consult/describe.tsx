@@ -20,6 +20,7 @@ import { useChild } from '@/context/child';
 import { typography } from '@/styles/global';
 import { setBookingConcern } from '@/lib/bookingDraft';
 import { WEB_DEMO } from '@/lib/webDemo';
+import { KEYBOARD_BEHAVIOR } from '@/lib/keyboard';
 
 // Bracket-specific quick complaint chips
 const COMPLAINT_CHIPS: Record<string, string[]> = {
@@ -63,7 +64,7 @@ export default function DescribeScreen() {
   return (
     <KeyboardAvoidingView
       style={[styles.screen, { paddingTop: insets.top }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={KEYBOARD_BEHAVIOR}
     >
       <ScreenHeader
         title="Describe issue"

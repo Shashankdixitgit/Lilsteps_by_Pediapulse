@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AppColors } from '@/constants/theme';
 
@@ -12,11 +12,7 @@ export interface PhotoAttachProps {
 
 export function PhotoAttach({ uri, onChange }: PhotoAttachProps) {
   async function handlePick() {
-    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Permission needed', 'Please allow photo access to attach an image.');
-      return;
-    }
+    // The system photo picker needs no library permission (review should-fix 3).
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'images',
       allowsEditing: true,

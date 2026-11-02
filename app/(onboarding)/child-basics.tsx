@@ -20,6 +20,7 @@ import {
   minAllowedDob,
 } from '@/lib/age';
 import { formatDate, toDateOnlyString, todayDateOnly } from '@/lib/date';
+import { pickedDate } from '@/lib/datePicker';
 import { typography } from '@/styles/global';
 
 const SEX_OPTIONS = ['Male', 'Female'];
@@ -212,8 +213,9 @@ export default function ChildBasicsScreen() {
               display="spinner"
               maximumDate={new Date()}
               minimumDate={minAllowedDob()}
-              onChange={(_, date) => {
-                if (date) setDraftDob(date);
+              onChange={(event, date) => {
+                const picked = pickedDate(event, date);
+                if (picked) setDraftDob(picked);
               }}
               themeVariant="light"
             />
@@ -229,9 +231,11 @@ export default function ChildBasicsScreen() {
           display="default"
           maximumDate={new Date()}
           minimumDate={minAllowedDob()}
-          onChange={(_, date) => {
+          onChange={(event, date) => {
             setPickerOpen(false);
-            if (date) setDob(date);
+            // Cancel sends 'dismissed' with today's date: keep the old answer.
+            const picked = pickedDate(event, date);
+            if (picked) setDob(picked);
           }}
         />
       )}

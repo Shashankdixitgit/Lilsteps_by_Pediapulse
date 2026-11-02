@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChipGroup } from '@/components/chip-group';
 import { GradientButton } from '@/components/gradient-button';
 import { notify } from '@/components/growth/confirm';
+import { cameraAccessDenied } from '@/lib/permissions';
 import { DateField } from '@/components/growth/DateField';
 import { ScreenHeader } from '@/components/ScreenHeader';
 import { TextInputField } from '@/components/text-input-field';
@@ -113,12 +114,8 @@ export default function UploadDocumentScreen() {
   }
 
   async function pickImage() {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      notify('Permission needed', 'Please allow photo library access to upload images.');
-      return;
-    }
-
+    // The system photo picker needs no library permission (iOS 14+, Android
+    // 13+), so the app never asks for it (review should-fix 3).
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       quality: 0.8,
@@ -137,9 +134,9 @@ export default function UploadDocumentScreen() {
   }
 
   async function takePhoto() {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    const { status, canAskAgain } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      notify('Permission needed', 'Please allow camera access to take photos.');
+      await cameraAccessDenied(canAskAgain);
       return;
     }
 

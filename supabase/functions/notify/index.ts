@@ -41,7 +41,7 @@ import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
 import { type Channel, dispatch, isChannel, type Recipient, smsEnabled } from '../_shared/notify.ts';
 import { canReceiveEmail, firstName, parentContact } from '../_shared/parentNotify.ts';
 import { DOCTOR_EMAIL_TEMPLATES, isTemplateKey, SERVER_ONLY_TEMPLATES } from '../_shared/templates.ts';
-import { createAdminClient, getCaller } from '../_shared/supabase.ts';
+import { createAdminClient, callerFailureResponse, resolveCaller } from '../_shared/supabase.ts';
 
 const RATE_LIMIT_PER_HOUR = 20;
 const MAX_PARAMS = 8;
@@ -75,8 +75,10 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   const admin = createAdminClient();
-  const caller = await getCaller(req, admin);
-  if (!caller) return jsonResponse({ error: 'Invalid session' }, 401);
+  // Bad / expired token: 401 session_ended. Auth service down: 503 (try again).
+  const resolved = await resolveCaller(req, admin);
+  if ('failure' in resolved) return callerFailureResponse(resolved.failure);
+  const caller = resolved.user;
 
   let body: any;
   try {

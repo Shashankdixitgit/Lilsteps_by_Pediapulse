@@ -1,3 +1,4 @@
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams } from 'expo-router';
 import { Fragment, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
@@ -10,6 +11,7 @@ import { layout, typography } from '@/styles/global';
 import { formatAgeLabel } from '@/lib/age';
 import { notify } from '@/lib/confirm';
 import { formatDate } from '@/lib/date';
+import { NO_REGISTRATION_TEXT, prescriptionDoctorLines } from '@/lib/prescriptionDoctor';
 import { supabase } from '@/lib/supabase';
 import type { PrescriptionRow } from '@/hooks/usePrescriptions';
 
@@ -36,8 +38,6 @@ type PrescriptionDetail = Omit<PrescriptionRow, 'doctors'> & {
 };
 
 type AllergyLite = { name: string; severity: string | null };
-
-const REGISTRATION_MISSING = 'Registration no. to be added';
 
 /** Generic name, with the brand after it when the doctor gave one (0055). */
 function medicineName(it: { medicine: string; brand?: string | null }): string {
@@ -132,10 +132,8 @@ export default function PrescriptionDetailScreen() {
         .join(' · ')
     : '';
 
-  const credentials = [doctor?.specialisation, doctor?.qualifications?.trim()].filter(Boolean).join(' · ');
-  const registration = doctor?.registration_number?.trim()
-    ? `Reg. no. ${doctor.registration_number.trim()}`
-    : REGISTRATION_MISSING;
+  // Placeholders ("to be added", "Test profile") are never printed.
+  const { credentials, registration } = prescriptionDoctorLines(doctor);
 
   const ageAtIssue =
     child && prescription ? formatAgeLabel(child.dob, { now: new Date(prescription.issued_at) }) : '';
@@ -156,7 +154,7 @@ export default function PrescriptionDetailScreen() {
       '',
       doctor?.name ?? 'Doctor',
       credentials,
-      registration,
+      registration ?? NO_REGISTRATION_TEXT,
       issuedDate ? `Issued ${issuedDate}` : '',
       '',
       diagnosis ? `Diagnosis: ${diagnosis}` : '',
@@ -227,9 +225,16 @@ export default function PrescriptionDetailScreen() {
           <View style={styles.doctorBlock}>
             <Text style={typography.headingSM}>{doctor?.name ?? 'Doctor'}</Text>
             {!!credentials && <Text style={typography.meta}>{credentials}</Text>}
-            <Text style={typography.meta}>{registration}</Text>
+            {!!registration && <Text style={typography.meta}>{registration}</Text>}
             {!!issuedDate && <Text style={typography.meta}>Issued {issuedDate}</Text>}
           </View>
+
+          {!registration && (
+            <View style={styles.warning} accessibilityRole="alert">
+              <Ionicons name="alert-circle-outline" size={18} color={AppColors.warning} />
+              <Text style={[typography.bodySM, styles.warningText]}>{NO_REGISTRATION_TEXT}</Text>
+            </View>
+          )}
 
           <View style={[styles.card, styles.patientCard]}>
             <View style={styles.factRow}>
@@ -313,6 +318,16 @@ const styles = StyleSheet.create({
   centerText: { textAlign: 'center' },
 
   doctorBlock: { gap: 4 },
+  warning: {
+    flexDirection: 'row',
+    gap: 8,
+    padding: 12,
+    borderRadius: Radius.md,
+    borderWidth: 1,
+    borderColor: AppColors.warningBorder,
+    backgroundColor: AppColors.warningSurface,
+  },
+  warningText: { flex: 1, color: AppColors.onSurface },
 
   card: {
     backgroundColor: AppColors.card,

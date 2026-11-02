@@ -6,7 +6,15 @@ let handler: Handler = () => ({});
 export function setInvokeHandler(h: Handler) {
   handler = h;
 }
+let rpcHandler: (name: string) => unknown = () => null;
+export function setRpcHandler(h: (name: string) => unknown) {
+  rpcHandler = h;
+}
 export const supabase: any = {
+  rpc(name: string) {
+    invoked.push({ name: `rpc:${name}`, body: {} });
+    return Promise.resolve({ data: rpcHandler(name), error: null });
+  },
   functions: {
     invoke(name: string, opts: { body: any }) {
       invoked.push({ name, body: opts.body });

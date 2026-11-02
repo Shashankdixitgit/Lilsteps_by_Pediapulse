@@ -3,6 +3,8 @@ import * as SecureStore from "expo-secure-store";
 import { Platform } from "react-native";
 import "react-native-url-polyfill/auto";
 
+import { createSessionAwareFetch } from "./sessionEnded";
+
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -118,7 +120,30 @@ const ExpoSecureStoreAdapter = {
   },
 };
 
+/**
+ * Every request goes through here (lib/sessionEnded createSessionAwareFetch):
+ * a 401 from one of our Edge Functions refreshes the session once and
+ * repeats the request; only a failed refresh or a confirmed 'session_ended'
+ * signs this phone out (mobile review must-fix 8; PR #26 review item 2).
+ */
+const sessionAwareFetch = createSessionAwareFetch({
+  baseFetch: (input, init) => fetch(input, init),
+  anonKey: supabaseAnonKey,
+  refresh: async () => {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (!error) return data.session?.access_token ?? null;
+    // Couldn't reach Auth (offline, timeout, 5xx): not a reason to sign out.
+    const status = (error as { status?: number }).status ?? 0;
+    if (error.name === 'AuthRetryableFetchError' || status === 0 || status >= 500) return 'unavailable';
+    return null;
+  },
+  signOut: async () => {
+    await supabase.auth.signOut({ scope: "local" });
+  },
+});
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  global: { fetch: sessionAwareFetch },
   auth: {
     storage: ExpoSecureStoreAdapter,
     autoRefreshToken: true,

@@ -2,7 +2,7 @@
  * Sign in. Email + password, or a code emailed to the parent
  * (SMS is off until DLT is done; the phone screen is kept behind PHONE_AUTH).
  */
-import { type Href, router } from 'expo-router';
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { View } from 'react-native';
 
@@ -31,7 +31,9 @@ import {
 } from '@/context/auth';
 import { takeReturnTo } from '@/lib/authRedirect';
 import { dbg } from '@/lib/debug';
+import { openReturnTo } from '@/lib/navigation';
 import { DEMO_FAMILY_PHONE, WEB_DEMO } from '@/lib/webDemo';
+import { SESSION_ENDED_TEXT, takeSessionEnded } from '@/lib/sessionEnded';
 
 /** Web demo: the sample family that already has visits and records. */
 const DEMO = WEB_DEMO && DEMO_FAMILY_PHONE ? demoCredentials(DEMO_FAMILY_PHONE) : null;
@@ -50,7 +52,8 @@ function EmailLoginScreen() {
   // 'email' = a sign-in code; 'signup' = finishing a sign-up whose address wasn't confirmed yet.
   const [codeKind, setCodeKind] = useState<EmailCodeKind | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // Sent here because the server ended this phone's session (lib/sessionEnded).
+  const [error, setError] = useState<string | null>(() => (takeSessionEnded() ? SESSION_ENDED_TEXT : null));
 
   function go(isNewUser: boolean) {
     // A protected link opened while signed out (AuthGate) opens now.
@@ -61,7 +64,7 @@ function EmailLoginScreen() {
       router.replace('/(onboarding)/parent-details');
     } else if (back) {
       dbg.nav(`Login → ${back} (returning user, requested link)`);
-      router.replace(back as Href);
+      openReturnTo(back);
     } else {
       dbg.nav('Login → Tabs (returning user)');
       router.replace('/(tabs)');

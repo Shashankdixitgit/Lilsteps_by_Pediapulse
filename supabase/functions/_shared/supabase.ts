@@ -13,6 +13,8 @@ import {
   type User,
 } from 'https://esm.sh/@supabase/supabase-js@2.99.3';
 
+import { jsonResponse } from './cors.ts';
+
 function parseKeyDictionary(raw: string | undefined): Record<string, string> {
   if (!raw) return {};
   try {
@@ -72,18 +74,56 @@ export function createUserClient(req: Request): SupabaseClient {
   });
 }
 
+/**
+ * Why the caller could not be resolved:
+ *  - 'session_ended': no token, or the token is invalid / expired / revoked
+ *    (the app refreshes once, then signs that phone out);
+ *  - 'unavailable': the auth service could not be reached or failed (network,
+ *    5xx). Not the parent's fault: 503, "try again", never a sign-out.
+ */
+export type CallerFailure = 'session_ended' | 'unavailable';
+
+/** An auth error that is a server/network problem, not a bad token. */
+export function isAuthUnavailable(error: { status?: number; name?: string } | null | undefined): boolean {
+  if (!error) return false;
+  if (error.name === 'AuthRetryableFetchError') return true;
+  const status = error.status ?? 0;
+  return status === 0 || status >= 500;
+}
+
+/** The user behind `Authorization: Bearer <user JWT>`, or why there is none. */
+export async function resolveCaller(
+  req: Request,
+  admin: SupabaseClient,
+): Promise<{ user: User } | { failure: CallerFailure }> {
+  const authHeader = req.headers.get('Authorization') ?? '';
+  if (!authHeader.startsWith('Bearer ')) return { failure: 'session_ended' };
+  const jwt = authHeader.slice('Bearer '.length).trim();
+  if (!jwt) return { failure: 'session_ended' };
+  try {
+    const { data, error } = await admin.auth.getUser(jwt);
+    if (error) return { failure: isAuthUnavailable(error) ? 'unavailable' : 'session_ended' };
+    return data?.user ? { user: data.user } : { failure: 'session_ended' };
+  } catch {
+    // getUser threw (network): not a bad token.
+    return { failure: 'unavailable' };
+  }
+}
+
+/** The answer for a caller that could not be resolved (401 session_ended / 503 try again). */
+export function callerFailureResponse(failure: CallerFailure): Response {
+  return failure === 'unavailable'
+    ? jsonResponse({ error: "Couldn't reach the server. Please try again.", code: 'auth_unavailable' }, 503)
+    : jsonResponse({ error: 'Your session has ended. Please sign in again.', code: 'session_ended' }, 401);
+}
+
 /** Resolves the user behind `Authorization: Bearer <user JWT>`, or null. */
 export async function getCaller(
   req: Request,
   admin: SupabaseClient,
 ): Promise<User | null> {
-  const authHeader = req.headers.get('Authorization') ?? '';
-  if (!authHeader.startsWith('Bearer ')) return null;
-  const jwt = authHeader.slice('Bearer '.length).trim();
-  if (!jwt) return null;
-  const { data, error } = await admin.auth.getUser(jwt);
-  if (error || !data?.user) return null;
-  return data.user;
+  const r = await resolveCaller(req, admin);
+  return 'user' in r ? r.user : null;
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

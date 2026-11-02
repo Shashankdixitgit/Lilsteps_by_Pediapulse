@@ -108,6 +108,13 @@ const SECTIONS: readonly LegalSection[] = [
   },
 ];
 
+/**
+ * What happens to a Care Plan when the account is deleted (review should-fix
+ * 12; delete-account stops it at Razorpay first: endPlansForDeletedAccount).
+ */
+const CARE_PLAN_ON_DELETE =
+  'A Care Plan stops straight away: AutoPay ends and you are not charged again. The month already paid for is not refunded, and its consults left can no longer be used.';
+
 type DeleteStep = 'idle' | 'confirm' | 'deleting';
 
 /** What delete-account answers (supabase/functions/delete-account). */
@@ -236,7 +243,8 @@ export default function PrivacyScreen() {
                 <Text style={typography.bodySM}>
                   Deleting your account removes it and every child profile, record, check-in, booking,
                   chat and prescription linked to it. Upcoming consults are cancelled. Paid consults more
-                  than 2 hours away are refunded in full, as in our refund policy. This cannot be undone.
+                  than 2 hours away are refunded in full, as in our refund policy. {CARE_PLAN_ON_DELETE} This
+                  cannot be undone.
                 </Text>
                 <GradientButton label="Delete my account" variant="danger" onPress={() => setStep('confirm')} />
               </>
@@ -253,6 +261,7 @@ export default function PrivacyScreen() {
                     'Uploaded records, photos, check-ins and growth entries',
                     'Bookings, chats with doctors and prescriptions',
                     'Upcoming consults are cancelled. Paid consults more than 2 hours away are refunded in full, as in our refund policy.',
+                    CARE_PLAN_ON_DELETE,
                   ].map((line) => (
                     <View key={line} style={styles.listRow}>
                       <Text style={[typography.bodySM, styles.dot]}>•</Text>

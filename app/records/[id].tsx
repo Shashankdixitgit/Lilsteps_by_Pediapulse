@@ -16,8 +16,9 @@ import {
   openDocumentFile,
   useDocuments,
 } from '@/hooks/useDocuments';
-import { formatDate } from '@/lib/date';
+import { formatDate, formatClockTime } from '@/lib/date';
 import { typography } from '@/styles/global';
+import { goBack } from '@/lib/navigation';
 
 const CATEGORY_LABEL: Record<string, string> = {
   prescription: 'Prescription',
@@ -59,15 +60,11 @@ export default function RecordDetailScreen() {
     };
   }, [isImage, fileUrl, docTitle]);
 
-  // en-IN, like the rest of the app: "13 Oct 2026", "13 Oct 2026 · 4:05 pm".
+  // en-IN, like the rest of the app: "13 Oct 2026", "13 Oct 2026 · 4:05 PM".
   const formattedDate = doc ? formatDate(doc.document_date, { year: 'always' }) : '—';
 
   const formattedUpdated = doc
-    ? `${formatDate(doc.created_at, { year: 'always' })} · ${new Date(doc.created_at).toLocaleTimeString('en-IN', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      })}`
+    ? `${formatDate(doc.created_at, { year: 'always' })} · ${formatClockTime(doc.created_at)}`
     : '—';
 
   const fileSizeLabel = doc?.file_size
@@ -170,7 +167,7 @@ export default function RecordDetailScreen() {
         <ScreenHeader title="Record" />
         <View style={styles.centered}>
           <Text style={[typography.body, styles.notFoundText]}>Record not found</Text>
-          <TextButton label="Go back" onPress={() => router.back()} />
+          <TextButton label="Go back" onPress={goBack} />
         </View>
       </View>
     );

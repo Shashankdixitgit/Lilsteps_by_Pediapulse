@@ -5,6 +5,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { AiCheckinHeroCard } from '@/components/consult/AiCheckinHeroCard';
 import { AppointmentCard } from '@/components/consult/AppointmentCard';
 import { ConsultHistoryItem } from '@/components/consult/ConsultHistoryItem';
+import { appointmentEnded } from '@/components/consult/appointmentFormat';
 import { ConversationListItem } from '@/components/consult/ConversationListItem';
 import { CancelledConsultItem } from '@/components/consult/CancelledConsultItem';
 import { PendingPaymentCard } from '@/components/consult/PendingPaymentCard';
@@ -55,7 +56,19 @@ export default function ConsultScreen() {
     const r = refunds.get(a.id);
     return r !== undefined && r !== 'not_paid';
   });
-  const pastCount = consultations.length + cancelledPast.length;
+  // A consult that has ended but the doctor has not closed yet (no visit
+  // notes): under Past as "Awaiting doctor's notes", never lost between
+  // Upcoming and Past (review should-fix 7).
+  const now = new Date();
+  const awaitingNotes = appointments
+    .filter(
+      (a) =>
+        (a.status === 'upcoming' || a.status === 'completed') &&
+        appointmentEnded(a.date, a.time, now) &&
+        !consultations.some((c) => c.appointment_id === a.id),
+    )
+    .sort((a, b) => `${b.date} ${b.time}`.localeCompare(`${a.date} ${a.time}`));
+  const pastCount = consultations.length + cancelledPast.length + awaitingNotes.length;
 
   // "Message doctor" on an appointment opens the chat directly, as on Home.
   async function messageDoctor(doctorId: string) {
@@ -214,6 +227,19 @@ export default function ConsultScreen() {
           <EmptyStateCard icon="document-text-outline" title="No past consultations" />
         ) : (
           <View style={styles.listCard}>
+            {awaitingNotes.map((a, i) => (
+              <CancelledConsultItem
+                key={a.id}
+                doctorName={a.doctors?.name ?? 'Doctor'}
+                date={a.date}
+                time={a.time}
+                concern={a.concern}
+                statusLabel="Awaiting doctor's notes"
+                byDoctor={false}
+                tone="waiting"
+                divider={i > 0}
+              />
+            ))}
             {cancelledPast.map((a, i) => (
               <CancelledConsultItem
                 key={a.id}
@@ -223,7 +249,7 @@ export default function ConsultScreen() {
                 concern={a.concern}
                 statusLabel={cancelledStatusLabel(refunds.get(a.id))}
                 byDoctor={a.cancel_reason === 'doctor'}
-                divider={i > 0}
+                divider={i > 0 || awaitingNotes.length > 0}
               />
             ))}
             {consultations.map((c, i) => (
@@ -234,7 +260,7 @@ export default function ConsultScreen() {
                 doctorName={c.doctor_name}
                 chiefComplaint={parentConsultTitle(c)}
                 outcome={c.outcome}
-                divider={i > 0 || cancelledPast.length > 0}
+                divider={i > 0 || cancelledPast.length > 0 || awaitingNotes.length > 0}
                 onPress={(id) => router.push(`/consult/${id}`)}
               />
             ))}
@@ -246,7 +272,7 @@ export default function ConsultScreen() {
 }
 
 const styles = StyleSheet.create({
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0 },
   section: { gap: 8 },
   loadingRow: { paddingVertical: 16, alignItems: 'center' },
   listCard: {

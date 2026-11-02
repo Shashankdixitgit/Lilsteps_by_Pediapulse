@@ -17,6 +17,7 @@ import { useChild } from '@/context/child';
 import type { AllergySeverity, AllergyType, ChildWithDetails } from '@/hooks/useChildren';
 import { formatAgeLabel, isDobInFuture, isDobInRange, minAllowedDob } from '@/lib/age';
 import { formatDate, parseDateOnly, toDateOnlyString, todayDateOnly } from '@/lib/date';
+import { pickedDate } from '@/lib/datePicker';
 import { dbg } from '@/lib/debug';
 import { supabase } from '@/lib/supabase';
 import { layout, typography } from '@/styles/global';
@@ -275,11 +276,25 @@ function EditChildForm({ child }: { child: ChildWithDetails }) {
                   maximumDate={new Date()}
                   minimumDate={minAllowedDob()}
                   themeVariant="light"
+                  accentColor={AppColors.primary}
                   onChange={(event, date) => {
-                    setPickerOpen(false);
-                    if (event.type === 'set' && date) setDob(date);
+                    // iOS inline: stay open while the month or year changes
+                    // (closed by Done below). Android: the dialog has closed.
+                    if (Platform.OS !== 'ios') setPickerOpen(false);
+                    const picked = pickedDate(event, date);
+                    if (picked) setDob(picked);
                   }}
                 />
+              ) : null}
+              {pickerOpen && Platform.OS === 'ios' ? (
+                <Pressable
+                  onPress={() => setPickerOpen(false)}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  style={styles.pickerDone}
+                >
+                  <Text style={styles.pickerDoneText}>Done</Text>
+                </Pressable>
               ) : null}
               {dobOutOfRange ? (
                 <Text style={[typography.caption, styles.errorInline]}>
@@ -469,6 +484,8 @@ function ListItem({ title, meta, onRemove }: { title: string; meta?: string; onR
 }
 
 const styles = StyleSheet.create({
+  pickerDone: { alignSelf: 'flex-end', minHeight: 44, minWidth: 64, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
+  pickerDoneText: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.secondary },
   flex: { flex: 1 },
   scroll: { paddingHorizontal: 20, paddingTop: 8, gap: 16 },
   card: {

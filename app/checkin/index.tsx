@@ -18,6 +18,8 @@ import { useChild } from '@/context/child';
 import { useResumableCheckin } from '@/hooks/useCheckin';
 import { typography } from '@/styles/global';
 import { WEB_DEMO } from '@/lib/webDemo';
+import { goBack } from '@/lib/navigation';
+import { formatClockTime } from '@/lib/date';
 
 export default function CheckinEntryScreen() {
   const insets = useSafeAreaInsets();
@@ -90,7 +92,7 @@ export default function CheckinEntryScreen() {
 
   return (
     <View style={styles.root}>
-      <CheckinHeader onBack={() => router.back()} showStatusDot />
+      <CheckinHeader onBack={goBack} showStatusDot />
 
       <ScrollView
         ref={scrollRef}
@@ -246,7 +248,7 @@ function resumeLabel(initialComplaint: string): string | null {
 /** "today at 9:40 AM" / "yesterday at 6:15 PM" (sessions are under 24 h old). */
 function startedPhrase(iso: string): string {
   const d = new Date(iso);
-  const time = d.toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
+  const time = formatClockTime(d);
   return d.toDateString() === new Date().toDateString() ? `today at ${time}` : `yesterday at ${time}`;
 }
 

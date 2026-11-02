@@ -8,17 +8,25 @@
  *
  * Subscribing opens Razorpay's subscription page (short_url) the same way a
  * consult payment does (lib/consultPayment.ts):
- *  - native: an auth session; Razorpay's subscription page has no redirect
- *    back, so it closes when the parent taps Done, then we ask the server;
+ *  - native: an auth session (lib/paymentBrowser, ephemeral on iOS so no
+ *    sign-in alert). Razorpay's subscription page has no redirect back, so
+ *    the app asks the server every few seconds and closes the page itself
+ *    once the plan is confirmed (iOS; on Android the parent taps ✕);
  *  - web: the whole page goes to Razorpay (a popup opened after a network
  *    call is blocked). The Care Plan screen checks again when it is opened.
  * Either way only the server's view (webhook / Razorpay fetch) counts.
  */
 import * as Linking from 'expo-linking';
-import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 
 import { RETURN_PATH } from '@/lib/consultPayment';
+import { openPaymentPage } from '@/lib/paymentBrowser';
+import {
+  isServerUnavailableError,
+  isSessionEndedError,
+  SERVER_UNAVAILABLE_TEXT,
+  SESSION_ENDED_TEXT,
+} from '@/lib/sessionEnded';
 import { supabase } from '@/lib/supabase';
 
 export const CARE_PLAN_PRICE_LABEL = '₹999';
@@ -93,6 +101,10 @@ export function creditsLeft(plan: CarePlan | null): number {
 }
 
 async function errorText(error: unknown, fallback: string): Promise<string> {
+  // The session ended on the server: the app is signing out (lib/sessionEnded).
+  if (isSessionEndedError(error)) return SESSION_ENDED_TEXT;
+  // The server couldn't check the session just now (503): not signed out.
+  if (isServerUnavailableError(error)) return SERVER_UNAVAILABLE_TEXT;
   const context = (error as { context?: Response } | null)?.context;
   if (context && typeof context.json === 'function') {
     try {
@@ -150,6 +162,15 @@ export type SubscribeResult =
   | { state: 'redirecting' }
   | { state: 'done'; plan: CarePlan | null };
 
+/** Gap between plan checks after the page closes (tests shorten it). */
+export const planRecheckMs = { value: 2000 };
+
+/** The first payment is in: the plan has a paid month (or is otherwise settled). */
+function isConfirmed(plan: CarePlan | null): boolean {
+  const kind = viewOf(plan).kind;
+  return kind !== 'starting' && kind !== 'none';
+}
+
 /** Open Razorpay's subscription page and come back with the server's view of the plan. */
 export async function subscribeToCarePlan(): Promise<SubscribeResult> {
   const started = await call<{ url?: string; state?: string }>(
@@ -164,11 +185,19 @@ export async function subscribeToCarePlan(): Promise<SubscribeResult> {
     return { state: 'redirecting' };
   }
 
-  await WebBrowser.openAuthSessionAsync(started.url, Linking.createURL(RETURN_PATH));
-  // The webhook can land a moment after the page closes: ask a few times.
-  let plan = await refreshCarePlan();
-  for (let i = 0; i < 3 && viewOf(plan).kind === 'starting'; i++) {
-    await new Promise((r) => setTimeout(r, 2000));
+  // Razorpay's subscription page never redirects back, so the app watches
+  // the server while it is open and closes it once the plan is confirmed
+  // (iOS). Android can't close a Custom Tab: the parent taps ✕.
+  let seen: CarePlan | null = null;
+  // Stored plan (get_my_care_plan) on most polls; a Razorpay check every 4th.
+  await openPaymentPage(started.url, Linking.createURL(RETURN_PATH), async ({ full }) => {
+    seen = full ? await refreshCarePlan() : await getMyCarePlan();
+    return isConfirmed(seen);
+  });
+  // The webhook can land a moment after the page closes: keep asking.
+  let plan = isConfirmed(seen) ? seen : await refreshCarePlan();
+  for (let i = 0; i < 5 && !isConfirmed(plan); i++) {
+    await new Promise((r) => setTimeout(r, planRecheckMs.value));
     plan = await refreshCarePlan();
   }
   return { state: 'done', plan };
