@@ -35,7 +35,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
-import { createAdminClient, createUserClient, getCaller } from '../_shared/supabase.ts';
+import { createAdminClient, createUserClient, callerFailureResponse, resolveCaller } from '../_shared/supabase.ts';
 import { RazorpayError } from '../_shared/razorpay.ts';
 import { parentContact } from '../_shared/parentNotify.ts';
 import {
@@ -63,8 +63,10 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   const admin = createAdminClient();
-  const caller = await getCaller(req, admin);
-  if (!caller) return jsonResponse({ error: 'Your session has ended. Please sign in again.', code: 'session_ended' }, 401);
+  // Bad / expired token: 401 session_ended. Auth service down: 503 (try again).
+  const resolved = await resolveCaller(req, admin);
+  if ('failure' in resolved) return callerFailureResponse(resolved.failure);
+  const caller = resolved.user;
 
   // Parents only: the plan belongs to a parents row.
   const { data: parent } = await admin.from('parents').select('id').eq('id', caller.id).maybeSingle();

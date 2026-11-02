@@ -166,12 +166,27 @@ export function renderTemplate(
     body: fill(tpl.body, params),
     // Fill each value on its own — splicing params into a JSON string breaks
     // on quotes / backslashes.
-    data: tpl.data
-      ? Object.fromEntries(
-          Object.entries(tpl.data).map(([k, v]) => [k, typeof v === 'string' ? fill(v, params) : v]),
-        )
-      : undefined,
+    data: tpl.data ? safePushData(tpl.data, params) : undefined,
   };
+}
+
+/** Ids allowed in a push deep link (uuid-like): nothing that changes the path. */
+const PUSH_ID_RE = /^[\w-]+$/;
+
+/**
+ * Fills the push data. `url` (where a tap opens in the app) is kept only
+ * when it is one of the app's known paths with a safe id; otherwise it is
+ * dropped and the tap just opens the app (PR #26 review item 5).
+ */
+function safePushData(data: Record<string, unknown>, params: Record<string, string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (k === 'url' && typeof v === 'string') {
+      if (v.includes('{{conversationId}}') && !PUSH_ID_RE.test(params.conversationId ?? '')) continue;
+    }
+    out[k] = typeof v === 'string' ? fill(v, params) : v;
+  }
+  return out;
 }
 
 // ── Email ─────────────────────────────────────────────────────────────────────

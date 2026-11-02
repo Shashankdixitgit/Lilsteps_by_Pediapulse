@@ -3,6 +3,8 @@
 import { assertEquals } from 'jsr:@std/assert@1';
 import { pickedDate } from '@/lib/datePicker';
 import {
+  createSessionAwareFetch,
+  isServerUnavailableError,
   isSessionEndedError,
   isSessionEndedResponse,
   markSessionEnded,
@@ -11,7 +13,7 @@ import {
 } from '@/lib/sessionEnded';
 import { returnToSteps } from '@/lib/authRedirect';
 import { NO_REGISTRATION_TEXT, prescriptionDoctorLines } from '@/lib/prescriptionDoctor';
-import { pushTarget } from '@/lib/pushRoutes';
+import { isAllowedPushPath, pushTarget } from '@/lib/pushRoutes';
 import { demoLimitText } from '@/lib/webDemo';
 import { formatClockTime, formatDate } from '../../lib/date.ts';
 import { isNarrowLayout } from '../../components/ui/narrowLayout.ts';
@@ -86,6 +88,13 @@ Deno.test('demo limit: plain words, pointing to the sample family when there is 
 // should-fix 2: a tapped notification opens what it is about
 Deno.test('push tap: in-app paths only; old message pushes still open the chat', () => {
   assertEquals(pushTarget({ url: '/consult' }), '/consult');
+  assertEquals(pushTarget({ url: '/profile/care-plan' }), '/profile/care-plan');
+  assertEquals(pushTarget({ url: '/chat/abc-123' }), '/chat/abc-123');
+  assertEquals(pushTarget({ url: '/profile/edit-child' }), null, 'not on the allow-list');
+  assertEquals(pushTarget({ url: '/chat/a/b' }), null);
+  assertEquals(pushTarget({ url: '/chat/' }), null);
+  assertEquals(pushTarget({ url: '/records/x?y=1' }), null);
+  assertEquals(isAllowedPushPath('/(tabs)'), true);
   assertEquals(pushTarget({ url: 'https://evil.example' }), null);
   assertEquals(pushTarget({ url: '//evil.example' }), null);
   assertEquals(pushTarget({ type: 'message', conversationId: 'c-1' }), '/chat/c-1');
@@ -137,4 +146,77 @@ Deno.test('growth log: 0.5 kg for a 9-month-old is blocked; 4 kg warned; newborn
   assertEquals(!!checkMeasure('150', 'cm', dob, on).error, true);
   const preterm = checkMeasure('0.9', 'kg', '2026-10-20', on); // 13 days old
   assertEquals(!!preterm.error, false);
+});
+
+// PR #26 review item 2: a 401 refreshes once and retries; sign out only when that fails
+const FN = 'https://x.supabase.co/functions/v1/consult-payment';
+const userInit = (token = 'old') => ({ method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: '{}' });
+function fakeFetch(answers: Array<{ status: number; code?: string }>) {
+  const calls: string[] = [];
+  const baseFetch = (_input: RequestInfo | URL, init?: RequestInit) => {
+    calls.push(new Headers(init?.headers).get('Authorization') ?? '');
+    const a = answers.shift() ?? { status: 200 };
+    return Promise.resolve(new Response(JSON.stringify(a.code ? { code: a.code } : { ok: true }), { status: a.status }));
+  };
+  return { calls, baseFetch };
+}
+
+Deno.test('401: refresh once, retry with the new token, stay signed in', async () => {
+  const { calls, baseFetch } = fakeFetch([{ status: 401, code: 'session_ended' }, { status: 200 }]);
+  let signedOut = 0;
+  const f = createSessionAwareFetch({ baseFetch, anonKey: 'anon', refresh: () => Promise.resolve('new'), signOut: async () => { signedOut++; } });
+  const res = await f(FN, userInit());
+  assertEquals(res.status, 200);
+  assertEquals(calls, ['Bearer old', 'Bearer new']);
+  assertEquals(signedOut, 0);
+  assertEquals(takeSessionEnded(), false);
+});
+
+Deno.test('401: refresh fails, signed out (once) with the plain message', async () => {
+  const { baseFetch } = fakeFetch([{ status: 401 }]);
+  let signedOut = 0;
+  const f = createSessionAwareFetch({ baseFetch, anonKey: 'anon', refresh: () => Promise.resolve(null), signOut: async () => { signedOut++; } });
+  const res = await f(FN, userInit());
+  assertEquals(res.status, 401);
+  await Promise.resolve();
+  assertEquals(signedOut, 1);
+  assertEquals(takeSessionEnded(), true);
+});
+
+Deno.test('401: retry still says session_ended, signed out; a plain 401 retry is not', async () => {
+  const a = fakeFetch([{ status: 401 }, { status: 401, code: 'session_ended' }]);
+  let out = 0;
+  const f = createSessionAwareFetch({ baseFetch: a.baseFetch, anonKey: 'anon', refresh: () => Promise.resolve('new'), signOut: async () => { out++; } });
+  await f(FN, userInit());
+  await Promise.resolve();
+  assertEquals(out, 1);
+  takeSessionEnded();
+  const b = fakeFetch([{ status: 401 }, { status: 401 }]);
+  let out2 = 0;
+  const g = createSessionAwareFetch({ baseFetch: b.baseFetch, anonKey: 'anon', refresh: () => Promise.resolve('new'), signOut: async () => { out2++; } });
+  await g(FN, userInit());
+  assertEquals(out2, 0);
+});
+
+Deno.test('503 and anon calls never refresh or sign out', async () => {
+  let refreshed = 0;
+  const a = fakeFetch([{ status: 503 }, { status: 401 }]);
+  const f = createSessionAwareFetch({ baseFetch: a.baseFetch, anonKey: 'anon', refresh: () => { refreshed++; return Promise.resolve('new'); }, signOut: async () => {} });
+  assertEquals((await f(FN, userInit())).status, 503);
+  assertEquals((await f(FN, userInit('anon'))).status, 401);
+  assertEquals(refreshed, 0);
+  assertEquals(isServerUnavailableError({ context: { status: 503 } }), true);
+});
+
+Deno.test('two requests failing together share one refresh', async () => {
+  let refreshed = 0;
+  const a = fakeFetch([{ status: 401 }, { status: 401 }, { status: 200 }, { status: 200 }]);
+  const f = createSessionAwareFetch({
+    baseFetch: a.baseFetch,
+    anonKey: 'anon',
+    refresh: () => { refreshed++; return Promise.resolve('new'); },
+    signOut: async () => {},
+  });
+  await Promise.all([f(FN, userInit()), f(FN, userInit())]);
+  assertEquals(refreshed, 1);
 });

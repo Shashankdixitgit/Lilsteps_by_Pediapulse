@@ -21,7 +21,7 @@
 // the app only ever sees a short friendly message.
 
 // deno-lint-ignore-file no-explicit-any
-import { createAdminClient, getCaller } from "../_shared/supabase.ts";
+import { createAdminClient, resolveCaller } from "../_shared/supabase.ts";
 
 const GEMINI_API_URL =
   "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
@@ -1350,10 +1350,14 @@ Deno.serve(async (req) => {
 
   // Verify Supabase JWT — must be present and resolve to a real user
   const admin = createAdminClient();
-  const caller = await getCaller(req, admin);
-  if (!caller) {
-    return json({ error: "Invalid or expired session" }, 401);
+  // Bad / expired token: 401 session_ended. Auth service down: 503 (try again).
+  const resolved = await resolveCaller(req, admin);
+  if ("failure" in resolved) {
+    return resolved.failure === "unavailable"
+      ? json({ error: "Couldn't reach the server. Please try again.", code: "auth_unavailable" }, 503)
+      : json({ error: "Your session has ended. Please sign in again.", code: "session_ended" }, 401);
   }
+  const caller = resolved.user;
 
   let body: RequestBody;
   try {

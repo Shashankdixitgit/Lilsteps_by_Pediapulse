@@ -11,7 +11,9 @@
 //          otherwise cancels it and makes a new one (max 3 per booking).
 //          payments_one_open_link_uidx (0045) keeps it to one open link even
 //          if two starts race. Each new link extends the hold to cover it.
-//   POST {action:"status", appointmentId, callback?}
+//   POST {action:"status", appointmentId, callback?, stored?}
+//          stored: true reads the booking row only (the app's light poll
+//          while the payment page is open): no Razorpay fetch, no refund retry.
 //        → {state: 'paid' | 'pending' | 'expired' | 'cancelled',
 //           refunded?, refundFailed?, holdExpiresAt?}
 //          Also retries any refund this booking still owes (refund_due /
@@ -70,7 +72,7 @@
 
 // deno-lint-ignore-file no-explicit-any
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
-import { createAdminClient, createUserClient, getCaller } from '../_shared/supabase.ts';
+import { createAdminClient, createUserClient, callerFailureResponse, resolveCaller } from '../_shared/supabase.ts';
 import { cancelConsult } from '../_shared/consultCancel.ts';
 import {
   emailPaymentReturnUrl,
@@ -165,8 +167,10 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   const admin = createAdminClient();
-  const caller = await getCaller(req, admin);
-  if (!caller) return jsonResponse({ error: 'Your session has ended. Please sign in again.', code: 'session_ended' }, 401);
+  // Bad / expired token: 401 session_ended. Auth service down: 503 (try again).
+  const resolved = await resolveCaller(req, admin);
+  if ('failure' in resolved) return callerFailureResponse(resolved.failure);
+  const caller = resolved.user;
 
   let body: any;
   try {
@@ -213,7 +217,7 @@ Deno.serve(async (req) => {
 
   try {
     if (action === 'start') return await start(admin, appt, body?.returnUrl, body?.handoff === true);
-    if (action === 'status') return await status(admin, appt, callbackFrom(body?.callback));
+    if (action === 'status') return await status(admin, appt, callbackFrom(body?.callback), body?.stored === true);
     if (action === 'use_plan') return await usePlan(admin, appt);
     if (action === 'cancel') return await cancel(admin, appt, isDoctor ? 'doctor' : 'parent');
     if (action === 'reschedule') return await reschedule(req, admin, appt, isDoctor ? 'doctor' : 'parent', slotId);
@@ -363,7 +367,23 @@ async function createLinkForHold(
 
 // ── status ──────────────────────────────────────────────────────────────────
 
-async function status(admin: any, appt: Appointment, cb: LinkCallback | null): Promise<Response> {
+async function status(admin: any, appt: Appointment, cb: LinkCallback | null, storedOnly = false): Promise<Response> {
+  // `stored`: the app's light poll while the payment page is open (every 5 s;
+  // a full check only every 4th poll). The booking row only: no Razorpay
+  // fetch, no refund retry (PR #26 review item 4). The webhook updates it.
+  if (storedOnly) {
+    if (appt.status === 'upcoming' || appt.status === 'completed' || appt.status === 'no_show') {
+      return jsonResponse({ state: 'paid' });
+    }
+    if (appt.status === 'cancelled') {
+      return jsonResponse({ state: appt.cancel_reason === 'payment_expired' ? 'expired' : 'cancelled' });
+    }
+    if (!appt.hold_expires_at || new Date(appt.hold_expires_at).getTime() <= Date.now()) {
+      return jsonResponse({ state: 'expired' });
+    }
+    return jsonResponse({ state: 'pending', holdExpiresAt: appt.hold_expires_at });
+  }
+
   // Money this booking still owes back: try again now.
   const retried = await retryOwedRefunds(admin, appt.id);
 

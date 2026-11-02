@@ -46,7 +46,7 @@
 //   supabase functions deploy delete-account --project-ref <project-ref>
 
 import { CORS_HEADERS, jsonResponse } from '../_shared/cors.ts';
-import { createAdminClient, getCaller } from '../_shared/supabase.ts';
+import { createAdminClient, callerFailureResponse, resolveCaller } from '../_shared/supabase.ts';
 import { deleteAccountData, REFUND_FAILED_NOTICE, settleConsultsBeforeDelete } from './account.ts';
 import { endPlansForDeletedAccount } from '../_shared/carePlan.ts';
 
@@ -55,8 +55,10 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return jsonResponse({ error: 'Method not allowed' }, 405);
 
   const admin = createAdminClient();
-  const caller = await getCaller(req, admin);
-  if (!caller) return jsonResponse({ error: 'Your session has ended. Please sign in again.', code: 'session_ended' }, 401);
+  // Bad / expired token: 401 session_ended. Auth service down: 503 (try again).
+  const resolved = await resolveCaller(req, admin);
+  if ('failure' in resolved) return callerFailureResponse(resolved.failure);
+  const caller = resolved.user;
 
   let body: { confirm?: string } = {};
   try {

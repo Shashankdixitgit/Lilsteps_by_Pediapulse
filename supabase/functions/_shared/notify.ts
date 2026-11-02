@@ -124,16 +124,19 @@ async function sendExpoPush(
       'Accept-Encoding': 'gzip, deflate',
       'Content-Type': 'application/json',
     },
-    // Reminders go to the app's high-importance Android channel and as
-    // high priority, so they pop up (review should-fix 2). An app without
-    // that channel yet falls back to its default one.
+    // Reminders go as high priority (review should-fix 2).
+    // TODO(channel): also send `channelId: 'reminders'` (the app's
+    // high-importance Android channel, created by usePushToken) once most
+    // Android installs are on the build that creates it. Android drops a
+    // notification sent to a channel the phone doesn't have, so it is not
+    // sent yet (PR #26 review item 1).
     body: JSON.stringify({
       to: token,
       title,
       body,
       data,
       sound: 'default',
-      ...(data?.channel === 'reminders' ? { channelId: 'reminders', priority: 'high' } : null),
+      ...(data?.channel === 'reminders' ? { priority: 'high' } : null),
     }),
   });
 

@@ -148,12 +148,21 @@ Deno.test('iOS: start does not ask for the hand-off page', async () => {
   assertEquals(invoked[0].body.handoff, false);
 });
 
-Deno.test('iOS: page closed by the app once the server says paid', async () => {
+Deno.test('iOS: page closed by the app once paid; light polls read the stored status only', async () => {
   Platform.OS = 'ios';
   resetBrowser();
-  fakeServer('paid');
+  invoked.length = 0;
+  let polls = 0;
+  setInvokeHandler((_name, body) => {
+    if (body.action === 'start') return { url: LINK };
+    if (body.action === 'status') return { state: ++polls >= 5 ? 'paid' : 'pending' };
+    return {};
+  });
   setNextResult('holdOpen');
   const result = await payForConsult('appt-8');
   assertEquals(result.state, 'paid');
   assertEquals(dismissed, 1);
+  const statuses = invoked.filter((c) => c.body.action === 'status').map((c) => c.body.stored === true);
+  // Polls 1-3 stored only, 4th a full check, 5th stored (paid), then the final full check.
+  assertEquals(statuses, [true, true, true, false, true, false]);
 });

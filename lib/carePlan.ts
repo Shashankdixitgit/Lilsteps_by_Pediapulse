@@ -21,7 +21,12 @@ import { Platform } from 'react-native';
 
 import { RETURN_PATH } from '@/lib/consultPayment';
 import { openPaymentPage } from '@/lib/paymentBrowser';
-import { isSessionEndedError, SESSION_ENDED_TEXT } from '@/lib/sessionEnded';
+import {
+  isServerUnavailableError,
+  isSessionEndedError,
+  SERVER_UNAVAILABLE_TEXT,
+  SESSION_ENDED_TEXT,
+} from '@/lib/sessionEnded';
 import { supabase } from '@/lib/supabase';
 
 export const CARE_PLAN_PRICE_LABEL = '₹999';
@@ -98,6 +103,8 @@ export function creditsLeft(plan: CarePlan | null): number {
 async function errorText(error: unknown, fallback: string): Promise<string> {
   // The session ended on the server: the app is signing out (lib/sessionEnded).
   if (isSessionEndedError(error)) return SESSION_ENDED_TEXT;
+  // The server couldn't check the session just now (503): not signed out.
+  if (isServerUnavailableError(error)) return SERVER_UNAVAILABLE_TEXT;
   const context = (error as { context?: Response } | null)?.context;
   if (context && typeof context.json === 'function') {
     try {
@@ -182,8 +189,9 @@ export async function subscribeToCarePlan(): Promise<SubscribeResult> {
   // the server while it is open and closes it once the plan is confirmed
   // (iOS). Android can't close a Custom Tab: the parent taps ✕.
   let seen: CarePlan | null = null;
-  await openPaymentPage(started.url, Linking.createURL(RETURN_PATH), async () => {
-    seen = await refreshCarePlan();
+  // Stored plan (get_my_care_plan) on most polls; a Razorpay check every 4th.
+  await openPaymentPage(started.url, Linking.createURL(RETURN_PATH), async ({ full }) => {
+    seen = full ? await refreshCarePlan() : await getMyCarePlan();
     return isConfirmed(seen);
   });
   // The webhook can land a moment after the page closes: keep asking.
