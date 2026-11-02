@@ -74,12 +74,16 @@ async function saysSessionEnded(res: Response): Promise<boolean> {
 export function createSessionAwareFetch(deps: {
   baseFetch: Fetch;
   anonKey: string;
-  /** supabase.auth.refreshSession: the new access token, or null when it failed. */
-  refresh: () => Promise<string | null>;
+  /**
+   * supabase.auth.refreshSession: the new access token, null when the session
+   * is really over, or 'unavailable' when the refresh itself couldn't reach
+   * the server (network blip, 5xx) — then the phone stays signed in.
+   */
+  refresh: () => Promise<string | null | 'unavailable'>;
   /** supabase.auth.signOut({ scope: 'local' }). */
   signOut: () => Promise<void>;
 }): Fetch {
-  let refreshing: Promise<string | null> | null = null;
+  let refreshing: Promise<string | null | 'unavailable'> | null = null;
   let endingSession = false;
 
   const endSession = () => {
@@ -102,11 +106,12 @@ export function createSessionAwareFetch(deps: {
 
     refreshing ??= deps
       .refresh()
-      .catch(() => null)
+      .catch((): 'unavailable' => 'unavailable')
       .finally(() => {
         refreshing = null;
       });
     const fresh = await refreshing;
+    if (fresh === 'unavailable') return res;
     if (!fresh) {
       endSession();
       return res;

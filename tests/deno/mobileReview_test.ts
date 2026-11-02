@@ -183,6 +183,19 @@ Deno.test('401: refresh fails, signed out (once) with the plain message', async 
   assertEquals(takeSessionEnded(), true);
 });
 
+Deno.test('401: refresh cannot reach the server (offline/5xx), stays signed in', async () => {
+  for (const refresh of [() => Promise.resolve('unavailable' as const), () => Promise.reject(new Error('offline'))]) {
+    const { baseFetch } = fakeFetch([{ status: 401 }]);
+    let signedOut = 0;
+    const f = createSessionAwareFetch({ baseFetch, anonKey: 'anon', refresh, signOut: async () => { signedOut++; } });
+    const res = await f(FN, userInit());
+    assertEquals(res.status, 401);
+    await Promise.resolve();
+    assertEquals(signedOut, 0);
+    assertEquals(takeSessionEnded(), false);
+  }
+});
+
 Deno.test('401: retry still says session_ended, signed out; a plain 401 retry is not', async () => {
   const a = fakeFetch([{ status: 401 }, { status: 401, code: 'session_ended' }]);
   let out = 0;

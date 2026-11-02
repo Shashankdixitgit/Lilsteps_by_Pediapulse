@@ -131,7 +131,11 @@ const sessionAwareFetch = createSessionAwareFetch({
   anonKey: supabaseAnonKey,
   refresh: async () => {
     const { data, error } = await supabase.auth.refreshSession();
-    return error ? null : data.session?.access_token ?? null;
+    if (!error) return data.session?.access_token ?? null;
+    // Couldn't reach Auth (offline, timeout, 5xx): not a reason to sign out.
+    const status = (error as { status?: number }).status ?? 0;
+    if (error.name === 'AuthRetryableFetchError' || status === 0 || status >= 500) return 'unavailable';
+    return null;
   },
   signOut: async () => {
     await supabase.auth.signOut({ scope: "local" });
