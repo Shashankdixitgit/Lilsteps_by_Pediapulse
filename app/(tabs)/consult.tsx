@@ -124,6 +124,7 @@ export default function ConsultScreen() {
             childId={f.child_id}
             doctorId={f.doctor_id}
             doctorName={f.doctors?.name ?? 'Doctor'}
+            doctorAvatarUrl={f.doctors?.avatar_url}
             date={f.date}
             time={f.time}
             holdExpiresAt={f.hold_expires_at ?? null}
@@ -137,12 +138,13 @@ export default function ConsultScreen() {
           </View>
         ) : upcoming.length > 0 ? (
           upcoming.map((a) => {
-            const item = { id: a.id, date: a.date, time: a.time, doctorName: a.doctors?.name ?? 'Doctor', paidWithPlan: a.paid_with_plan === true };
+            const item = { id: a.id, date: a.date, time: a.time, doctorName: a.doctors?.name ?? 'Doctor', doctorAvatarUrl: a.doctors?.avatar_url ?? null, paidWithPlan: a.paid_with_plan === true };
             const summaryId = a.ai_summary_id;
             return (
               <AppointmentCard
                 key={a.id}
                 doctorName={item.doctorName}
+                doctorAvatarUrl={item.doctorAvatarUrl}
                 doctorSpecialisation={a.doctors?.specialisation ?? ''}
                 date={a.date}
                 time={a.time}
@@ -181,6 +183,7 @@ export default function ConsultScreen() {
                 key={c.id}
                 id={c.id}
                 doctorName={c.doctors?.name ?? 'Doctor'}
+                doctorAvatarUrl={c.doctors?.avatar_url}
                 preview={c.last_message?.content ?? null}
                 previewFromParent={c.last_message?.sender === 'parent'}
                 lastAt={c.last_message?.created_at ?? c.last_message_at ?? c.created_at}

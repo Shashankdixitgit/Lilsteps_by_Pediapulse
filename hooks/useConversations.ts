@@ -11,7 +11,7 @@ export interface ConversationRow {
   last_message_at: string;
   created_at: string;
   // joined
-  doctors?: { name: string; specialisation: string; hospital: string };
+  doctors?: { name: string; specialisation: string; hospital: string; avatar_url?: string | null };
   children?: { name: string };
   /** Latest message text (either side), for the Messages list. */
   last_message?: { content: string; sender: 'parent' | 'doctor'; created_at: string } | null;
@@ -36,7 +36,7 @@ export function useConversations(childId: string | null) {
 
     let q = supabase
       .from('conversations')
-      .select('*, doctors(name, specialisation, hospital), children(name)')
+      .select('*, doctors(name, specialisation, hospital, avatar_url), children(name)')
       .eq('parent_id', user.id)
       .order('last_message_at', { ascending: false });
 

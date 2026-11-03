@@ -6,7 +6,7 @@ import { useNarrowLayout } from '@/components/ui/useNarrowLayout';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import type { DoctorRow } from '@/hooks/useDoctors';
 
-import { doctorInitial } from './appointmentFormat';
+import { DoctorAvatar } from './DoctorAvatar';
 
 
 export interface DoctorCardCompactProps {
@@ -56,9 +56,7 @@ export function DoctorCardCompact({ doctor, qualifications, onBook, inList, divi
       accessibilityLabel={`${doctor.name}, ${doctor.specialisation}${qualifications ? `, ${qualifications}` : ''}${available ? '. Book' : '. Unavailable'}`}
       style={[styles.row, !inList && styles.standalone, inList && divider && styles.divider]}
     >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{doctorInitial(doctor.name)}</Text>
-      </View>
+      <DoctorAvatar name={doctor.name} avatarUrl={doctor.avatar_url} />
       <View style={styles.text}>
         {/* Never cut with "…" (review must-fix 6): names wrap. */}
         <Text style={styles.name}>{doctor.name}</Text>
@@ -97,15 +95,6 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: AppColors.border,
   },
-  avatar: {
-    width: Size.iconWell,
-    height: Size.iconWell,
-    borderRadius: Size.iconWell / 2,
-    backgroundColor: AppColors.mintSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.primary },
   text: { flex: 1, gap: 2 },
   name: { fontFamily: FontFamily.semibold, fontSize: 15, lineHeight: 20, color: AppColors.onSurface },
   spec: { fontFamily: FontFamily.regular, fontSize: 13, lineHeight: 18, color: AppColors.muted },

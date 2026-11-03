@@ -3,12 +3,15 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { GradientButton, TextButton } from '@/components/gradient-button';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 
-import { canJoinVideo, CONSULT_MINUTES, doctorInitial, JOIN_OPENS_MINUTES, whenLabel } from './appointmentFormat';
+import { canJoinVideo, CONSULT_MINUTES, JOIN_OPENS_MINUTES, whenLabel } from './appointmentFormat';
+import { DoctorAvatar } from './DoctorAvatar';
 
 export interface AppointmentCardProps {
   doctorName: string;
+  /** doctors.avatar_url; the initial shows without it. */
+  doctorAvatarUrl?: string | null;
   doctorSpecialisation: string;
   date: string; // 'YYYY-MM-DD' (clinic date)
   time: string; // 'HH:MM[:SS]' (clinic time)
@@ -47,6 +50,7 @@ export interface AppointmentCardProps {
  */
 export function AppointmentCard({
   doctorName,
+  doctorAvatarUrl,
   doctorSpecialisation,
   date,
   time,
@@ -73,9 +77,7 @@ export function AppointmentCard({
           at 200% zoom the name keeps the full width instead of breaking one
           letter per line. */}
       <View style={styles.top}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{doctorInitial(doctorName)}</Text>
-        </View>
+        <DoctorAvatar name={doctorName} avatarUrl={doctorAvatarUrl} />
         <View style={styles.info}>
           <Text style={styles.doctor}>{doctorName}</Text>
           {doctorSpecialisation ? <Text style={styles.spec}>{doctorSpecialisation}</Text> : null}
@@ -172,15 +174,6 @@ const styles = StyleSheet.create({
   },
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   pill: { flexDirection: 'row', marginTop: 4 },
-  avatar: {
-    width: Size.iconWell,
-    height: Size.iconWell,
-    borderRadius: Size.iconWell / 2,
-    backgroundColor: AppColors.mintSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontFamily: FontFamily.semibold, fontSize: 13, color: AppColors.primary },
   info: { flex: 1, minWidth: 0, gap: 2 },
   doctor: { fontFamily: FontFamily.semibold, fontSize: 15, lineHeight: 20, color: AppColors.onSurface },
   spec: { fontFamily: FontFamily.regular, fontSize: 13, lineHeight: 18, color: AppColors.muted },

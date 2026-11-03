@@ -4,12 +4,14 @@ import { StyleSheet, Text, View } from 'react-native';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Size } from '@/constants/theme';
 import { formatDate, formatClockTime } from '@/lib/date';
+import { DoctorAvatar } from './DoctorAvatar';
 
-import { doctorInitial } from './appointmentFormat';
 
 export interface ConversationListItemProps {
   id: string;
   doctorName: string;
+  /** doctors.avatar_url; the initial shows without it. */
+  doctorAvatarUrl?: string | null;
   /** Last message text, or null for a thread with no messages yet. */
   preview: string | null;
   /** True when the last message was sent by the parent. */
@@ -51,6 +53,7 @@ function shortStamp(iso: string | null): string {
 export function ConversationListItem({
   id,
   doctorName,
+  doctorAvatarUrl,
   preview,
   previewFromParent,
   lastAt,
@@ -81,9 +84,7 @@ export function ConversationListItem({
       accessibilityLabel={label}
       style={[styles.row, divider && styles.divider]}
     >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{doctorInitial(doctorName)}</Text>
-      </View>
+      <DoctorAvatar name={doctorName} avatarUrl={doctorAvatarUrl} />
       <View style={styles.info}>
         <View style={styles.topLine}>
           <Text style={styles.name}>{doctorName}</Text>
@@ -115,15 +116,6 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: AppColors.border },
-  avatar: {
-    width: Size.iconWell,
-    height: Size.iconWell,
-    borderRadius: Size.iconWell / 2,
-    backgroundColor: AppColors.mintSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontFamily: FontFamily.semibold, fontSize: 13, color: AppColors.primary },
   info: { flex: 1, minWidth: 0, gap: 2 },
   topLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   name: { flex: 1, minWidth: 0, fontFamily: FontFamily.semibold, fontSize: 15, lineHeight: 20, color: AppColors.onSurface },

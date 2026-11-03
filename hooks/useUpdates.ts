@@ -25,6 +25,7 @@ export interface UnreadThread {
   childId: string;
   childName: string;
   doctorName: string;
+  doctorAvatarUrl: string | null;
   /** Newest unread doctor message. */
   latest: string;
   latestAt: string;
@@ -105,7 +106,7 @@ interface MessageJoinRow {
   created_at: string;
   conversations: {
     child_id: string;
-    doctors: { name: string } | null;
+    doctors: { name: string; avatar_url: string | null } | null;
     children: { name: string } | null;
   } | null;
 }
@@ -150,7 +151,7 @@ export function useUpdates() {
     const [msgRes, rxRes, visitRes] = await Promise.all([
       supabase
         .from('messages')
-        .select('id, conversation_id, content, created_at, conversations!inner(child_id, parent_id, doctors(name), children(name))')
+        .select('id, conversation_id, content, created_at, conversations!inner(child_id, parent_id, doctors(name, avatar_url), children(name))')
         .eq('sender', 'doctor')
         .is('read_at', null)
         .eq('conversations.parent_id', userId)
@@ -184,6 +185,7 @@ export function useUpdates() {
           childId: m.conversations?.child_id ?? '',
           childName: m.conversations?.children?.name ?? '',
           doctorName: m.conversations?.doctors?.name ?? 'Your doctor',
+          doctorAvatarUrl: m.conversations?.doctors?.avatar_url ?? null,
           latest: m.content,
           latestAt: m.created_at,
           count: 1,
