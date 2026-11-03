@@ -215,7 +215,7 @@ function DoctorRowItem({
       accessibilityLabel={`${doc.name}, ${meta}${qualifications ? `. ${qualifications}` : ''}${nextText ? `. ${nextText}` : ''}${noVideoLink ? `. ${NO_LINK_HINT}` : ''}. Book`}
       style={[styles.row, divider && styles.divider]}
     >
-      <DoctorAvatar name={doc.name} avatarUrl={doc.avatar_url} />
+      <DoctorAvatar name={doc.name} avatarUrl={doc.avatar_url} size={40} />
       <View style={styles.info}>
         <Text style={styles.name}>{doc.name}</Text>
         {meta ? <Text style={typography.meta}>{meta}</Text> : null}

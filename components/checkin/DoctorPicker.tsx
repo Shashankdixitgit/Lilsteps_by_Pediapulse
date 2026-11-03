@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { DoctorAvatar } from '@/components/consult/DoctorAvatar';
-import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { doctorHasVideoLink, type DoctorRow, useDoctorQualifications } from '@/hooks/useDoctors';
 
 import { spaceSelects } from './spaceKey';

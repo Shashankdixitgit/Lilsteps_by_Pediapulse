@@ -22,7 +22,7 @@ import {
 } from '@/components/consult/appointmentFormat';
 import { GradientButton } from '@/components/gradient-button';
 import { ScreenHeader } from '@/components/ScreenHeader';
-import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
+import { AppColors, Radius, Size } from '@/constants/theme';
 import { typography } from '@/styles/global';
 import { useChild } from '@/context/child';
 import { supabase } from '@/lib/supabase';
@@ -281,7 +281,7 @@ export default function ConfirmScreen() {
 
         <View style={styles.card}>
           <View style={styles.docRow}>
-            <DoctorAvatar name={doctor?.name} avatarUrl={doctor?.avatar_url} />
+            <DoctorAvatar name={doctor?.name} avatarUrl={doctor?.avatar_url} size={40} />
             <View style={styles.docText}>
               {/* Wraps, never "Dr. Madhav C…" (review must-fix 6). */}
               <Text style={styles.docName}>{doctor?.name ?? 'Doctor'}</Text>

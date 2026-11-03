@@ -3,7 +3,7 @@ import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
 import { TextButton } from '@/components/gradient-button';
 import { PressableScale } from '@/components/ui/PressableScale';
-import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { typography } from '@/styles/global';
 import { DoctorAvatar } from '@/components/consult/DoctorAvatar';
 

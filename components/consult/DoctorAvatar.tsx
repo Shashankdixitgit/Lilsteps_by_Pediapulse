@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { AppColors, FontFamily, Size } from '@/constants/theme';
@@ -21,6 +21,8 @@ export interface DoctorAvatarProps {
  */
 export function DoctorAvatar({ name, avatarUrl, size = Size.iconWell, decorative = true, style }: DoctorAvatarProps) {
   const [failed, setFailed] = useState(false);
+  // A recycled row may get a new URL: try the photo again.
+  useEffect(() => setFailed(false), [avatarUrl]);
   const showPhoto = !!avatarUrl && !failed;
   const box = { width: size, height: size, borderRadius: size / 2 };
 

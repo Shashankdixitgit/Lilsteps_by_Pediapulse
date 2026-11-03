@@ -4,7 +4,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { GradientButton } from '@/components/gradient-button';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 import { confirmReleaseSlot, SLOT_NOT_KEPT_TEXT, SLOT_RELEASED_TEXT, useConsultCheckout } from '@/hooks/useConsultCheckout';
 import { cancelConsult, CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 

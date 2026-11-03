@@ -3,7 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { GradientButton, TextButton } from '@/components/gradient-button';
 import { StatusPill } from '@/components/ui/StatusPill';
-import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
+import { AppColors, FontFamily, Radius } from '@/constants/theme';
 
 import { canJoinVideo, CONSULT_MINUTES, JOIN_OPENS_MINUTES, whenLabel } from './appointmentFormat';
 import { DoctorAvatar } from './DoctorAvatar';
