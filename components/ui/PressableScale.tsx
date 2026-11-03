@@ -1,4 +1,4 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Pressable, PressableProps, StyleProp, ViewStyle } from 'react-native';
 import Animated, {
   interpolate,
@@ -11,7 +11,8 @@ import Animated, {
 
 import { Motion } from '@/constants/theme';
 
-import { haptic } from './useMotion';
+import { haptic, useMotion } from './useMotion';
+
 
 interface PressableScaleProps extends Omit<PressableProps, 'style' | 'children'> {
   children: ReactNode;
@@ -23,6 +24,12 @@ interface PressableScaleProps extends Omit<PressableProps, 'style' | 'children'>
   scaleTo?: number;
   /** Light impact haptic on press (CTAs only). */
   hapticOnPress?: boolean;
+  /**
+   * Solid offset shadow in px (HitRate-style CTA). At rest the control sits on
+   * a navy copy of itself, `n` px down and to the left; pressing slides it onto
+   * the shadow (translate, shadow → 0) instead of scaling.
+   */
+  offsetShadow?: number;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -47,14 +54,24 @@ export function PressableScale({
   onPress,
   accessibilityRole = 'button',
   hitSlop = 6,
+  offsetShadow,
+  disabled,
   ...rest
 }: PressableScaleProps) {
   const pressed = useSharedValue(0);
+  const { reduceMotion } = useMotion();
+  // The shadow string can't animate on the UI thread, so it flips with React
+  // state; the slide itself is a UI-thread transform.
+  const [down, setDown] = useState(false);
+  const n = offsetShadow ?? 0;
+  const slide = n > 0;
 
   const animatedStyle = useAnimatedStyle(() => {
     const p = pressed.get();
     return {
-      transform: [{ scale: interpolate(p, [0, 1], [1, scaleTo]) }],
+      transform: slide
+        ? [{ translateX: interpolate(p, [0, 1], [0, -n]) }, { translateY: interpolate(p, [0, 1], [0, n]) }]
+        : [{ scale: interpolate(p, [0, 1], [1, scaleTo]) }],
       ...(bg && bgPressed ? { backgroundColor: interpolateColor(p, [0, 1], [bg, bgPressed]) } : null),
     };
   });
@@ -63,19 +80,27 @@ export function PressableScale({
     <AnimatedPressable
       accessibilityRole={accessibilityRole}
       hitSlop={hitSlop}
+      disabled={disabled}
       onPressIn={(e) => {
-        pressed.set(withTiming(1, { duration: Motion.pressIn }));
+        pressed.set(reduceMotion && slide ? 1 : withTiming(1, { duration: Motion.pressIn }));
+        if (slide) setDown(true);
         onPressIn?.(e);
       }}
       onPressOut={(e) => {
-        pressed.set(withSpring(0, Motion.springPress));
+        pressed.set(reduceMotion && slide ? 0 : withSpring(0, Motion.springPress));
+        if (slide) setDown(false);
         onPressOut?.(e);
       }}
       onPress={(e) => {
         if (hapticOnPress) haptic('light');
         onPress?.(e);
       }}
-      style={[bg ? { backgroundColor: bg } : null, style, animatedStyle]}
+      style={[
+        bg ? { backgroundColor: bg } : null,
+        style,
+        slide && !disabled ? { boxShadow: down ? 'none' : `-${n}px ${n}px 0px #0b1632` } : null,
+        animatedStyle,
+      ]}
       {...rest}
     >
       {children}

@@ -37,7 +37,7 @@ export function HeroBackdrop({ radius = Radius.xl }: HeroBackdropProps) {
 }
 
 interface HeroCardProps extends ViewProps {
-  /** Soft navy-tinted shadow (default true). Pass false if the card clips (overflow:'hidden'). */
+  /** Solid navy offset shadow (default true), as on the clinic website. */
   elevated?: boolean;
 }
 
@@ -63,11 +63,11 @@ export const heroCardStyle = StyleSheet.create({
     borderRadius: Radius.xl,
     borderCurve: 'continuous',
     borderWidth: 1,
-    borderColor: AppColors.heroBorder,
+    borderColor: AppColors.ink,
     padding: 20,
   },
   elevated: {
-    boxShadow: Shadow.card,
+    boxShadow: Shadow.hardLg,
   },
 });
 

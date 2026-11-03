@@ -78,7 +78,7 @@ export default function SplashScreen() {
             {STONES.map((stone, i) => (
               <View key={stone.h} style={styles.stoneCol}>
                 {i === STONES.length - 1 ? (
-                  <Sprout mood="wave" size={56} entrance style={styles.sproutOnStone} />
+                  <Sprout mood="wave" size={84} entrance style={styles.sproutOnStone} />
                 ) : null}
                 {i === 1 || i === 3 ? <View style={styles.footprint} /> : null}
                 <View style={[styles.step, { height: stone.h, backgroundColor: stone.color }]} />
@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   sproutOnStone: {
-    marginBottom: -6,
+    marginBottom: -2,
   },
   heroBody: {
     gap: 12,

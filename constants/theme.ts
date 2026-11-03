@@ -69,7 +69,8 @@ export const AppColors = {
   placeholder: '#5a6079',
   outline: '#686e86', // icons only (text only on #FFFFFF)
   outlineVariant: '#aaaec2', // decorative / disabled icons only
-  ink: '#0b1632', // navy circle in the white pill CTA
+  ink: '#0b1632', // navy: CTA / key-card outlines and their solid offset shadow
+  hairline: 'rgba(11, 22, 50, 0.10)', // ordinary card edge (HitRate-style soft card)
   overlay: 'rgba(11, 22, 50, 0.45)', // navy modal scrim, never concatenate
   onDarkMuted: 'rgba(255, 255, 255, 0.78)', // body text on primary / navy
   onDarkSubtle: 'rgba(255, 255, 255, 0.10)', // glassy pill fill on primary (subtle glass)
@@ -217,7 +218,17 @@ export const Shadow = {
   raised: '0px 2px 4px rgba(11, 22, 50, 0.06), 0px 12px 28px rgba(11, 22, 50, 0.10)',
   clay: '0px 6px 14px rgba(11, 22, 50, 0.10), inset 0px -3px 0px rgba(11, 22, 50, 0.06)',
   focusRing: '0px 0px 0px 3px #ebe9ff',
-  /** Explicitly no shadow (plain cards are border-only). */
+  /** Ordinary card: hairline edge + soft lift (HitRate-style). */
+  lift: '0px 6px 18px rgba(20, 23, 43, 0.08)',
+  /**
+   * Solid offset shadow (no blur), as on lilstepsclinics.com: CTAs and key
+   * cards sit on a navy copy of themselves, down and to the left. Pressing a
+   * CTA slides it onto its shadow (see PressableScale `offsetShadow`).
+   */
+  hard: '-3px 3px 0px #0b1632',
+  hardSm: '-2px 2px 0px #0b1632',
+  hardLg: '-4px 4px 0px #0b1632',
+  /** Explicitly no shadow. */
   none: 'none',
 } as const;
 

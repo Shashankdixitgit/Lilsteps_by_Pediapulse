@@ -45,6 +45,8 @@
       --segment-foreground: #0b1632;
 
       --border: #e5e4f0;
+      --ink: #0b1632;
+      --hairline: rgba(11, 22, 50, 0.10);
       --separator: #e5e4f0;
       --focus: #6052bc;
     }
@@ -76,6 +78,8 @@
       --segment-foreground: #0b1632;
 
       --border: #e5e4f0;
+      --ink: #0b1632;
+      --hairline: rgba(11, 22, 50, 0.10);
       --separator: #e5e4f0;
       --focus: #6052bc;
     }
