@@ -13,12 +13,13 @@ interface GradientButtonProps {
    *          This is also THE CTA on lavender glass heroes (HeroCard).
    * `light`: white pill, ink label, black circle with a white arrow. Only on a
    *          solid primary surface (rare now: heroes are lavender).
-   * `outline`: white pill, 1px borderStrong, primary label, no arrow.
+   * `outline`: white pill, ink outline + small offset shadow, ink label, no arrow.
+   * `soft`: lavender pill, ink outline + offset shadow, ink label (quiet secondary CTA).
    * `ghost`: text-only secondary action. No fill, no border, `secondary`
    *          label, 44 hit area. Use for every non-primary action.
    * `danger`: text-only destructive action (Sign out): `danger` label.
    */
-  variant?: 'dark' | 'light' | 'outline' | 'ghost' | 'danger';
+  variant?: 'dark' | 'light' | 'outline' | 'soft' | 'ghost' | 'danger';
   /** Ghost/danger only: trailing chevron-forward 14. */
   chevron?: boolean;
   /** Hide the circular arrow badge (e.g. for "Skip"/secondary flows). */
@@ -35,9 +36,11 @@ interface GradientButtonProps {
 
 /**
  * Primary action button (name kept for call-site compatibility; there is no
- * gradient). Pill + arrow circle echo healthnivaran.in. Squishy press via
- * PressableScale, light haptic. Disabled never uses opacity: it switches to
- * a cool-grey fill with a muted label (AA).
+ * gradient). HitRate-style, as on lilstepsclinics.com: every filled pill has a
+ * 1px navy outline and sits on a solid navy shadow (down-left, no blur);
+ * pressing slides it onto the shadow (PressableScale `offsetShadow`). Light
+ * haptic. Disabled never uses opacity: it switches to a cool-grey fill with a
+ * muted label (AA) and drops the shadow.
  */
 export function GradientButton({
   label,
@@ -75,6 +78,7 @@ export function GradientButton({
   }
 
   const isLight = variant === 'light';
+  const isSoft = variant === 'soft';
   const isOutline = variant === 'outline';
   const isSmall = size === 'sm';
   const hasLabel = label.length > 0;
@@ -87,23 +91,25 @@ export function GradientButton({
 
   const bg = disabled
     ? AppColors.surfaceContainerHigh
-    : isLight
-      ? AppColors.card
-      : isOutline
+    : isSoft
+      ? AppColors.lavender
+      : isLight || isOutline
         ? AppColors.card
         : AppColors.primary;
   const bgPressed = disabled
     ? AppColors.surfaceContainerHigh
-    : isLight || isOutline
-      ? AppColors.surfaceContainer
-      : AppColors.primaryDim;
+    : isSoft
+      ? AppColors.mintBorder
+      : isLight || isOutline
+        ? AppColors.surfaceContainer
+        : AppColors.primaryDim;
   const labelColor = disabled
     ? AppColors.muted
-    : isLight
+    : isLight || isOutline || isSoft
       ? AppColors.ink
-      : isOutline
-        ? AppColors.primary
-        : AppColors.onPrimary;
+      : AppColors.onPrimary;
+  // Solid navy shadow: 3 px on standard pills, 2 px on small inline ones.
+  const shadow = disabled ? 0 : isSmall ? 2 : 3;
 
   return (
     <PressableScale
@@ -114,13 +120,14 @@ export function GradientButton({
       accessibilityState={{ disabled: inactive, busy: !!loading }}
       bg={bg}
       bgPressed={bgPressed}
+      offsetShadow={shadow}
       style={[
         styles.pill,
         // minHeight, not height: a 2-line label grows the pill instead of
         // spilling out of it.
         { minHeight: height, borderRadius: height / 2 },
         !isSmall && styles.pillPadded,
-        isOutline && styles.outline,
+        disabled ? styles.outlineDisabled : styles.outline,
         isSmall && styles.small,
         withArrow || (loading && !isSmall) ? (size === 'lg' ? styles.withArrowLg : styles.withArrow) : null,
         style,
@@ -137,7 +144,7 @@ export function GradientButton({
       </Text>
       {loading && !isSmall ? (
         <View style={[styles.arrowCircle, { right: arrowInset, width: circle, height: circle, borderRadius: circle / 2 }]}>
-          <ActivityIndicator size="small" color={isLight || isOutline ? AppColors.primary : AppColors.onPrimary} />
+          <ActivityIndicator size="small" color={isLight || isOutline || isSoft ? AppColors.primary : AppColors.onPrimary} />
         </View>
       ) : withArrow ? (
         <View
@@ -211,6 +218,10 @@ const styles = StyleSheet.create({
   },
   outline: {
     borderWidth: 1,
+    borderColor: AppColors.ink,
+  },
+  outlineDisabled: {
+    borderWidth: 1,
     borderColor: AppColors.borderStrong,
   },
   small: {
@@ -232,6 +243,8 @@ const styles = StyleSheet.create({
   },
   arrowCircleDark: {
     backgroundColor: AppColors.card,
+    borderWidth: 1,
+    borderColor: AppColors.ink,
   },
   arrowCircleLight: {
     backgroundColor: AppColors.ink,

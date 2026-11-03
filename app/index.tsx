@@ -1,3 +1,4 @@
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -16,6 +17,8 @@ import { PHONE_AUTH, useAuth } from '@/context/auth';
 import { dbg } from '@/lib/debug';
 import { WEB_DEMO } from '@/lib/webDemo';
 import { typography } from '@/styles/global';
+
+const BRAND_MARK = require('@/assets/images/brand-mark.png');
 
 // Stepping stones: precomputed solid purples rising from deep purple to soft purple.
 const STONES = [40, 68, 100, 136, 176].map((h, i) => ({ h, color: ForestRamp[i] }));
@@ -54,13 +57,8 @@ export default function SplashScreen() {
     >
       {/* Top bar — plain wordmark, like the site's nav */}
       <Animated.View entering={FadeIn.duration(500)} style={styles.topBar}>
-        <View style={styles.markTile}>
-          <View style={[styles.markDot, styles.markDotLarge]} />
-          <View style={styles.markDotRow}>
-            <View style={styles.markDot} />
-            <View style={styles.markDot} />
-          </View>
-        </View>
+        {/* Heart-hands logo (same art as the app icon); the wordmark beside it names it. */}
+        <Image source={BRAND_MARK} style={styles.mark} contentFit="contain" accessible={false} />
         <Text style={styles.wordmark}>LilSteps</Text>
       </Animated.View>
 
@@ -78,7 +76,7 @@ export default function SplashScreen() {
             {STONES.map((stone, i) => (
               <View key={stone.h} style={styles.stoneCol}>
                 {i === STONES.length - 1 ? (
-                  <Sprout mood="wave" size={56} entrance style={styles.sproutOnStone} />
+                  <Sprout mood="wave" size={84} entrance style={styles.sproutOnStone} />
                 ) : null}
                 {i === 1 || i === 3 ? <View style={styles.footprint} /> : null}
                 <View style={[styles.step, { height: stone.h, backgroundColor: stone.color }]} />
@@ -141,31 +139,9 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 4,
   },
-  markTile: {
+  mark: {
     width: 32,
     height: 32,
-    borderRadius: Radius.md,
-    borderCurve: 'continuous',
-    backgroundColor: AppColors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-  },
-  markDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: AppColors.onPrimary,
-  },
-  markDotLarge: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: AppColors.lavender,
-  },
-  markDotRow: {
-    flexDirection: 'row',
-    gap: 3,
   },
   wordmark: {
     fontFamily: FontFamily.semibold,
@@ -214,7 +190,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   sproutOnStone: {
-    marginBottom: -6,
+    marginBottom: -2,
   },
   heroBody: {
     gap: 12,

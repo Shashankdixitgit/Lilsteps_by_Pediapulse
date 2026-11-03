@@ -8,14 +8,16 @@ type CardTone = 'default' | 'mint' | 'sunshine' | 'info' | 'forest';
 interface GlassCardProps extends ViewProps {
   tone?: CardTone;
   /**
-   * Adds the soft navy-tinted card shadow, but ONLY on `tone="forest"`
-   * (heroes). Plain cards are border-only; the prop is a no-op on them.
+   * Kept for call sites. Heroes (`tone="forest"`) always get the navy outline
+   * + solid offset shadow; plain cards always get the soft lift.
    */
   elevated?: boolean;
+  /** Key card: navy outline + solid offset shadow (HitRate-style). */
+  strong?: boolean;
 }
 
 const TONES: Record<CardTone, { backgroundColor: string; borderColor: string; borderWidth: number }> = {
-  default: { backgroundColor: AppColors.card, borderColor: AppColors.border, borderWidth: 1 },
+  default: { backgroundColor: AppColors.card, borderColor: AppColors.hairline, borderWidth: 1 },
   mint: { backgroundColor: AppColors.greenWash, borderColor: AppColors.mintBorder, borderWidth: 1 },
   sunshine: { backgroundColor: AppColors.sunshineSurface, borderColor: AppColors.warningBorder, borderWidth: 1 },
   info: { backgroundColor: AppColors.infoSurface, borderColor: AppColors.infoBorder, borderWidth: 1 },
@@ -24,19 +26,21 @@ const TONES: Record<CardTone, { backgroundColor: string; borderColor: string; bo
 };
 
 /**
- * White hairline-bordered card (padding 16, no shadow) with optional tones (name kept for call-site
- * compatibility; there is no frosted glass). `forest` renders the lavender
- * glass hero (lavender gradient + white sheen), same as <HeroCard />. Never
- * combine `elevated` with overflow:'hidden' on the same view.
+ * Card (padding 16) in the clinic website's style (name kept for call-site
+ * compatibility; there is no frosted glass). Default: white, hairline edge,
+ * soft lift. `strong` and the `forest` hero: navy outline sitting on a solid
+ * navy offset shadow. `forest` also renders the lavender hero backdrop, same
+ * as <HeroCard />.
  */
-export function GlassCard({ children, style, tone = 'default', elevated, ...props }: GlassCardProps) {
+export function GlassCard({ children, style, tone = 'default', elevated, strong, ...props }: GlassCardProps) {
+  const key = strong || tone === 'forest';
   return (
     <View
       style={[
         styles.card,
         TONES[tone],
         tone === 'forest' && heroCardStyle.card,
-        elevated && tone === 'forest' && styles.elevated,
+        key ? styles.strong : tone === 'default' ? styles.lift : null,
         style,
       ]}
       {...props}
@@ -53,7 +57,11 @@ const styles = StyleSheet.create({
     borderCurve: 'continuous',
     padding: 16,
   },
-  elevated: {
-    boxShadow: Shadow.card,
+  lift: {
+    boxShadow: Shadow.lift,
+  },
+  strong: {
+    borderColor: AppColors.ink,
+    boxShadow: Shadow.hardLg,
   },
 });

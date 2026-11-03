@@ -1,4 +1,5 @@
 import { useIsFocused } from 'expo-router';
+import { Image } from 'expo-image';
 import { memo, useEffect } from 'react';
 import { StyleProp, ViewStyle } from 'react-native';
 import Animated, {
@@ -11,16 +12,50 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Ellipse, G, Path, Text as SvgText } from 'react-native-svg';
 
-import { AppColors, Motion } from '@/constants/theme';
+import { Motion } from '@/constants/theme';
 import { useMotion } from '@/components/ui/useMotion';
+
+/**
+ * Lil: LilSteps' mascot, the boy doctor-superhero from the clinic website
+ * and the store screenshots. Replaced the old seedling (still exported as
+ * `Sprout` / `SproutArt` so call sites did not change).
+ *
+ * Artwork: cut-outs from the Lil character guide (assets/images/lil). Never
+ * mirrored or recoloured: the cape logo must stay readable. Small sizes
+ * (<= 44 px) show a head-and-shoulders crop in a lavender circle, because a
+ * full-body figure is unreadable there.
+ *
+ * Purely decorative (hidden from screen readers). Never shown on danger /
+ * red-flag content, prescriptions, record detail, doctor chat or video.
+ */
 
 export type SproutMood = 'happy' | 'cheer' | 'think' | 'sleepy' | 'care' | 'wave';
 
+const POSES = {
+  welcome: require('@/assets/images/lil/lil-welcome.png'),
+  cheer: require('@/assets/images/lil/lil-cheer.png'),
+  idea: require('@/assets/images/lil/lil-idea.png'),
+  crossed: require('@/assets/images/lil/lil-crossed.png'),
+  thumbs: require('@/assets/images/lil/lil-thumbs.png'),
+} as const;
+const AVATAR = require('@/assets/images/lil/lil-avatar.png');
+
+/** Mood → pose from the character guide's pose library. */
+const POSE_FOR_MOOD: Record<SproutMood, keyof typeof POSES> = {
+  happy: 'welcome',
+  wave: 'welcome',
+  cheer: 'cheer',
+  think: 'idea',
+  care: 'thumbs',
+  sleepy: 'crossed',
+};
+
+const SMALL = 44;
+
 interface SproutProps {
   mood?: SproutMood;
-  /** Rendered size in px (24-160). */
+  /** Box size in px (24-160). Lil stands inside it, feet on the bottom edge. */
   size?: number;
   /** Idle bob (translateY +-3, 2.4 s). Max one per screen; paused on blur. */
   animated?: boolean;
@@ -29,22 +64,6 @@ interface SproutProps {
   style?: StyleProp<ViewStyle>;
 }
 
-// Sprout keeps its own green character colours (the original seedling, as on the
-// app icon) while the UI around it uses the purple palette.
-const LEAF_DARK = '#1E7A4C';
-const LEAF_LIGHT = '#4E9A62';
-const BODY = '#71c286';
-const BELLY = '#E4F4E8';
-const FACE = '#0E4A35';
-
-/**
- * Sprout: LilSteps' seedling mascot. A round mint body with two leaves.
- * Purely decorative (hidden from screen readers). Never shown on danger /
- * red-flag content, prescriptions, record detail, doctor chat or video.
- *
- * Motion only ever moves the wrapping Animated.View (transform), never SVG
- * props, so it costs nothing per frame on the JS thread.
- */
 export const Sprout = memo(function Sprout({
   mood = 'happy',
   size = 64,
@@ -99,87 +118,27 @@ export const Sprout = memo(function Sprout({
 
 /** Static artwork (exported for memoised reuse, e.g. chat avatars). */
 export const SproutArt = memo(function SproutArt({ mood, size }: { mood: SproutMood; size: number }) {
-  const leftLeafRot = mood === 'cheer' ? -18 : mood === 'sleepy' ? 12 : 0;
-  const rightLeafRot = mood === 'cheer' || mood === 'wave' ? 16 : mood === 'sleepy' ? -10 : 0;
-
+  if (size <= SMALL) {
+    return (
+      <Image
+        source={AVATAR}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+        contentFit="cover"
+        accessible={false}
+      />
+    );
+  }
   return (
-    <Svg width={size} height={size} viewBox="0 0 64 64">
-      {/* Stem + leaves */}
-      <Path d="M32 27 L32 22" stroke={LEAF_DARK} strokeWidth={2.4} strokeLinecap="round" />
-      <G rotation={leftLeafRot} origin="32, 23">
-        <Path d="M32 23 C25 22 19 17 18 9 C26 9 31 14 32 23 Z" fill={LEAF_DARK} />
-      </G>
-      <G rotation={rightLeafRot} origin="32, 23">
-        <Path d="M32 23 C35 14 41 8 48 7 C48 15 42 21 32 23 Z" fill={LEAF_LIGHT} />
-      </G>
-
-      {/* Body */}
-      <Ellipse cx={32} cy={41} rx={19} ry={17} fill={BODY} />
-      <Ellipse cx={32} cy={46} rx={11} ry={8} fill={BELLY} />
-
-      {/* Cheeks */}
-      <Circle cx={20} cy={44} r={3} fill={AppColors.peach} opacity={0.7} />
-      <Circle cx={44} cy={44} r={3} fill={AppColors.peach} opacity={0.7} />
-
-      <Face mood={mood} />
-    </Svg>
+    <Image
+      source={POSES[POSE_FOR_MOOD[mood]]}
+      style={{ width: size, height: size }}
+      contentFit="contain"
+      contentPosition="bottom"
+      accessible={false}
+    />
   );
 });
 
-function Face({ mood }: { mood: SproutMood }) {
-  const forest = FACE;
-
-  if (mood === 'sleepy') {
-    return (
-      <G>
-        <Path d="M22.5 38 Q25 40.5 27.5 38" stroke={forest} strokeWidth={2} fill="none" strokeLinecap="round" />
-        <Path d="M36.5 38 Q39 40.5 41.5 38" stroke={forest} strokeWidth={2} fill="none" strokeLinecap="round" />
-        <Path d="M29.5 45 Q32 46.5 34.5 45" stroke={forest} strokeWidth={2} fill="none" strokeLinecap="round" />
-        <SvgText x={47} y={22} fontSize={10} fontWeight="700" fill={AppColors.info}>
-          z
-        </SvgText>
-        <SvgText x={53} y={15} fontSize={7} fontWeight="700" fill={AppColors.info}>
-          z
-        </SvgText>
-      </G>
-    );
-  }
-
-  const eyeY = mood === 'think' ? 36.5 : 38;
-  const glintDy = mood === 'think' ? -1.2 : -0.9;
-
-  return (
-    <G>
-      <Circle cx={25} cy={eyeY} r={2.6} fill={forest} />
-      <Circle cx={39} cy={eyeY} r={2.6} fill={forest} />
-      <Circle cx={25.9} cy={eyeY + glintDy} r={0.9} fill={AppColors.card} />
-      <Circle cx={39.9} cy={eyeY + glintDy} r={0.9} fill={AppColors.card} />
-
-      {mood === 'cheer' ? (
-        <Path d="M26.5 44 Q32 51 37.5 44 Z" fill={forest} stroke={forest} strokeWidth={1.5} strokeLinejoin="round" />
-      ) : mood === 'think' ? (
-        <G>
-          <Path d="M29.5 46 L34.5 45" stroke={forest} strokeWidth={2} strokeLinecap="round" />
-          <Circle cx={50} cy={30} r={1.6} fill={AppColors.secondary} />
-          <Circle cx={54.5} cy={26} r={1.9} fill={AppColors.secondary} />
-          <Circle cx={59} cy={21} r={2.2} fill={AppColors.secondary} />
-        </G>
-      ) : (
-        <Path
-          d={mood === 'care' ? 'M28.5 44.5 Q32 47 35.5 44.5' : 'M27.5 44 Q32 48.5 36.5 44'}
-          stroke={forest}
-          strokeWidth={2}
-          fill="none"
-          strokeLinecap="round"
-        />
-      )}
-
-      {mood === 'care' ? (
-        <Path
-          d="M52 14 C52 11.5 49 10.5 47.8 12.6 C46.6 10.5 43.6 11.5 43.6 14 C43.6 16.6 47.8 19 47.8 19 C47.8 19 52 16.6 52 14 Z"
-          fill={AppColors.peach}
-        />
-      ) : null}
-    </G>
-  );
-}
+/** Plain-English alias: new code should say `Lil`. */
+export const Lil = Sprout;
+export type LilMood = SproutMood;
