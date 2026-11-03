@@ -73,6 +73,7 @@ export default function UpdatesScreen() {
                   key={t.conversationId}
                   id={t.conversationId}
                   doctorName={t.doctorName}
+                  doctorAvatarUrl={t.doctorAvatarUrl}
                   preview={multiChild && t.childName ? `For ${t.childName}: ${t.latest}` : t.latest}
                   lastAt={t.latestAt}
                   unread={t.count}

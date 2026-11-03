@@ -22,7 +22,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { doctorInitial, whenLabel } from '@/components/consult/appointmentFormat';
+import { whenLabel } from '@/components/consult/appointmentFormat';
+import { DoctorAvatar } from '@/components/consult/DoctorAvatar';
 import { BookPill } from '@/components/consult/DoctorCardCompact';
 import { useNarrowLayout } from '@/components/ui/useNarrowLayout';
 import { ScreenHeader } from '@/components/ScreenHeader';
@@ -202,7 +203,6 @@ function DoctorRowItem({
   divider: boolean;
   onBook: () => void;
 }) {
-  const initial = doctorInitial(doc.name);
   const meta = [doc.specialisation, doc.hospital].filter(Boolean).join(' · ');
   const nextText = nextFreeText(next, nextLoading);
   const noVideoLink = !doctorHasVideoLink(doc);
@@ -215,9 +215,7 @@ function DoctorRowItem({
       accessibilityLabel={`${doc.name}, ${meta}${qualifications ? `. ${qualifications}` : ''}${nextText ? `. ${nextText}` : ''}${noVideoLink ? `. ${NO_LINK_HINT}` : ''}. Book`}
       style={[styles.row, divider && styles.divider]}
     >
-      <View style={styles.avatar}>
-        <Text style={styles.avatarText}>{initial}</Text>
-      </View>
+      <DoctorAvatar name={doc.name} avatarUrl={doc.avatar_url} />
       <View style={styles.info}>
         <Text style={styles.name}>{doc.name}</Text>
         {meta ? <Text style={typography.meta}>{meta}</Text> : null}
@@ -292,7 +290,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarText: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.primary },
   info: { flex: 1, gap: 2 },
   name: { ...typography.title, lineHeight: 20 },
   nextFree: { color: AppColors.primary },

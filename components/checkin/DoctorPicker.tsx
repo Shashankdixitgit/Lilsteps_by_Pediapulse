@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { doctorInitial } from '@/components/consult/appointmentFormat';
+import { DoctorAvatar } from '@/components/consult/DoctorAvatar';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { doctorHasVideoLink, type DoctorRow, useDoctorQualifications } from '@/hooks/useDoctors';
 
@@ -59,9 +59,7 @@ export function DoctorPicker({ doctors, selectedId, onSelect, nextFree, nextFree
               pressed && !active && styles.rowPressed,
             ]}
           >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{doctorInitial(doc.name)}</Text>
-            </View>
+            <DoctorAvatar name={doc.name} avatarUrl={doc.avatar_url} />
             <View style={styles.info}>
               {/* No numberOfLines: names wrap at 200% zoom instead of being cut. */}
               <Text style={styles.name}>{doc.name}</Text>
@@ -105,15 +103,6 @@ const styles = StyleSheet.create({
   rowActive: { backgroundColor: AppColors.greenWash },
   rowPressed: { backgroundColor: AppColors.surfaceContainerLow },
   divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: AppColors.border },
-  avatar: {
-    width: Size.iconWell,
-    height: Size.iconWell,
-    borderRadius: Size.iconWell / 2,
-    backgroundColor: AppColors.mintSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.primary },
   info: { flex: 1, minWidth: 0, gap: 2 },
   name: { fontFamily: FontFamily.semibold, fontSize: 15, lineHeight: 20, color: AppColors.onSurface },
   spec: { fontFamily: FontFamily.regular, fontSize: 13, lineHeight: 18, color: AppColors.muted },

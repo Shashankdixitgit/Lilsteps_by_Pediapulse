@@ -15,7 +15,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   CONSULT_MINUTES,
-  doctorInitial,
   doctorShortName,
   formatSlotTime as formatTime,
   JOIN_OPENS_MINUTES,
@@ -36,12 +35,14 @@ import { CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 import { useConversations } from '@/hooks/useConversations';
 import { isPlaceholderQualification } from '@/hooks/useDoctors';
 import { useBackGuard } from '@/hooks/useBackGuard';
+import { DoctorAvatar } from '@/components/consult/DoctorAvatar';
 
 interface DoctorInfo {
   name: string;
   specialisation: string;
   qualifications: string | null;
   hospital: string;
+  avatar_url: string | null;
   has_meet_link: boolean;
   has_google_calendar: boolean;
 }
@@ -111,7 +112,7 @@ export default function ConfirmScreen() {
     (async () => {
       const { data } = await supabase
         .from('doctors')
-        .select('name, specialisation, qualifications, hospital, has_meet_link, has_google_calendar')
+        .select('name, specialisation, qualifications, hospital, avatar_url, has_meet_link, has_google_calendar')
         .eq('id', doctorId)
         .maybeSingle<DoctorInfo>();
       if (data) setDoctor(data);
@@ -262,7 +263,6 @@ export default function ConfirmScreen() {
   }
 
   // ── Review state ───────────────────────────────────────────────────────────
-  const initial = doctorInitial(doctor?.name);
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <ScreenHeader title="Confirm booking" backDisabled={booking} />
@@ -281,9 +281,7 @@ export default function ConfirmScreen() {
 
         <View style={styles.card}>
           <View style={styles.docRow}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initial}</Text>
-            </View>
+            <DoctorAvatar name={doctor?.name} avatarUrl={doctor?.avatar_url} />
             <View style={styles.docText}>
               {/* Wraps, never "Dr. Madhav C…" (review must-fix 6). */}
               <Text style={styles.docName}>{doctor?.name ?? 'Doctor'}</Text>
@@ -397,15 +395,6 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   docRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingBottom: 12 },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: AppColors.mintSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontFamily: FontFamily.semibold, fontSize: 15, color: AppColors.primary },
   docText: { flex: 1, gap: 2 },
   docName: { ...typography.title, lineHeight: 20 },
 

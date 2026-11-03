@@ -34,6 +34,8 @@ export interface AppointmentRow {
     name: string;
     specialisation: string;
     hospital: string;
+    /** Identification headshot (doctors.avatar_url), or null. */
+    avatar_url?: string | null;
     /** Yes/no only; the link itself is private (0035/0036). */
     has_meet_link?: boolean;
     has_google_calendar?: boolean;
@@ -81,7 +83,7 @@ export function useAppointments(childId: string | null) {
     setLoading(true);
     setError(null);
 
-    const select = '*, doctors(name, specialisation, hospital, has_meet_link, has_google_calendar), checkin_sessions(ai_summary)';
+    const select = '*, doctors(name, specialisation, hospital, avatar_url, has_meet_link, has_google_calendar), checkin_sessions(ai_summary)';
     const [{ data, error: err }, { data: due }] = await Promise.all([
       supabase
         .from('appointments')

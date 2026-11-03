@@ -206,6 +206,7 @@ export default function HomeScreen() {
       role: a.doctors.specialisation,
       // The doctor's initial without the "Dr." ("Dr. Emily Chen" -> "E"), like the consult screens.
       initial: doctorInitial(name),
+      avatarUrl: a.doctors.avatar_url ?? null,
     });
     if (careProviders.length === 3) break;
   }
@@ -290,6 +291,7 @@ export default function HomeScreen() {
                 childId={f.child_id}
                 doctorId={f.doctor_id}
                 doctorName={f.doctors?.name ?? 'Doctor'}
+                doctorAvatarUrl={f.doctors?.avatar_url}
                 date={f.date}
                 time={f.time}
                 holdExpiresAt={f.hold_expires_at ?? null}
@@ -326,13 +328,14 @@ export default function HomeScreen() {
               <Text style={typography.bodySM}>No upcoming consults. See past visits and messages.</Text>
             ) : null}
             {nextTwo.map((a) => {
-              const item = { id: a.id, date: a.date, time: a.time, doctorName: a.doctors?.name ?? 'Doctor', paidWithPlan: a.paid_with_plan === true };
+              const item = { id: a.id, date: a.date, time: a.time, doctorName: a.doctors?.name ?? 'Doctor', doctorAvatarUrl: a.doctors?.avatar_url ?? null, paidWithPlan: a.paid_with_plan === true };
               const summaryId = a.ai_summary_id;
               const urgent = isUrgentAppointment(a);
               return (
                 <View key={a.id} style={styles.apptBlock}>
                   <AppointmentCard
                     doctorName={item.doctorName}
+                    doctorAvatarUrl={item.doctorAvatarUrl}
                     doctorSpecialisation={a.doctors?.specialisation ?? ''}
                     date={a.date}
                     time={a.time}

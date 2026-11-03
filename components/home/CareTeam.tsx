@@ -5,12 +5,15 @@ import { TextButton } from '@/components/gradient-button';
 import { PressableScale } from '@/components/ui/PressableScale';
 import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { typography } from '@/styles/global';
+import { DoctorAvatar } from '@/components/consult/DoctorAvatar';
 
 export interface CareProvider {
   id: string;
   name: string;
   role: string;
   initial: string;
+  /** doctors.avatar_url; the initial shows without it. */
+  avatarUrl?: string | null;
 }
 
 interface CareTeamProps {
@@ -45,9 +48,7 @@ export function CareTeam({ providers, onAddProvider, onProviderPress }: CareTeam
               {/* Decorative initial: dropped at 200% zoom / narrow widths so the
                   name gets the room ("Dr. Madh av") (R3-05). */}
               {narrow ? null : (
-                <View style={styles.avatar}>
-                  <Text style={styles.avatarText}>{p.initial}</Text>
-                </View>
+                <DoctorAvatar name={p.name} avatarUrl={p.avatarUrl} />
               )}
               <View style={styles.text}>
                 <Text style={styles.name} numberOfLines={3}>
@@ -92,19 +93,6 @@ const styles = StyleSheet.create({
   rowDivider: {
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: AppColors.border,
-  },
-  avatar: {
-    width: Size.iconWell,
-    height: Size.iconWell,
-    borderRadius: Size.iconWell / 2,
-    backgroundColor: AppColors.mintSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: {
-    fontFamily: FontFamily.semibold,
-    fontSize: 15,
-    color: AppColors.primary,
   },
   text: {
     flex: 1,

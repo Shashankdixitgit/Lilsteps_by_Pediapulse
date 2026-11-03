@@ -8,13 +8,16 @@ import { AppColors, FontFamily, Radius, Size } from '@/constants/theme';
 import { confirmReleaseSlot, SLOT_NOT_KEPT_TEXT, SLOT_RELEASED_TEXT, useConsultCheckout } from '@/hooks/useConsultCheckout';
 import { cancelConsult, CONSULT_PRICE_LABEL } from '@/lib/consultPayment';
 
-import { CONSULT_MINUTES, doctorInitial, doctorShortName, whenLabel } from './appointmentFormat';
+import { CONSULT_MINUTES, doctorShortName, whenLabel } from './appointmentFormat';
+import { DoctorAvatar } from './DoctorAvatar';
 
 export interface PendingPaymentCardProps {
   appointmentId: string;
   childId: string;
   doctorId: string;
   doctorName: string;
+  /** doctors.avatar_url; the initial shows without it. */
+  doctorAvatarUrl?: string | null;
   date: string;
   time: string;
   /** Until when the time is held for the family. */
@@ -46,6 +49,7 @@ export function PendingPaymentCard({
   childId,
   doctorId,
   doctorName,
+  doctorAvatarUrl,
   date,
   time,
   holdExpiresAt,
@@ -113,9 +117,7 @@ export function PendingPaymentCard({
   return (
     <View style={styles.card}>
       <View style={styles.top}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{doctorInitial(doctorName)}</Text>
-        </View>
+        <DoctorAvatar name={doctorName} avatarUrl={doctorAvatarUrl} />
         <View style={styles.info}>
           <Text style={styles.doctor}>{doctorName}</Text>
           <Text style={styles.spec}>{followUp ? 'Follow-up booked by your doctor' : 'Booking not paid yet'}</Text>
@@ -179,15 +181,6 @@ const styles = StyleSheet.create({
   },
   top: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   pill: { flexDirection: 'row', marginTop: 4 },
-  avatar: {
-    width: Size.iconWell,
-    height: Size.iconWell,
-    borderRadius: Size.iconWell / 2,
-    backgroundColor: AppColors.mintSurface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  avatarText: { fontFamily: FontFamily.semibold, fontSize: 13, color: AppColors.primary },
   info: { flex: 1, minWidth: 0, gap: 2 },
   doctor: { fontFamily: FontFamily.semibold, fontSize: 15, lineHeight: 20, color: AppColors.onSurface },
   spec: { fontFamily: FontFamily.regular, fontSize: 13, lineHeight: 18, color: AppColors.muted },
