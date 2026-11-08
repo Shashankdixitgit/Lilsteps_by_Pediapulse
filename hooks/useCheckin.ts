@@ -112,6 +112,8 @@ export function quickOptionsFor(text: string): string[] {
   // A yes/no question about one thing (not "is it dry or wet?", not "can you tell me...").
   if (/^(can|could) you (tell|describe|share)/.test(q)) return [];
   if (/^(is|are|does|do|did|has|have|can|could|was|were|will|would)\b/.test(q) && !/\s(or|ya)\s/.test(q)) {
+    // A toilet-trained child has no nappies to count (early-tester feedback).
+    if (/\b(nappy|nappies|diapers?)\b/.test(q)) return ['Yes', 'No', 'Not sure', 'Not applicable'];
     return ['Yes', 'No', 'Not sure'];
   }
   // The same in Hinglish ("Kya Aarav theek se kha raha hai?").

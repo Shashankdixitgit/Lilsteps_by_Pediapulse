@@ -36,6 +36,10 @@ export type PrescriptionCardData = {
   appointments?: { date: string; time: string } | null;
 };
 
+/** Printed at the foot of every prescription. Kept identical to components/PrescriptionDisclaimer.tsx in the parent app. */
+const PRESCRIPTION_DISCLAIMER =
+  'Past records are for reference only—pediatric doses are strictly calculated on current weight, so never reuse past prescriptions without an active pediatric review.';
+
 /** Columns for the medicines table (wide cards only). */
 const MED_COLS = '@xl:grid-cols-[1.6fr_1fr_1.2fr_0.9fr_1.6fr]';
 
@@ -216,6 +220,11 @@ export function PrescriptionCard({
             <p className="mt-1 whitespace-pre-line break-words text-[14px] leading-[1.55] text-[var(--ink-2)]">{rx.notes}</p>
           </div>
         )}
+
+        {/* Dose-reuse disclaimer (early-tester feedback, 8 Nov 2026), same wording as the parent app */}
+        <p className="rounded-xl border border-[var(--hairline-strong)] bg-neutral-100 px-4 py-3 text-[13px] font-bold leading-[1.5] text-[var(--ink)]">
+          {PRESCRIPTION_DISCLAIMER}
+        </p>
 
         {/* Linked consult */}
         {linkConsult && (
