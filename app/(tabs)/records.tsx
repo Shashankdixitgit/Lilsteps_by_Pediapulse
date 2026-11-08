@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EmptyState } from '@/components/EmptyState';
+import { PrescriptionDisclaimer } from '@/components/PrescriptionDisclaimer';
 import { TextButton } from '@/components/gradient-button';
 import { TabScreenLayout } from '@/components/TabScreenLayout';
 import { tabBarRightEdgeCover, tabBarSpace as tabBarSpaceFor } from '@/components/home/tabBarSpace';
@@ -269,6 +270,10 @@ export default function RecordsScreen() {
               ))}
             </View>
           )}
+
+          {/* Pinned under the list whenever prescriptions are shown, so parents
+              read it before opening an old one. */}
+          {!isLoading && filteredPrescriptions.length > 0 ? <PrescriptionDisclaimer /> : null}
         </View>
       </TabScreenLayout>
 

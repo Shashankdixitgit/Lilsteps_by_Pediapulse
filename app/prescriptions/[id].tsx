@@ -5,6 +5,7 @@ import { ActivityIndicator, Platform, ScrollView, Share, StyleSheet, Text, View 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatWeight } from '@/components/growth/format';
+import { PRESCRIPTION_DISCLAIMER, PrescriptionDisclaimer } from '@/components/PrescriptionDisclaimer';
 import { HeaderIconButton, ScreenHeader } from '@/components/ScreenHeader';
 import { AppColors, Radius } from '@/constants/theme';
 import { layout, typography } from '@/styles/global';
@@ -167,6 +168,8 @@ export default function PrescriptionDetailScreen() {
       advice ? `\nSpecial instructions: ${advice}` : '',
       followUp ? `Follow-up: ${followUp}` : '',
       prescription.notes ? `\nDoctor's notes: ${prescription.notes}` : '',
+      '',
+      PRESCRIPTION_DISCLAIMER,
     ];
     const message = lines.filter((l, i) => l !== '' || lines[i - 1] !== '').join('\n').trim();
 
@@ -306,6 +309,8 @@ export default function PrescriptionDetailScreen() {
               </View>
             </View>
           )}
+
+          <PrescriptionDisclaimer />
         </ScrollView>
       )}
     </View>

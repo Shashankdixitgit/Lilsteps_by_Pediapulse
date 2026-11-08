@@ -99,7 +99,7 @@ export interface PaymentLink {
   payments?: Array<{ payment_id: string; amount: number; status: string }> | null;
 }
 
-export function createPaymentLink(input: {
+export async function createPaymentLink(input: {
   paymentId: string;
   appointmentId: string;
   expireBy: Date;
@@ -108,7 +108,7 @@ export function createPaymentLink(input: {
   contact?: string | null;
   email?: string | null;
 }): Promise<PaymentLink> {
-  return call('POST', '/payment_links', {
+  const body = {
     amount: CONSULT_PRICE_PAISE,
     currency: 'INR',
     accept_partial: false,
@@ -125,8 +125,30 @@ export function createPaymentLink(input: {
     notes: { appointment_id: input.appointmentId, payment_id: input.paymentId },
     callback_url: input.callbackUrl,
     callback_method: 'get',
-  });
+  };
+  // UPI first (early-tester feedback, 8 Nov 2026): most Indian parents pay by
+  // UPI, so it gets its own block at the top. Cards, netbanking and wallets
+  // still follow. Razorpay only shows methods enabled on the account.
+  // If Razorpay ever refuses the display options (400), the link is made
+  // without them: a plain payment page beats no payment at all. A refused
+  // request creates no link, so the same reference_id can be reused.
+  try {
+    return await call('POST', '/payment_links', { ...body, options: { checkout: { config: UPI_FIRST_CHECKOUT } } });
+  } catch (e) {
+    if (!(e instanceof RazorpayError) || e.status !== 400) throw e;
+    console.warn('[razorpay] payment link refused the UPI-first options; retrying without them');
+    return await call('POST', '/payment_links', body);
+  }
 }
+
+/** Razorpay checkout display config: a "Pay with UPI" block shown before the rest. */
+export const UPI_FIRST_CHECKOUT = {
+  display: {
+    blocks: { upi: { name: 'Pay with UPI', instruments: [{ method: 'upi' }] } },
+    sequence: ['block.upi'],
+    preferences: { show_default_blocks: true },
+  },
+};
 
 export function fetchPaymentLink(linkId: string): Promise<PaymentLink> {
   return call('GET', `/payment_links/${encodeURIComponent(linkId)}`);

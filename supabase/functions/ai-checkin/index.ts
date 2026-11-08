@@ -1003,7 +1003,8 @@ RULES:
    - Never put a comma inside an option. Keep each option short (1–4 words).
    - The options MUST answer the exact question you asked. If the question is about a sore throat, every option is about the sore throat. If you ask about two things, ask about one instead.
    Use this for:
-   - Yes/No/Not sure questions (including each danger sign) → [QUICK_OPTIONS: Yes | No | Not sure]
+   - Yes/No/Not sure questions (including each danger sign, except the wet nappies question below) → [QUICK_OPTIONS: Yes | No | Not sure]
+   - A question that mentions nappies or diapers → [QUICK_OPTIONS: Yes | No | Not sure | Not applicable] (a toilet-trained child has no nappies to count). If the parent answers "Not applicable", ask once "Is ${child.name} peeing less than usual?" with [QUICK_OPTIONS: Yes | No | Not sure]; never offer "Not applicable" on that question.
    - Duration → [QUICK_OPTIONS: Just started | Since yesterday | 2-3 days | A week or more]
    - Severity → [QUICK_OPTIONS: Mild | Moderate | Severe]
    - Fever temperature → [QUICK_OPTIONS: Below 100°F | 100-101°F | 101-103°F | Above 103°F]
@@ -1260,6 +1261,7 @@ DETAILS RULES:
 - If the parent is worried about the child's mood or emotional health, add a row { "label": "Mood or emotional health", "value": "<what the parent described, in their words>" }.
 - Danger signs for this age: ${signList}. If the assistant asked about one of these and the parent never answered it (or answered something else), add one row { "label": "Not answered", "value": "<the question, short>" } for each such question.
 - If the parent answered "Not sure" (or "pata nahi", "don't know") to a question, that is an answer: write the row with the value "Parent not sure" (for example { "label": "Breathing fast", "value": "Parent not sure" }). Never list it under "Not answered".
+- If the parent answered "Not applicable" to the wet nappies question, that is an answer: write { "label": "Wet nappies", "value": "Not applicable (parent's answer)" }. It is not a danger sign and never goes under "Not answered".
 - Only include facts the parent actually stated or confirmed. Never add a symptom the parent did not confirm.
 - Word every answer exactly as strongly as the parent did. A hedged yes ("a little", "a bit", "thoda", "sometimes") stays mild: "a little sleepy", never "very sleepy" or "lethargy". Never make the child sound better either: "playing a bit" is "playing a little", not "active"; "eating less" is not "eating normally".
 - A danger sign stays in the summary even when the parent said "a little", worded as they said it.
